@@ -664,6 +664,95 @@ button {
   margin-top: 12px;
 }
 
+/* ————— eon outlook ————— */
+.verdict {
+  font-family: var(--serif);
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  padding: 8px 2px;
+}
+
+.verdict.ok {
+  color: var(--indi);
+}
+
+.verdict.bad {
+  color: var(--accent);
+}
+
+.short-list {
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.short-list li {
+  padding: 4px 0;
+}
+
+/* ————— station temps ————— */
+.slot-chips {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.temp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.temp-row .label {
+  flex: 1;
+}
+
+.temp-input {
+  position: relative;
+  width: 190px;
+  flex: none;
+}
+
+.temp-input .input {
+  padding-right: 42px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.input::-webkit-outer-spin-button,
+.input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.temp-input .suffix {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+
+.pill-block {
+  display: block;
+  margin: 14px auto 0;
+}
+
+.pill:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
 /* ————— bible viewer ————— */
 .bible-viewer {
   background: var(--cream);

@@ -1,15 +1,15 @@
 import { defaultConfig } from '../../config';
 import type { PerSize } from '../../core/types';
 import { SectionHead } from '../shell/SectionHead';
-import { fmt, type TwoPmForm } from './formState';
+import { fmt, type CountsFields } from './counts';
 
-type FormKey = keyof TwoPmForm;
+type CountKey = keyof CountsFields;
 
 function CountField(props: {
   label: string;
-  formKey: FormKey;
-  form: TwoPmForm;
-  onChange: (patch: Partial<TwoPmForm>) => void;
+  formKey: CountKey;
+  fields: CountsFields;
+  onChange: (patch: Partial<CountsFields>) => void;
 }) {
   return (
     <div className="fld">
@@ -19,25 +19,27 @@ function CountField(props: {
         inputMode="numeric"
         placeholder="0"
         aria-label={props.label}
-        value={props.form[props.formKey]}
+        value={props.fields[props.formKey]}
         onChange={(e) => props.onChange({ [props.formKey]: e.target.value })}
       />
     </div>
   );
 }
 
+/** The five color-coded dough count cards, shared by the 2 PM and EON pages. */
 export function CountCards(props: {
-  form: TwoPmForm;
-  onChange: (patch: Partial<TwoPmForm>) => void;
+  fields: CountsFields;
+  onChange: (patch: Partial<CountsFields>) => void;
   have: PerSize;
+  note: string;
 }) {
-  const { form, onChange, have } = props;
+  const { fields, onChange, have } = props;
   const cfg = defaultConfig;
   const bpt = cfg.ballsPerTray;
 
   return (
     <>
-      <SectionHead num="02" title="Current Dough Counts" note="TRAYS + SINGLES" />
+      <SectionHead num="02" title="Current Dough Counts" note={props.note} />
       <div className="count-grid">
         <div className="count-card" style={{ ['--size' as string]: 'var(--indi)' }}>
           <div className="head">
@@ -45,8 +47,8 @@ export function CountCards(props: {
             <span className="hint">{bpt.indi} / tray</span>
           </div>
           <div className="fields">
-            <CountField label="TRAYS" formKey="indiTrays" form={form} onChange={onChange} />
-            <CountField label="SINGLES" formKey="indiSingles" form={form} onChange={onChange} />
+            <CountField label="TRAYS" formKey="indiTrays" fields={fields} onChange={onChange} />
+            <CountField label="SINGLES" formKey="indiSingles" fields={fields} onChange={onChange} />
           </div>
           <div className="balls">
             = <strong>{fmt(have.indi)}</strong> balls
@@ -59,8 +61,8 @@ export function CountCards(props: {
             <span className="hint">{bpt.small} / tray</span>
           </div>
           <div className="fields">
-            <CountField label="TRAYS" formKey="smallTrays" form={form} onChange={onChange} />
-            <CountField label="SINGLES" formKey="smallSingles" form={form} onChange={onChange} />
+            <CountField label="TRAYS" formKey="smallTrays" fields={fields} onChange={onChange} />
+            <CountField label="SINGLES" formKey="smallSingles" fields={fields} onChange={onChange} />
           </div>
           <div className="balls">
             = <strong>{fmt(have.small)}</strong> balls
@@ -73,8 +75,8 @@ export function CountCards(props: {
             <span className="hint">{bpt.large} / tray</span>
           </div>
           <div className="fields">
-            <CountField label="TRAYS" formKey="largeTrays" form={form} onChange={onChange} />
-            <CountField label="SINGLES" formKey="largeSingles" form={form} onChange={onChange} />
+            <CountField label="TRAYS" formKey="largeTrays" fields={fields} onChange={onChange} />
+            <CountField label="SINGLES" formKey="largeSingles" fields={fields} onChange={onChange} />
           </div>
           <div className="balls">
             = <strong>{fmt(have.large)}</strong> balls
@@ -87,7 +89,7 @@ export function CountCards(props: {
             <span className="hint">min {cfg.sicMinBalls} balls</span>
           </div>
           <div className="fields single">
-            <CountField label="BALLS" formKey="sicSingles" form={form} onChange={onChange} />
+            <CountField label="BALLS" formKey="sicSingles" fields={fields} onChange={onChange} />
           </div>
         </div>
 
@@ -99,8 +101,8 @@ export function CountCards(props: {
             </span>
           </div>
           <div className="fields">
-            <CountField label="TRAYS" formKey="boilTrays" form={form} onChange={onChange} />
-            <CountField label="SINGLES" formKey="boilSingles" form={form} onChange={onChange} />
+            <CountField label="TRAYS" formKey="boilTrays" fields={fields} onChange={onChange} />
+            <CountField label="SINGLES" formKey="boilSingles" fields={fields} onChange={onChange} />
           </div>
           <div className="balls">
             = <strong>{fmt(have.boil)}</strong> balls

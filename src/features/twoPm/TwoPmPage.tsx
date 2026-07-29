@@ -1,40 +1,24 @@
-import { defaultConfig, type BibleId } from '../../config';
-import { computeHave, normalizeSales, runDoughCalculation } from '../../core';
-import { bibles } from '../bibleData';
+import { defaultConfig } from '../../config';
+import { normalizeSales } from '../../core';
+import type { DoughDayRecord, PerSize } from '../../core/types';
 import { AmUseBlock } from './AmUseBlock';
 import { BySizeTable } from './BySizeTable';
 import { DaysWork, type Rounding } from './DaysWork';
 import { SalesCard } from './SalesCard';
-import { CountCards } from './CountCards';
-import { parseCounts, salesComplete, toNum, type TwoPmForm } from './formState';
+import { CountCards } from '../shared/CountCards';
+import { toNum, type TwoPmForm } from './formState';
 
 export function TwoPmPage(props: {
-  date: string;
-  bibleOverride: BibleId | undefined;
+  /** Computed in App from this form (null until sales + both forecasts are typed). */
+  record: DoughDayRecord | null;
+  have: PerSize;
   form: TwoPmForm;
   onFormChange: (patch: Partial<TwoPmForm>) => void;
   rounding: Rounding;
   onRounding: (r: 'down' | 'up') => void;
 }) {
   const cfg = defaultConfig;
-  const { form } = props;
-  const counts = parseCounts(form);
-  const have = computeHave(counts, cfg);
-
-  const record = salesComplete(form)
-    ? runDoughCalculation(
-        {
-          date: props.date,
-          counts,
-          todayForecastRaw: toNum(form.todayForecast),
-          currentSalesRaw: toNum(form.currentSales),
-          tomorrowForecastRaw: toNum(form.tomorrowForecast),
-          bibleOverride: props.bibleOverride,
-        },
-        bibles,
-        cfg,
-      )
-    : null;
+  const { form, record, have } = props;
 
   // Sales-left preview as soon as today's forecast + current sales are both typed.
   const salesPairTyped = form.todayForecast.trim() !== '' && form.currentSales.trim() !== '';
@@ -54,17 +38,13 @@ export function TwoPmPage(props: {
           salesLeft={salesLeft}
           negativeSalesLeft={salesLeft !== null && salesLeft < 0}
         />
-        <CountCards form={form} onChange={props.onFormChange} have={have} />
+        <CountCards fields={form} onChange={props.onFormChange} have={have} note="TRAYS + SINGLES" />
         <div style={{ height: 30 }} />
       </div>
 
       <div className="band band-dark">
         <DaysWork record={record} rounding={props.rounding} onRounding={props.onRounding} />
-        <BySizeTable
-          record={record}
-          have={have}
-          boilMake={record ? record.boilTrays : null}
-        />
+        <BySizeTable record={record} have={have} boilMake={record ? record.boilTrays : null} />
         <AmUseBlock result={null} />
         <div className="save-bar">
           <button className="btn-primary" disabled>
