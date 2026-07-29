@@ -47,6 +47,12 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
 - **Temp slots** — before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night.
 
+## Design system (phase 2 — final choices)
+
+- **Fonts** (self-hosted via Fontsource, no network fetch): headings/hero numerals `Fraunces Variable` (opsz + italic); labels/buttons/inputs/data `Space Mono`. Imported in `src/main.tsx`.
+- **Palette** (sampled from `design/` screenshots, defined as CSS variables in `src/styles.css`): page cream `#EEE7D7` · card cream `#FBF7EE` · input tint `#F0EADE` · ink `#1E1B14` · dark band `#121008` · accent brick red `#A33E2A` · muted `#7C7263` · sizes: Indi `#3E693C`, Small `#A63B27`, Large `#356EA3`, Sic `#BB527A`, Boil `#733D89`.
+- One global stylesheet (`src/styles.css`) of tokens + component classes; no CSS framework. Dark bands use a clip-path torn edge. Numbered badges are one global sequence (00 date, 01 sales, 02 counts, 03 day's work, 04 by size, 05 AM use; 08 EON outlook and 09 temps arrive later per the screenshots).
+
 ## Engine facts worth remembering
 
 - `runDoughCalculation(inputs, bibles, config)` → `DoughDayRecord`; `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`; `computeAmUse(yesterdayEon | null, todayHave, currentSales$)`. All pure; bibles and config are always passed in.

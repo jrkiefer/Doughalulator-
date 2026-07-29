@@ -48,6 +48,8 @@ export interface AppConfig {
   ballsPerTray: BallsPerTray;
   /** Sicilian is counted/made in singles; one make-tray holds this many balls. */
   sicMakeTraySize: number;
+  /** Display hint on the Sicilian count card: never dip below this many balls. */
+  sicMinBalls: number;
   /** Boil target: always bring the count up to this many trays. */
   boilTargetTrays: number;
   traysPerBatch: number;
@@ -65,6 +67,7 @@ export interface AppConfig {
 export const defaultConfig: AppConfig = {
   ballsPerTray: { indi: 11, small: 8, large: 6, boil: 6 },
   sicMakeTraySize: 3,
+  sicMinBalls: 2,
   boilTargetTrays: 6,
   traysPerBatch: 11,
   salesShorthand: { maxShorthand: 50, multiplier: 1000 },

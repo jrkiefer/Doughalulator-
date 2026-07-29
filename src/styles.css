@@ -1,0 +1,761 @@
+/* Design tokens — colors sampled from the screenshots in design/ (ground truth). */
+:root {
+  --cream: #eee7d7; /* page background */
+  --card: #fbf7ee; /* card surface */
+  --tint: #f0eade; /* inputs, chips, computed rows */
+  --ink: #1e1b14; /* near-black text */
+  --solid: #17150e; /* solid black buttons */
+  --band: #121008; /* dark page bands */
+  --accent: #a33e2a; /* deep brick red */
+  --muted: #7c7263; /* micro labels */
+  --line: rgba(30, 27, 20, 0.14);
+  --indi: #3e693c;
+  --small: #a63b27;
+  --large: #356ea3;
+  --sic: #bb527a;
+  --boil: #733d89;
+  --serif: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --mono: 'Space Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --r-card: 18px;
+  --r-input: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--band);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: var(--cream);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ————— bands ————— */
+.band {
+  padding: 0 16px;
+}
+
+.band-dark {
+  background: var(--band);
+  color: var(--cream);
+  padding: 26px 16px 30px;
+  clip-path: polygon(0 30px, 58% 7px, 100% 0, 100% 100%, 0 100%);
+  margin-top: -6px;
+  padding-top: 56px;
+}
+
+.band-dark .btn-primary {
+  background: var(--card);
+  color: var(--ink);
+}
+
+/* ————— type ————— */
+.micro {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 2px 12px;
+}
+
+.section-head h2 {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.section-head .micro {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.band-dark .section-head h2 {
+  color: #57503f;
+}
+
+.band-dark .section-head .micro {
+  color: #6d6552;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 1px 7px;
+  align-self: center;
+}
+
+.band-dark .badge {
+  border-color: #57503f;
+  color: #57503f;
+}
+
+/* ————— cards ————— */
+.card {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(30, 27, 20, 0.05);
+}
+
+/* ————— buttons & pills ————— */
+button {
+  font-family: var(--mono);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.btn-primary {
+  display: block;
+  width: 100%;
+  background: var(--solid);
+  color: var(--card);
+  border: none;
+  border-radius: 14px;
+  padding: 18px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.btn-primary:disabled {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.pill {
+  border: 2px solid var(--ink);
+  background: transparent;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pill.active {
+  background: var(--solid);
+  color: var(--card);
+  border-color: var(--solid);
+}
+
+.pill-sm {
+  padding: 6px 14px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+/* ————— inputs ————— */
+.input {
+  width: 100%;
+  background: var(--tint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  padding: 14px 12px;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--ink);
+  min-height: 52px;
+}
+
+.input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.input:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: -1px;
+}
+
+/* ————— header ————— */
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 2px 4px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+
+.status-pill::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.btn-reset {
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: 46px;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  margin: 2px 2px 14px;
+  line-height: 1;
+}
+
+.title em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ————— active date ————— */
+.date-display {
+  position: relative;
+  background: var(--tint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.date-display input[type='date'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+/* ————— bible row ————— */
+.bible-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.bible-row .labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.auto-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+}
+
+/* ————— nav ————— */
+.mode-nav {
+  border: 2px solid var(--solid);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  margin-top: 14px;
+  background: var(--card);
+}
+
+.mode-nav .temps-bar {
+  display: block;
+  width: 100%;
+  border: none;
+  background: var(--card);
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  border-bottom: 2px solid var(--solid);
+}
+
+.mode-nav .temps-bar.active {
+  background: var(--solid);
+  color: var(--card);
+}
+
+.mode-nav .tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mode-nav .tabs button {
+  border: none;
+  background: var(--card);
+  padding: 15px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.mode-nav .tabs button.active {
+  background: var(--solid);
+  color: var(--card);
+}
+
+/* ————— sales card ————— */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.field-row .label {
+  flex: 1;
+}
+
+.field-row .input {
+  width: 150px;
+  flex: none;
+}
+
+.computed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tint);
+  border-radius: var(--r-input);
+  padding: 14px 12px;
+  margin: 6px 0;
+}
+
+.computed-row strong {
+  font-size: 16px;
+}
+
+.warning {
+  color: var(--accent);
+  font-size: 12px;
+  padding: 8px 2px 2px;
+}
+
+/* ————— count cards ————— */
+.count-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.count-card {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--size, var(--ink));
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(30, 27, 20, 0.05);
+}
+
+.count-card.wide {
+  grid-column: 1 / -1;
+}
+
+.count-card .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.count-card .name {
+  color: var(--size, var(--ink));
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.count-card .hint {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.count-card .fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.count-card .fields.single {
+  grid-template-columns: 1fr;
+}
+
+.count-card .fld .micro {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.count-card .balls {
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.count-card .balls strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+/* ————— day's work ————— */
+.tray-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tray-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--tint);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.tray-pill .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--size, var(--ink));
+}
+
+.tray-pill strong {
+  font-size: 15px;
+}
+
+.dashed-divider {
+  border: none;
+  border-top: 2px dashed var(--line);
+  margin: 16px 0;
+}
+
+.batch-hero {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.batch-hero .numeral {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 104px;
+  font-weight: 600;
+  line-height: 0.82;
+  color: var(--accent);
+}
+
+.batch-hero .details .micro {
+  margin-bottom: 4px;
+}
+
+.batch-hero h3 {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.batch-hero .kv {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin: 3px 0;
+}
+
+.batch-hero .kv .micro {
+  width: 64px;
+  flex: none;
+}
+
+.batch-hero .kv strong {
+  font-size: 17px;
+}
+
+.status-chip {
+  display: inline-block;
+  background: var(--tint);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+.rounding-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.rounding-row .label {
+  margin-right: auto;
+}
+
+.days-work-note {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 2px;
+}
+
+/* ————— by size table ————— */
+.bysize table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.bysize th {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  text-align: right;
+  padding: 6px 4px;
+}
+
+.bysize th:first-child {
+  text-align: left;
+}
+
+.bysize td {
+  text-align: right;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+}
+
+.bysize td.size-name {
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.bysize .size-name .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--size, var(--ink));
+  margin-right: 6px;
+}
+
+.bysize td.trays-cell {
+  padding: 6px 0 6px 8px;
+}
+
+.bysize .trays-box {
+  background: var(--tint);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--size, var(--ink));
+  min-width: 44px;
+}
+
+.bysize .trays-box .micro {
+  display: block;
+  font-size: 8px;
+  color: var(--size, var(--ink));
+}
+
+.bysize .neg {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.bysize .boil-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-top: 2px solid var(--line);
+  margin-top: 4px;
+  padding-top: 12px;
+  font-size: 13px;
+}
+
+.bysize .boil-row .kv .micro {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.bysize .boil-row .note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.table-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* ————— bible viewer ————— */
+.bible-viewer {
+  background: var(--cream);
+  padding: 4px 16px 10px;
+}
+
+.bible-viewer .bar {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  padding: 16px 2px;
+}
+
+.bible-viewer .bar .name {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--large);
+}
+
+.bible-viewer .bar .name em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.bible-viewer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.bible-viewer th {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 400;
+  text-align: right;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bible-viewer td {
+  text-align: right;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ————— footer ————— */
+.footer {
+  background: var(--band);
+  color: var(--muted);
+  text-align: center;
+  padding: 26px 16px 34px;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+}
+
+.footer .settings {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-decoration: underline;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ————— misc ————— */
+.coming-note {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin-top: 8px;
+}
+
+.placeholder-card {
+  margin: 26px 0;
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 16px;
+}
+
+.save-bar {
+  margin: 22px 0 6px;
+}
