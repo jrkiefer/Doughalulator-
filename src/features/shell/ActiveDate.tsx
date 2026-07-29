@@ -6,7 +6,12 @@ function formatDate(iso: string): string {
   return `${names[m - 1]} ${d}, ${y}`;
 }
 
-export function ActiveDate(props: { date: string; onChange: (date: string) => void }) {
+export function ActiveDate(props: {
+  date: string;
+  onChange: (date: string) => void;
+  onLoad: () => void;
+  loadMsg: string;
+}) {
   return (
     <>
       <SectionHead num="00" title="Active Date" />
@@ -20,10 +25,10 @@ export function ActiveDate(props: { date: string; onChange: (date: string) => vo
             onChange={(e) => e.target.value && props.onChange(e.target.value)}
           />
         </div>
-        <button className="btn-primary" disabled>
+        <button className="btn-primary" onClick={props.onLoad}>
           LOAD FROM SHEET
         </button>
-        <div className="coming-note">coming in a later step</div>
+        {props.loadMsg && <div className="coming-note">{props.loadMsg}</div>}
       </div>
     </>
   );

@@ -7,7 +7,7 @@ import type { AmUseResult, EonRecord, PerSize } from './types';
  * currentSales is the already-expanded 2 PM sales figure.
  */
 export function computeAmUse(
-  yesterdayEonRecord: EonRecord | null,
+  yesterdayEonRecord: Pick<EonRecord, 'eonHave'> | null,
   todayHave: PerSize,
   currentSales: number,
 ): AmUseResult | null {

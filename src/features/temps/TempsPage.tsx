@@ -13,6 +13,10 @@ export function TempsPage(props: {
   onSlot: (slot: TempSlot) => void;
   readings: TempReadings;
   onReading: (slot: TempSlot, station: string, value: string) => void;
+  onSave: () => void;
+  saveMsg: string;
+  onLoadLast: () => void;
+  loadNote: string;
 }) {
   const cfg = defaultConfig;
   const names = cfg.tempSlots.names;
@@ -57,17 +61,25 @@ export function TempsPage(props: {
           </div>
         ))}
 
-        <button className="pill pill-sm pill-block" disabled>
+        <button className="pill pill-sm pill-block" onClick={props.onLoadLast}>
           LOAD LAST TEMPS
         </button>
-        <div className="coming-note">coming in a later step</div>
+        {props.loadNote && <div className="coming-note">{props.loadNote}</div>}
       </div>
 
       <div className="save-bar">
-        <button className="btn-primary" disabled>
+        <button
+          className="btn-primary"
+          disabled={!Object.values(current).some((v) => v.trim() !== '')}
+          onClick={props.onSave}
+        >
           SAVE TEMPS
         </button>
-        <div className="coming-note">Saving comes in a later step.</div>
+        <div className="coming-note">
+          {Object.values(current).some((v) => v.trim() !== '')
+            ? props.saveMsg
+            : 'Type at least one temperature to save. Empty stations are skipped.'}
+        </div>
       </div>
       <div style={{ height: 20 }} />
     </div>

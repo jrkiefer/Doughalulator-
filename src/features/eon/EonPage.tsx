@@ -1,6 +1,6 @@
 import { defaultConfig, type BibleId } from '../../config';
 import { runEonCalculation } from '../../core';
-import type { BibleSizeKey, DoughDayRecord, SizeKey } from '../../core/types';
+import type { BibleSizeKey, DoughDayRecord, EonRecord, SizeKey } from '../../core/types';
 import { bibles } from '../bibleData';
 import { CountCards } from '../shared/CountCards';
 import { computeHave } from '../../core';
@@ -29,6 +29,8 @@ export function EonPage(props: {
   dayRecord: DoughDayRecord | null;
   form: EonForm;
   onFormChange: (patch: Partial<EonForm>) => void;
+  onSave: (record: EonRecord) => void;
+  saveMsg: string;
 }) {
   const cfg = defaultConfig;
   const { form, dayRecord } = props;
@@ -172,10 +174,16 @@ export function EonPage(props: {
         </div>
 
         <div className="save-bar">
-          <button className="btn-primary" disabled>
+          <button
+            className="btn-primary"
+            disabled={!finalSalesTyped}
+            onClick={() => props.onSave(record)}
+          >
             SAVE EON RECORD
           </button>
-          <div className="coming-note">Saving comes in a later step.</div>
+          <div className="coming-note">
+            {finalSalesTyped ? props.saveMsg : 'Type the final sales to save.'}
+          </div>
         </div>
       </div>
     </>

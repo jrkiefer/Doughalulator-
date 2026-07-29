@@ -53,6 +53,14 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **Palette** (sampled from `design/` screenshots, defined as CSS variables in `src/styles.css`): page cream `#EEE7D7` · card cream `#FBF7EE` · input tint `#F0EADE` · ink `#1E1B14` · dark band `#121008` · accent brick red `#A33E2A` · muted `#7C7263` · sizes: Indi `#3E693C`, Small `#A63B27`, Large `#356EA3`, Sic `#BB527A`, Boil `#733D89`.
 - One global stylesheet (`src/styles.css`) of tokens + component classes; no CSS framework. Dark bands use a clip-path torn edge. Numbered badges are one global sequence (00 date, 01 sales, 02 counts, 03 day's work, 04 by size, 05 AM use; 08 EON outlook and 09 temps arrive later per the screenshots).
 
+## Storage facts (phase 4)
+
+- `src/services/mapping.ts` is the single source of truth for sheet columns: pure record→row functions per tab, reverse mappers for loading, bible-mirror payload with an FNV-1a hash gate. Fully tested.
+- Saves are **merge-upserts by Date** — a payload carries only its own columns; the Apps Script never blanks the rest of a row. Actual Use fills in two steps (AM at the 2 PM save, PM at the EON save).
+- The offline queue (`src/services/local.ts` + `queue.ts`) stores payloads WITHOUT the secret; `flushQueue` injects the current secret at send time (so saves queued before Settings existed still sync). Queue flushes on app open; status pill NEW NIGHT → LOADED → SAVED → UNSYNCED.
+- Apps Scripts live in `apps-script/dough/Code.gs` and `apps-script/temps/Code.gs` — paste-ready for phase 5; `setup()` is idempotent; POSTs are text/plain JSON (no CORS preflight); every request carries the shared secret.
+- Loads are network-first with phone-cache fallback (`loadDate`, `fetchYesterdayEonHave`, `fetchLatestTemps`). Settings (script URLs + secrets) live in localStorage via `src/services/settings.ts`.
+
 ## Engine facts worth remembering
 
 - `runDoughCalculation(inputs, bibles, config)` → `DoughDayRecord`; `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`; `computeAmUse(yesterdayEon | null, todayHave, currentSales$)`. All pure; bibles and config are always passed in.

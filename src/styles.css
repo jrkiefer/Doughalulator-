@@ -237,6 +237,15 @@ button {
   background: var(--muted);
 }
 
+.status-pill.status-saved::before,
+.status-pill.status-loaded::before {
+  background: var(--indi);
+}
+
+.status-pill.status-unsynced::before {
+  background: var(--accent);
+}
+
 .btn-reset {
   border: 1px solid var(--line);
   background: var(--card);

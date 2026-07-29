@@ -1,6 +1,6 @@
 import { defaultConfig } from '../../config';
 import { normalizeSales } from '../../core';
-import type { DoughDayRecord, PerSize } from '../../core/types';
+import type { AmUseResult, DoughDayRecord, PerSize } from '../../core/types';
 import { AmUseBlock } from './AmUseBlock';
 import { BySizeTable } from './BySizeTable';
 import { DaysWork, type Rounding } from './DaysWork';
@@ -16,6 +16,9 @@ export function TwoPmPage(props: {
   onFormChange: (patch: Partial<TwoPmForm>) => void;
   rounding: Rounding;
   onRounding: (r: 'down' | 'up') => void;
+  amUse: AmUseResult | null;
+  onSave: () => void;
+  saveMsg: string;
 }) {
   const cfg = defaultConfig;
   const { form, record, have } = props;
@@ -45,15 +48,21 @@ export function TwoPmPage(props: {
       <div className="band band-dark">
         <DaysWork record={record} rounding={props.rounding} onRounding={props.onRounding} />
         <BySizeTable record={record} have={have} boilMake={record ? record.boilTrays : null} />
-        <AmUseBlock result={null} />
+        <AmUseBlock result={props.amUse} />
         <div className="save-bar">
-          <button className="btn-primary" disabled>
+          <button
+            className="btn-primary"
+            disabled={record === null || props.rounding === null}
+            onClick={props.onSave}
+          >
             SAVE 2 PM RECORD
           </button>
           <div className="coming-note">
-            {props.rounding === null && record !== null
-              ? 'Tap Round up or Round down first — saving itself comes in a later step.'
-              : 'Saving comes in a later step.'}
+            {record === null
+              ? 'Fill in the sales and forecasts to save.'
+              : props.rounding === null
+                ? 'Tap Round up or Round down first.'
+                : props.saveMsg}
           </div>
         </div>
       </div>
