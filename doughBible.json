@@ -1,0 +1,199 @@
+{
+  "name": "Dough Bible 2026",
+  "season": {
+    "start": "09-01",
+    "end": "06-30"
+  },
+  "notes": "Used September 1 - June 30. 1 Batch = 11 Trays.",
+  "rows": [
+    {
+      "sales": 3750,
+      "indi": 11,
+      "small": 52,
+      "large": 44,
+      "sic": 2
+    },
+    {
+      "sales": 4000,
+      "indi": 12,
+      "small": 58,
+      "large": 50,
+      "sic": 2
+    },
+    {
+      "sales": 4400,
+      "indi": 13,
+      "small": 63,
+      "large": 56,
+      "sic": 2
+    },
+    {
+      "sales": 4800,
+      "indi": 14,
+      "small": 69,
+      "large": 62,
+      "sic": 2
+    },
+    {
+      "sales": 5200,
+      "indi": 15,
+      "small": 74,
+      "large": 65,
+      "sic": 2
+    },
+    {
+      "sales": 5700,
+      "indi": 17,
+      "small": 81,
+      "large": 72,
+      "sic": 2
+    },
+    {
+      "sales": 6300,
+      "indi": 18,
+      "small": 88,
+      "large": 79,
+      "sic": 2
+    },
+    {
+      "sales": 6800,
+      "indi": 20,
+      "small": 94,
+      "large": 87,
+      "sic": 3
+    },
+    {
+      "sales": 7200,
+      "indi": 21,
+      "small": 101,
+      "large": 94,
+      "sic": 3
+    },
+    {
+      "sales": 7800,
+      "indi": 22,
+      "small": 108,
+      "large": 99,
+      "sic": 3
+    },
+    {
+      "sales": 8300,
+      "indi": 24,
+      "small": 115,
+      "large": 106,
+      "sic": 3
+    },
+    {
+      "sales": 9100,
+      "indi": 26,
+      "small": 125,
+      "large": 117,
+      "sic": 3
+    },
+    {
+      "sales": 10000,
+      "indi": 28,
+      "small": 136,
+      "large": 126,
+      "sic": 4
+    },
+    {
+      "sales": 10700,
+      "indi": 30,
+      "small": 146,
+      "large": 137,
+      "sic": 4
+    },
+    {
+      "sales": 11500,
+      "indi": 32,
+      "small": 156,
+      "large": 148,
+      "sic": 4
+    },
+    {
+      "sales": 12250,
+      "indi": 34,
+      "small": 166,
+      "large": 159,
+      "sic": 4
+    },
+    {
+      "sales": 13000,
+      "indi": 37,
+      "small": 177,
+      "large": 166,
+      "sic": 5
+    },
+    {
+      "sales": 13900,
+      "indi": 39,
+      "small": 187,
+      "large": 177,
+      "sic": 5
+    },
+    {
+      "sales": 14750,
+      "indi": 41,
+      "small": 197,
+      "large": 188,
+      "sic": 5
+    },
+    {
+      "sales": 15500,
+      "indi": 43,
+      "small": 206,
+      "large": 195,
+      "sic": 5
+    },
+    {
+      "sales": 16250,
+      "indi": 44,
+      "small": 214,
+      "large": 205,
+      "sic": 6
+    },
+    {
+      "sales": 17000,
+      "indi": 44,
+      "small": 225,
+      "large": 216,
+      "sic": 6
+    },
+    {
+      "sales": 17750,
+      "indi": 44,
+      "small": 235,
+      "large": 225,
+      "sic": 6
+    },
+    {
+      "sales": 18500,
+      "indi": 44,
+      "small": 246,
+      "large": 237,
+      "sic": 6
+    },
+    {
+      "sales": 19250,
+      "indi": 44,
+      "small": 255,
+      "large": 247,
+      "sic": 6
+    },
+    {
+      "sales": 20000,
+      "indi": 44,
+      "small": 266,
+      "large": 256,
+      "sic": 7
+    },
+    {
+      "sales": 20750,
+      "indi": 44,
+      "small": 276,
+      "large": 267,
+      "sic": 7
+    }
+  ]
+}

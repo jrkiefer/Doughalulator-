@@ -1,0 +1,280 @@
+{
+  "name": "Peach Dough Bible",
+  "season": {
+    "start": "07-01",
+    "end": "08-31"
+  },
+  "notes": "Used July 1 - August 31 (peach season). The trays/batches columns are reference values carried over from the original paper table; the app's engine ignores them. The 17,000-sales batches value (6.9) was interpolated from a partially legible source photo.",
+  "rows": [
+    {
+      "sales": 3000,
+      "indi": 20,
+      "small": 56,
+      "large": 51,
+      "sic": 2,
+      "trays": 17,
+      "batches": 1.7
+    },
+    {
+      "sales": 3500,
+      "indi": 20,
+      "small": 66,
+      "large": 61,
+      "sic": 2,
+      "trays": 20,
+      "batches": 2
+    },
+    {
+      "sales": 4000,
+      "indi": 21,
+      "small": 75,
+      "large": 66,
+      "sic": 3,
+      "trays": 22,
+      "batches": 2.2
+    },
+    {
+      "sales": 4500,
+      "indi": 21,
+      "small": 85,
+      "large": 70,
+      "sic": 3,
+      "trays": 24,
+      "batches": 2.4
+    },
+    {
+      "sales": 5000,
+      "indi": 22,
+      "small": 96,
+      "large": 74,
+      "sic": 3,
+      "trays": 26,
+      "batches": 2.6
+    },
+    {
+      "sales": 5500,
+      "indi": 22,
+      "small": 106,
+      "large": 82,
+      "sic": 3,
+      "trays": 29,
+      "batches": 2.8
+    },
+    {
+      "sales": 6000,
+      "indi": 24,
+      "small": 115,
+      "large": 91,
+      "sic": 3,
+      "trays": 32,
+      "batches": 3.1
+    },
+    {
+      "sales": 6500,
+      "indi": 25,
+      "small": 124,
+      "large": 97,
+      "sic": 3,
+      "trays": 34,
+      "batches": 3.3
+    },
+    {
+      "sales": 7000,
+      "indi": 26,
+      "small": 132,
+      "large": 103,
+      "sic": 3,
+      "trays": 36,
+      "batches": 3.5
+    },
+    {
+      "sales": 7500,
+      "indi": 27,
+      "small": 141,
+      "large": 109,
+      "sic": 3,
+      "trays": 38,
+      "batches": 3.7
+    },
+    {
+      "sales": 8000,
+      "indi": 28,
+      "small": 151,
+      "large": 114,
+      "sic": 4,
+      "trays": 40,
+      "batches": 3.9
+    },
+    {
+      "sales": 8500,
+      "indi": 28,
+      "small": 160,
+      "large": 120,
+      "sic": 4,
+      "trays": 43,
+      "batches": 4.1
+    },
+    {
+      "sales": 9000,
+      "indi": 29,
+      "small": 170,
+      "large": 127,
+      "sic": 4,
+      "trays": 45,
+      "batches": 4.4
+    },
+    {
+      "sales": 9500,
+      "indi": 29,
+      "small": 179,
+      "large": 133,
+      "sic": 4,
+      "trays": 47,
+      "batches": 4.6
+    },
+    {
+      "sales": 10000,
+      "indi": 30,
+      "small": 188,
+      "large": 137,
+      "sic": 4,
+      "trays": 49,
+      "batches": 4.8
+    },
+    {
+      "sales": 10500,
+      "indi": 30,
+      "small": 197,
+      "large": 140,
+      "sic": 4,
+      "trays": 51,
+      "batches": 4.9
+    },
+    {
+      "sales": 11000,
+      "indi": 31,
+      "small": 204,
+      "large": 145,
+      "sic": 5,
+      "trays": 52,
+      "batches": 5.1
+    },
+    {
+      "sales": 11500,
+      "indi": 31,
+      "small": 211,
+      "large": 150,
+      "sic": 5,
+      "trays": 54,
+      "batches": 5.3
+    },
+    {
+      "sales": 12000,
+      "indi": 32,
+      "small": 218,
+      "large": 155,
+      "sic": 5,
+      "trays": 56,
+      "batches": 5.4
+    },
+    {
+      "sales": 12500,
+      "indi": 32,
+      "small": 226,
+      "large": 159,
+      "sic": 6,
+      "trays": 58,
+      "batches": 5.6
+    },
+    {
+      "sales": 13000,
+      "indi": 33,
+      "small": 234,
+      "large": 162,
+      "sic": 6,
+      "trays": 59,
+      "batches": 5.8
+    },
+    {
+      "sales": 13500,
+      "indi": 33,
+      "small": 243,
+      "large": 164,
+      "sic": 6,
+      "trays": 61,
+      "batches": 5.9
+    },
+    {
+      "sales": 14000,
+      "indi": 34,
+      "small": 253,
+      "large": 166,
+      "sic": 6,
+      "trays": 62,
+      "batches": 6.1
+    },
+    {
+      "sales": 14500,
+      "indi": 34,
+      "small": 262,
+      "large": 168,
+      "sic": 6,
+      "trays": 64,
+      "batches": 6.2
+    },
+    {
+      "sales": 15000,
+      "indi": 35,
+      "small": 271,
+      "large": 169,
+      "sic": 6,
+      "trays": 65,
+      "batches": 6.3
+    },
+    {
+      "sales": 15500,
+      "indi": 35,
+      "small": 281,
+      "large": 171,
+      "sic": 6,
+      "trays": 67,
+      "batches": 6.5
+    },
+    {
+      "sales": 16000,
+      "indi": 36,
+      "small": 290,
+      "large": 173,
+      "sic": 6,
+      "trays": 68,
+      "batches": 6.6
+    },
+    {
+      "sales": 16500,
+      "indi": 36,
+      "small": 300,
+      "large": 175,
+      "sic": 6,
+      "trays": 70,
+      "batches": 6.8
+    },
+    {
+      "sales": 17000,
+      "indi": 37,
+      "small": 309,
+      "large": 177,
+      "sic": 6,
+      "trays": 71,
+      "batches": 6.9
+    },
+    {
+      "sales": 17500,
+      "indi": 37,
+      "small": 318,
+      "large": 179,
+      "sic": 6,
+      "trays": 73,
+      "batches": 7.1
+    }
+  ]
+}
