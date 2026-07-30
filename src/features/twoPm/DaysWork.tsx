@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../config';
-import type { BatchOption, DoughDayRecord } from '../../core/types';
+import type { BatchOption, DoughDayRecord, Maybe } from '../../core/types';
 import { SectionHead } from '../shell/SectionHead';
 
 export type Rounding = 'down' | 'up' | null;
@@ -17,15 +17,21 @@ function TrayPill(props: { name: string; color: string; value: string }) {
   );
 }
 
+function pillValue(value: Maybe, suffix = ''): string {
+  return value === null ? '—' : `${value}${suffix}`;
+}
+
 export function DaysWork(props: {
-  record: DoughDayRecord | null;
+  record: DoughDayRecord;
   rounding: Rounding;
   onRounding: (r: 'down' | 'up') => void;
 }) {
   const { record, rounding } = props;
   const chosen: BatchOption | null =
-    record && rounding ? (rounding === 'down' ? record.batchDown : record.batchUp) : null;
-  const trays = chosen ? chosen.finalTraysToMake : record?.trays ?? null;
+    rounding === null ? null : rounding === 'down' ? record.batchDown : record.batchUp;
+  const trays = chosen ? chosen.finalTraysToMake : { ...record.trays, boli: record.boliTrays };
+  const closed = record.flags.closedTomorrow;
+  const ready = record.totalTrays !== null;
 
   return (
     <>
@@ -33,38 +39,43 @@ export function DaysWork(props: {
       <div className="card">
         <span className="micro">TRAYS</span>
         <div className="tray-pills">
-          <TrayPill name="INDI" color="var(--indi)" value={trays ? String(trays.indi) : '—'} />
-          <TrayPill name="SM" color="var(--small)" value={trays ? String(trays.small) : '—'} />
-          <TrayPill name="LG" color="var(--large)" value={trays ? String(trays.large) : '—'} />
-          <TrayPill
-            name="SIC"
-            color="var(--sic)"
-            value={record ? `${record.sicBalls} BALLS` : '— BALLS'}
-          />
-          <TrayPill
-            name="BOIL"
-            color="var(--boil)"
-            value={record ? String(record.boilTrays) : '—'}
-          />
+          <TrayPill name="INDI" color="var(--indi)" value={pillValue(trays.indi)} />
+          <TrayPill name="SM" color="var(--small)" value={pillValue(trays.small)} />
+          <TrayPill name="LG" color="var(--large)" value={pillValue(trays.large)} />
+          <TrayPill name="SIC" color="var(--sic)" value={pillValue(record.sicBalls, ' BALLS')} />
+          <TrayPill name="BOLI" color="var(--boli)" value={pillValue(record.boliTrays)} />
         </div>
+        {record.flags.boliNotCounted && (
+          <p className="days-work-note">Boli wasn't counted — it's left out of tonight's batch.</p>
+        )}
 
         <hr className="dashed-divider" />
 
-        {!record && (
+        {closed && (
+          <div className="closed-chip">
+            Closed tomorrow — nothing to make tonight.
+          </div>
+        )}
+
+        {!closed && !ready && (
           <p className="days-work-note">Set sales and both forecasts to get the batch count.</p>
         )}
 
-        {record && !chosen && (
+        {!closed && ready && record.totalTrays === 0 && (
+          <p className="days-work-note">Nothing to make — tomorrow is covered by what's left.</p>
+        )}
+
+        {!closed && ready && record.totalTrays! > 0 && !chosen && (
           <p className="days-work-note">
             <strong style={{ color: 'var(--ink)', fontSize: 15 }}>
-              {batchesText(record.exactBatches)} batches · {record.totalTrays} trays
+              {batchesText(record.exactBatches!)} batches · {record.totalTrays} trays
             </strong>
             <br />
             Tap Round up or Round down.
           </p>
         )}
 
-        {record && chosen && (
+        {!closed && ready && chosen && (
           <div className="batch-hero">
             <div className="numeral">{chosen.batches}</div>
             <div className="details">
@@ -93,23 +104,23 @@ export function DaysWork(props: {
           </div>
         )}
 
-        <div className="rounding-row">
-          <span className="label">ROUNDING</span>
-          <button
-            className={`pill pill-sm${rounding === 'up' ? ' active' : ''}`}
-            disabled={!record}
-            onClick={() => props.onRounding('up')}
-          >
-            Round up
-          </button>
-          <button
-            className={`pill pill-sm${rounding === 'down' ? ' active' : ''}`}
-            disabled={!record}
-            onClick={() => props.onRounding('down')}
-          >
-            Round down
-          </button>
-        </div>
+        {!closed && ready && record.totalTrays! > 0 && (
+          <div className="rounding-row">
+            <span className="label">ROUNDING</span>
+            <button
+              className={`pill pill-sm${rounding === 'up' ? ' active' : ''}`}
+              onClick={() => props.onRounding('up')}
+            >
+              Round up
+            </button>
+            <button
+              className={`pill pill-sm${rounding === 'down' ? ' active' : ''}`}
+              onClick={() => props.onRounding('down')}
+            >
+              Round down
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

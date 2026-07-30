@@ -1,11 +1,12 @@
 import { defaultConfig, type BibleId } from '../../config';
 import { runEonCalculation } from '../../core';
-import type { BibleSizeKey, DoughDayRecord, EonRecord, SizeKey } from '../../core/types';
+import type { BibleSizeKey, DoughDayRecord } from '../../core/types';
 import { bibles } from '../bibleData';
 import { CountCards } from '../shared/CountCards';
-import { computeHave } from '../../core';
-import { fmt, parseCounts, toNum } from '../shared/counts';
+import { fmt, parseCounts, toNumOrNull } from '../shared/counts';
+import { numericChangeHandler } from '../shared/inputs';
 import { SectionHead } from '../shell/SectionHead';
+import { DollarEcho } from '../twoPm/SalesCard';
 import type { EonForm } from './formState';
 
 const CHECK_ROWS: { key: BibleSizeKey; name: string }[] = [
@@ -15,37 +16,23 @@ const CHECK_ROWS: { key: BibleSizeKey; name: string }[] = [
   { key: 'sic', name: 'SIC' },
 ];
 
-const PM_USE_ROWS: { key: SizeKey; name: string; color: string }[] = [
-  { key: 'indi', name: 'INDI', color: 'var(--indi)' },
-  { key: 'small', name: 'SM', color: 'var(--small)' },
-  { key: 'large', name: 'LG', color: 'var(--large)' },
-  { key: 'sic', name: 'SIC', color: 'var(--sic)' },
-  { key: 'boil', name: 'BOIL', color: 'var(--boil)' },
-];
-
 export function EonPage(props: {
   date: string;
   bibleOverride: BibleId | undefined;
   dayRecord: DoughDayRecord | null;
   form: EonForm;
   onFormChange: (patch: Partial<EonForm>) => void;
-  onSave: (record: EonRecord) => void;
-  saveMsg: string;
+  synced: boolean;
 }) {
   const cfg = defaultConfig;
   const { form, dayRecord } = props;
-  const counts = parseCounts(form);
-  const eonHave = computeHave(counts, cfg);
 
-  const manualTyped = form.manualTomorrowForecast.trim() !== '';
   const record = runEonCalculation(
     {
       date: props.date,
-      counts,
-      finalSalesRaw: toNum(form.finalSales),
-      manualTomorrowForecastRaw: !dayRecord && manualTyped
-        ? toNum(form.manualTomorrowForecast)
-        : undefined,
+      counts: parseCounts(form),
+      finalSalesRaw: toNumOrNull(form.finalSales),
+      manualTomorrowForecastRaw: toNumOrNull(form.manualTomorrowForecast),
       bibleOverride: props.bibleOverride,
     },
     dayRecord,
@@ -53,58 +40,72 @@ export function EonPage(props: {
     cfg,
   );
 
-  const shortSizes = record.eonLeft
-    ? CHECK_ROWS.filter(({ key }) => record.eonLeft![key] < 0)
+  const needsManualForecast = !(dayRecord && dayRecord.tomorrowForecast !== null);
+  const manualTyped = form.manualTomorrowForecast.trim() !== '';
+  const shortSizes = record.traysShort
+    ? CHECK_ROWS.filter(({ key }) => (record.traysShort![key] ?? 0) > 0)
     : [];
-  const finalSalesTyped = form.finalSales.trim() !== '';
-  const roundingPending = dayRecord !== null && dayRecord.chosenBatchOption === null;
+  const boliShort = (record.boliTraysShort ?? 0) > 0;
+  const anyShort = shortSizes.length > 0 || boliShort;
 
   return (
     <>
       <div className="band">
-        <SectionHead num="01" title="End of Night Sales" note="DOLLARS" />
+        <SectionHead num="01" title="End of Night Sales" note="DOLLARS · 10 = $10,000" />
         <div className="card">
           <div className="field-row">
             <span className="label">FINAL SALES</span>
-            <input
-              className="input"
-              inputMode="decimal"
-              placeholder="0"
-              aria-label="FINAL SALES"
-              value={form.finalSales}
-              onChange={(e) => props.onFormChange({ finalSales: e.target.value })}
-            />
+            <div className="input-wrap">
+              <input
+                className="input"
+                type="text"
+                inputMode="decimal"
+                aria-label="FINAL SALES"
+                value={form.finalSales}
+                onChange={numericChangeHandler({ decimal: true }, (v) =>
+                  props.onFormChange({ finalSales: v }),
+                )}
+              />
+              {props.synced && form.finalSales.trim() !== '' && <span className="chip">✓</span>}
+              <DollarEcho raw={form.finalSales} />
+            </div>
           </div>
         </div>
 
         <CountCards
           fields={form}
           onChange={props.onFormChange}
-          have={eonHave}
+          have={record.eonHave}
           note="CLOSING COUNT"
+          synced={props.synced}
         />
       </div>
 
       <div className="band">
         <SectionHead num="08" title="EON Outlook" note="HAVE VS TOMORROW'S NEED" />
         <div className="card">
-          {!dayRecord && (
+          {needsManualForecast && (
             <>
               <div className="field-row">
                 <span className="label">
                   TOMORROW'S FORECAST
                   <span className="micro" style={{ display: 'block', marginTop: 4, textTransform: 'none' }}>
-                    No 2 PM save — enter manually
+                    No 2 PM forecast — enter manually (0 = closed)
                   </span>
                 </span>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="0"
-                  aria-label="TOMORROW'S FORECAST"
-                  value={form.manualTomorrowForecast}
-                  onChange={(e) => props.onFormChange({ manualTomorrowForecast: e.target.value })}
-                />
+                <div className="input-wrap">
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    aria-label="TOMORROW'S FORECAST"
+                    value={form.manualTomorrowForecast}
+                    onChange={numericChangeHandler({ decimal: true }, (v) =>
+                      props.onFormChange({ manualTomorrowForecast: v }),
+                    )}
+                  />
+                  <DollarEcho raw={form.manualTomorrowForecast} />
+                </div>
               </div>
               {!manualTyped && (
                 <p className="days-work-note">Enter tomorrow's forecast above to see the outlook.</p>
@@ -112,11 +113,13 @@ export function EonPage(props: {
             </>
           )}
 
-          {record.flags.tomorrowCheckAvailable && (
+          {record.flags.tomorrowCheckAvailable && record.flags.closedTomorrow && (
+            <div className="closed-chip">Closed tomorrow — nothing needed.</div>
+          )}
+
+          {record.flags.tomorrowCheckAvailable && !record.flags.closedTomorrow && (
             <>
-              {shortSizes.length === 0 ? (
-                <div className="verdict ok">Covered for tomorrow</div>
-              ) : (
+              {anyShort ? (
                 <div className="verdict bad">
                   Short for tomorrow
                   <ul className="short-list">
@@ -128,61 +131,25 @@ export function EonPage(props: {
                           : `${record.traysShort![key]} ${record.traysShort![key] === 1 ? 'tray' : 'trays'} short`}
                       </li>
                     ))}
+                    {boliShort && <li>BOLI — {record.boliTraysShort} {record.boliTraysShort === 1 ? 'tray' : 'trays'} short of its {record.boliNeed}-ball target</li>}
                   </ul>
                 </div>
+              ) : (
+                <div className="verdict ok">Covered for tomorrow</div>
               )}
             </>
           )}
 
           <hr className="dashed-divider" />
 
-          {dayRecord && (
-            <div className="computed-row">
-              <span className="label">PM SALES</span>
-              <strong>{finalSalesTyped && record.pmSales !== null ? fmt(record.pmSales) : '—'}</strong>
-            </div>
-          )}
-
-          {record.pmUse ? (
-            <div className="bysize" style={{ marginTop: 12 }}>
-              <span className="micro">PM USE — SINCE 2 PM</span>
-              <table style={{ marginTop: 6 }}>
-                <tbody>
-                  {PM_USE_ROWS.map(({ key, name, color }) => (
-                    <tr key={key}>
-                      <td className="size-name" style={{ ['--size' as string]: color }}>
-                        <span className="dot" />
-                        {name}
-                      </td>
-                      <td className={record.pmUse![key] < 0 ? 'neg' : ''}>
-                        {record.pmUse![key]}
-                        {record.pmUse![key] < 0 && <span className="micro"> check count?</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="days-work-note" style={{ marginTop: 12 }}>
-              {roundingPending
-                ? 'PM Use needs a Round up / Round down choice on the 2 PM page.'
-                : "PM Use needs today's 2 PM save."}
-            </p>
-          )}
-        </div>
-
-        <div className="save-bar">
-          <button
-            className="btn-primary"
-            disabled={!finalSalesTyped}
-            onClick={() => props.onSave(record)}
-          >
-            SAVE EON RECORD
-          </button>
-          <div className="coming-note">
-            {finalSalesTyped ? props.saveMsg : 'Type the final sales to save.'}
+          <div className="computed-row">
+            <span className="label">PM SALES</span>
+            <strong>{record.pmSales === null ? '—' : fmt(record.pmSales)}</strong>
           </div>
+          <p className="days-work-note" style={{ marginTop: 10 }}>
+            Morning and evening dough use now live in the Google Sheet's “Dough Use” tab — it
+            recomputes itself even when numbers are corrected by hand.
+          </p>
         </div>
       </div>
     </>

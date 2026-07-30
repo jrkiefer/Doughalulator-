@@ -1,10 +1,10 @@
 /**
  * Hot Tomato Temp Log — Google Apps Script.
  *
- * Phase 5 setup: same dance as the dough script — paste into a blank
- * sheet's Apps Script editor, set SECRET, run setup() once, deploy as a
- * web app (execute as Me, access: Anyone), then give the app the URL +
- * secret in Settings.
+ * Setup: same dance as the dough script — paste into a blank sheet's Apps
+ * Script editor, set SECRET, run setup() once, deploy as a web app
+ * (execute as Me, access: Anyone), then give the app the URL + secret in
+ * Settings.
  *
  * Three kinds of tabs:
  *   Overview — one fixed row per station: the latest reading at a glance.
@@ -13,6 +13,13 @@
  *   One tab per station — Date | Morning | 2 PM | Night, merge-upsert by
  *              date; re-entering a slot overwrites the cell while Log
  *              keeps the original.
+ *
+ * Payloads carry a whole day at once:
+ *   { secret, type: 'temps', date, items: [{ time, slot, readings: [{station, temp}] }] }
+ *
+ * Writes run under a script lock; a busy lock answers retryable-shaped so
+ * the app just tries again. Temps may be negative (the freezer) — but a
+ * save with no readings, a bad date, or an unknown slot is rejected.
  */
 
 var SECRET = 'PASTE-YOUR-SECRET-HERE';
@@ -59,45 +66,76 @@ function setup() {
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return jsonOut({ ok: false, retryable: true, error: 'busy — another save is writing; try again' });
+  }
   try {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
     if (body.type !== 'temps') return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
-    if (SLOTS.indexOf(body.slot) === -1) return jsonOut({ ok: false, error: 'unknown slot: ' + body.slot });
+
+    var problem = validateTemps(body);
+    if (problem) return jsonOut({ ok: false, error: problem });
 
     var ss = SpreadsheetApp.getActive();
+    var date = normalizeDate(body.date);
+    var saved = 0;
 
-    // 1. Append-only audit trail.
-    var log = ss.getSheetByName('Log');
-    body.readings.forEach(function (r) {
-      log.appendRow([body.date, body.time, body.slot, r.station, r.temp]);
+    body.items.forEach(function (item) {
+      // 1. Append-only audit trail.
+      var log = ss.getSheetByName('Log');
+      item.readings.forEach(function (r) {
+        log.appendRow([date, item.time, item.slot, r.station, r.temp]);
+        saved++;
+      });
+
+      // 2. Merge-upsert each station tab by date, touching only this slot's column.
+      item.readings.forEach(function (r) {
+        var sheet = ss.getSheetByName(r.station);
+        if (!sheet) return; // unknown station: still in the Log above
+        var rowIndex = findDateRow(sheet, date);
+        if (rowIndex === -1) {
+          rowIndex = sheet.getLastRow() + 1;
+          sheet.getRange(rowIndex, 1).setValue(date);
+        }
+        var col = STATION_HEADERS.indexOf(item.slot) + 1;
+        sheet.getRange(rowIndex, col).setValue(r.temp);
+      });
+
+      // 3. Refresh the Overview row for each submitted station.
+      var overview = ss.getSheetByName('Overview');
+      item.readings.forEach(function (r) {
+        var idx = STATIONS.indexOf(r.station);
+        if (idx === -1) return;
+        overview.getRange(idx + 2, 2, 1, 3).setValues([[r.temp, item.slot, date + ' ' + item.time]]);
+      });
     });
 
-    // 2. Merge-upsert each station tab by date, touching only this slot's column.
-    body.readings.forEach(function (r) {
-      var sheet = ss.getSheetByName(r.station);
-      if (!sheet) return; // unknown station: still in the Log above
-      var rowIndex = findDateRow(sheet, body.date);
-      if (rowIndex === -1) {
-        rowIndex = sheet.getLastRow() + 1;
-        sheet.getRange(rowIndex, 1).setValue(body.date);
-      }
-      var col = STATION_HEADERS.indexOf(body.slot) + 1;
-      sheet.getRange(rowIndex, col).setValue(r.temp);
-    });
-
-    // 3. Refresh the Overview row for each submitted station.
-    var overview = ss.getSheetByName('Overview');
-    body.readings.forEach(function (r) {
-      var idx = STATIONS.indexOf(r.station);
-      if (idx === -1) return;
-      overview.getRange(idx + 2, 2, 1, 3).setValues([[r.temp, body.slot, body.date + ' ' + body.time]]);
-    });
-
-    return jsonOut({ ok: true, saved: body.readings.length, date: body.date, slot: body.slot });
+    return jsonOut({ ok: true, saved: saved, date: date });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
   }
+}
+
+/** Terminal validation. Temps MAY be negative (the freezer) — that is not an error. */
+function validateTemps(body) {
+  if (!normalizeDate(body.date)) return 'missing or invalid date: ' + body.date;
+  var items = body.items;
+  if (!items || !items.length) return 'empty save: no readings';
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (SLOTS.indexOf(item.slot) === -1) return 'unknown slot: ' + item.slot;
+    if (!item.readings || !item.readings.length) return 'empty save: slot ' + item.slot + ' has no readings';
+    for (var r = 0; r < item.readings.length; r++) {
+      if (typeof item.readings[r].temp !== 'number' || !isFinite(item.readings[r].temp)) {
+        return 'temperature is not a number: ' + item.readings[r].station;
+      }
+    }
+  }
+  return null;
 }
 
 function doGet(e) {
@@ -109,7 +147,6 @@ function doGet(e) {
       return jsonOut({ ok: true, sheet: 'temps', time: new Date().toISOString() });
     }
     if (p.action === 'latest') {
-      // Latest reading per station, straight off the Overview tab.
       var overview = SpreadsheetApp.getActive().getSheetByName('Overview');
       var out = {};
       STATIONS.forEach(function (station, i) {
@@ -119,18 +156,19 @@ function doGet(e) {
       return jsonOut({ ok: true, stations: out });
     }
     if (p.action === 'day') {
-      // One date's Morning / 2 PM / Night grid from the station tabs.
+      var date = normalizeDate(p.date);
+      if (!date) return jsonOut({ ok: false, error: 'missing or invalid date: ' + p.date });
       var ss = SpreadsheetApp.getActive();
       var grid = {};
       STATIONS.forEach(function (station) {
         var sheet = ss.getSheetByName(station);
         if (!sheet) return;
-        var rowIndex = findDateRow(sheet, p.date);
+        var rowIndex = findDateRow(sheet, date);
         if (rowIndex === -1) return;
         var values = sheet.getRange(rowIndex, 2, 1, 3).getDisplayValues()[0];
         grid[station] = { 'Morning': values[0], '2 PM': values[1], 'Night': values[2] };
       });
-      return jsonOut({ ok: true, date: p.date, stations: grid });
+      return jsonOut({ ok: true, date: date, stations: grid });
     }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {
@@ -138,12 +176,30 @@ function doGet(e) {
   }
 }
 
+/** Normalize a date from the app OR a hand-typed sheet cell to YYYY-MM-DD. */
+function normalizeDate(value) {
+  if (value === null || value === undefined) return '';
+  var s = String(value).trim();
+  var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return iso[1] + '-' + pad2(iso[2]) + '-' + pad2(iso[3]);
+  var us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (us) {
+    var year = us[3].length === 2 ? '20' + us[3] : us[3];
+    return year + '-' + pad2(us[1]) + '-' + pad2(us[2]);
+  }
+  return '';
+}
+
+function pad2(n) {
+  return ('0' + n).slice(-2);
+}
+
 function findDateRow(sheet, date) {
   var last = sheet.getLastRow();
   if (last < 2) return -1;
   var values = sheet.getRange(2, 1, last - 1, 1).getDisplayValues();
   for (var i = 0; i < values.length; i++) {
-    if (values[i][0] === date) return i + 2;
+    if (normalizeDate(values[i][0]) === date) return i + 2;
   }
   return -1;
 }

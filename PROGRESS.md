@@ -6,4 +6,12 @@
 - [x] **Phase 4 — Google Sheets storage, sync, offline queue, Settings** · Pure mapping layer for every tab (25 tests), both Apps Scripts generated (`apps-script/`), save/load/queue services, every button live, AM-use path, LOAD LAST TEMPS, Settings with Test Connection. 85 tests green. Verified offline flows in-browser; real sheet connection happens in phase 5.
 - [x] **Phase 5 — Launch + guided setup with the owner** · Live at https://jrkiefer.github.io/Doughalulator-/ (GitHub Pages, deploys on push to main). Both Sheets created, scripts deployed, connections tested, and the owner saved a real 2 PM record and real temps from their phone. SETUP.md is the plain-words diary. Post-launch: layout cleanup pass for small phones (v0.5.0).
 
-**All five phases done — the app is live and in real use.**
+- [x] **Parity build (specs 6–9)** · boli rename everywhere · blank-vs-zero through form/core/payload/load · closed-tomorrow rule · set-out & replacement (dough conserves) · Boli top-up with singles + EON boli check · batch round-down floored at 1 · autosave/sync engine replacing all save buttons (three-outcome transport, offline queue-less dirty model, keepalive, boot retry, phone-full path) · two-phone merge + force-load + two-tap reset · History card · peach-window-only bible toggle · backend locks/validation/tolerant dates · formula-driven Dough Use tab + Theil–Sen fitted-bible tabs + 🍕 menu · input hardening, zoom lock, dollar echo, collapsibles, ESLint in CI · 139 tests incl. sync-engine and in-process backend suites. v1.0.0.
+
+**Owner-changeable defaults picked in the parity build (§11):**
+1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
+2. Night temps slot stays "after 17:00".
+3. Sheet columns that depend on the tapped batch choice stay blank until a choice is tapped, then sync.
+4. Sicilian EON shortfalls report at full strength (no clamp, no minimum).
+
+**The app is live and in real use.**

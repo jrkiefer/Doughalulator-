@@ -1,6 +1,6 @@
-import type { CountedInventory } from '../../core/types';
+import type { CountedInventory, Maybe } from '../../core/types';
 
-/** The nine dough-count fields, kept as strings so inputs can be empty. */
+/** The nine dough-count fields, kept as strings so blank ≠ zero survives the form. */
 export interface CountsFields {
   indiTrays: string;
   indiSingles: string;
@@ -9,8 +9,8 @@ export interface CountsFields {
   largeTrays: string;
   largeSingles: string;
   sicSingles: string;
-  boilTrays: string;
-  boilSingles: string;
+  boliTrays: string;
+  boliSingles: string;
 }
 
 export const emptyCountsFields: CountsFields = {
@@ -21,30 +21,37 @@ export const emptyCountsFields: CountsFields = {
   largeTrays: '',
   largeSingles: '',
   sicSingles: '',
-  boilTrays: '',
-  boilSingles: '',
+  boliTrays: '',
+  boliSingles: '',
 };
 
-/** '' or junk → 0; otherwise the typed number. */
-export function toNum(value: string): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+/** Blank (or junk) → null — "not entered". A typed 0 is a real zero. */
+export function toNumOrNull(value: string): Maybe {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function parseCounts(fields: CountsFields): CountedInventory {
   return {
-    indiTrays: toNum(fields.indiTrays),
-    indiSingles: toNum(fields.indiSingles),
-    smallTrays: toNum(fields.smallTrays),
-    smallSingles: toNum(fields.smallSingles),
-    largeTrays: toNum(fields.largeTrays),
-    largeSingles: toNum(fields.largeSingles),
-    sicSingles: toNum(fields.sicSingles),
-    boilTrays: toNum(fields.boilTrays),
-    boilSingles: toNum(fields.boilSingles),
+    indiTrays: toNumOrNull(fields.indiTrays),
+    indiSingles: toNumOrNull(fields.indiSingles),
+    smallTrays: toNumOrNull(fields.smallTrays),
+    smallSingles: toNumOrNull(fields.smallSingles),
+    largeTrays: toNumOrNull(fields.largeTrays),
+    largeSingles: toNumOrNull(fields.largeSingles),
+    sicSingles: toNumOrNull(fields.sicSingles),
+    boliTrays: toNumOrNull(fields.boliTrays),
+    boliSingles: toNumOrNull(fields.boliSingles),
   };
 }
 
 export function fmt(n: number): string {
   return n.toLocaleString('en-US');
+}
+
+/** '—' for unknowns, the number otherwise. */
+export function fmtMaybe(n: Maybe): string {
+  return n === null ? '—' : fmt(n);
 }

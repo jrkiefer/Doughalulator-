@@ -1,18 +1,15 @@
 import type { AppConfig } from '../config';
 import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
-import { computeHave } from './counting';
+import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
   Bibles,
   DoughDayRecord,
   EonInputs,
   EonRecord,
-  PerBibleSize,
-  PerSize,
-  SizeKey,
+  Maybe,
+  PerBibleSizeMaybe,
 } from './types';
-
-const ALL_SIZES: SizeKey[] = ['indi', 'small', 'large', 'sic', 'boil'];
 
 /** Trays short, rounded up, for one size's shortfall (a non-negative number of balls). */
 function traysShortFor(shortBalls: number, perTray: number): number {
@@ -21,8 +18,9 @@ function traysShortFor(shortBalls: number, perTray: number): number {
 
 /**
  * The end-of-night calculation. Works with or without the day's 2 PM record:
- * without one it still counts dough and takes final sales, and a
- * manually-entered tomorrow forecast can stand in for the day record's need.
+ * without one, a manually-entered tomorrow forecast can stand in for the day
+ * record's need (a manual 0 = closed tomorrow, zero need everywhere). The
+ * tomorrow check covers all five sizes — Boli against its 36-ball target.
  */
 export function runEonCalculation(
   eonInputs: EonInputs,
@@ -31,99 +29,105 @@ export function runEonCalculation(
   config: AppConfig,
 ): EonRecord {
   const bpt = config.ballsPerTray;
+  const norm = (raw: Maybe): Maybe =>
+    raw === null ? null : normalizeSales(raw, config.salesShorthand);
 
+  const countedSizes = computeCountedSizes(eonInputs.counts);
   const eonHave = computeHave(eonInputs.counts, config);
-  const finalSales = normalizeSales(eonInputs.finalSalesRaw, config.salesShorthand);
+  const finalSales = norm(eonInputs.finalSalesRaw);
 
-  const pmSales = dayRecord ? finalSales - dayRecord.currentSales : null;
+  const pmSales =
+    finalSales !== null && dayRecord !== null && dayRecord.currentSales !== null
+      ? finalSales - dayRecord.currentSales
+      : null;
 
   // Where tomorrow's need comes from: the day record, or a manual forecast lookup.
   let needSource: EonRecord['needSource'] = null;
-  let need: PerBibleSize | null = null;
-  let manualTomorrowForecast: number | null = null;
+  let need: PerBibleSizeMaybe | null = null;
+  let closedTomorrow = false;
+  const manualRaw = eonInputs.manualTomorrowForecastRaw ?? null;
+  let manualTomorrowForecast: Maybe = null;
   let bibleUsed: EonRecord['bibleUsed'] = null;
   let bibleName: string | null = null;
   let tomorrowRowMatched: EonRecord['tomorrowRowMatched'] = null;
-  if (dayRecord) {
+
+  if (dayRecord && dayRecord.tomorrowForecast !== null) {
     needSource = 'dayRecord';
     need = dayRecord.need;
-  } else if (eonInputs.manualTomorrowForecastRaw !== undefined) {
+    closedTomorrow = dayRecord.flags.closedTomorrow;
+  } else if (manualRaw !== null) {
     needSource = 'manualForecast';
-    manualTomorrowForecast = normalizeSales(
-      eonInputs.manualTomorrowForecastRaw,
-      config.salesShorthand,
-    );
+    manualTomorrowForecast = norm(manualRaw);
+    closedTomorrow = manualTomorrowForecast === 0;
     bibleUsed = selectBibleId(eonInputs.date, config, eonInputs.bibleOverride);
     bibleName = config.bibleDisplayNames[bibleUsed];
-    tomorrowRowMatched = lookupBibleRow(
-      getBible(bibles, bibleUsed),
-      manualTomorrowForecast,
-      config,
-    );
-    need = rowToNeeds(tomorrowRowMatched);
+    if (closedTomorrow) {
+      need = { indi: 0, small: 0, large: 0, sic: 0 };
+    } else {
+      tomorrowRowMatched = lookupBibleRow(
+        getBible(bibles, bibleUsed),
+        manualTomorrowForecast!,
+        config,
+      );
+      need = rowToNeeds(tomorrowRowMatched);
+    }
   }
 
-  // Tomorrow check — Indi/Small/Large/Sic only, never Boil.
-  let eonLeft: PerBibleSize | null = null;
-  let traysShort: PerBibleSize | null = null;
-  let sicBallsShort: number | null = null;
+  // The check — all five sizes; Boli against 36 balls (0 when closed tomorrow).
+  const checkAvailable = need !== null;
+  const boliNeed: Maybe = checkAvailable ? (closedTomorrow ? 0 : config.boliTargetTrays * bpt.boli) : null;
+
+  let eonLeft: PerBibleSizeMaybe | null = null;
+  let traysShort: PerBibleSizeMaybe | null = null;
+  let sicBallsShort: Maybe = null;
+  let boliLeft: Maybe = null;
+  let boliTraysShort: Maybe = null;
   if (need) {
+    const leftFor = (haveVal: Maybe, needVal: Maybe): Maybe =>
+      haveVal === null || needVal === null ? null : haveVal - needVal;
     eonLeft = {
-      indi: eonHave.indi - need.indi,
-      small: eonHave.small - need.small,
-      large: eonHave.large - need.large,
-      sic: eonHave.sic - need.sic,
+      indi: leftFor(eonHave.indi, need.indi),
+      small: leftFor(eonHave.small, need.small),
+      large: leftFor(eonHave.large, need.large),
+      sic: leftFor(eonHave.sic, need.sic),
     };
+    const shortFor = (leftVal: Maybe, perTray: number): Maybe =>
+      leftVal === null ? null : leftVal < 0 ? traysShortFor(-leftVal, perTray) : 0;
     traysShort = {
-      indi: eonLeft.indi < 0 ? traysShortFor(-eonLeft.indi, bpt.indi) : 0,
-      small: eonLeft.small < 0 ? traysShortFor(-eonLeft.small, bpt.small) : 0,
-      large: eonLeft.large < 0 ? traysShortFor(-eonLeft.large, bpt.large) : 0,
-      sic: eonLeft.sic < 0 ? traysShortFor(-eonLeft.sic, config.sicMakeTraySize) : 0,
+      indi: shortFor(eonLeft.indi, bpt.indi),
+      small: shortFor(eonLeft.small, bpt.small),
+      large: shortFor(eonLeft.large, bpt.large),
+      sic: shortFor(eonLeft.sic, config.sicMakeTraySize),
     };
-    sicBallsShort = eonLeft.sic < 0 ? -eonLeft.sic : 0;
-  }
-
-  // PM use, all five sizes: what tonight's count says actually got used since 2 PM.
-  // Needs the day record AND the batch option the owner tapped.
-  let pmUse: PerSize | null = null;
-  if (dayRecord && dayRecord.chosenBatchOption) {
-    const chosen =
-      dayRecord.chosenBatchOption === 'down' ? dayRecord.batchDown : dayRecord.batchUp;
-    const fd = chosen.finalDough;
-    pmUse = {
-      indi: fd.indiTotal - eonHave.indi,
-      small: fd.smallTotal - eonHave.small,
-      large: fd.largeTotal - eonHave.large,
-      sic: fd.sicTotal - eonHave.sic,
-      boil: fd.boilTotal - eonHave.boil,
-    };
+    sicBallsShort = eonLeft.sic === null ? null : eonLeft.sic < 0 ? -eonLeft.sic : 0;
+    boliLeft = eonHave.boli === null || boliNeed === null ? null : eonHave.boli - boliNeed;
+    boliTraysShort = shortFor(boliLeft, bpt.boli);
   }
 
   return {
     date: eonInputs.date,
     counts: eonInputs.counts,
+    countedSizes,
     eonHave,
     finalSalesRaw: eonInputs.finalSalesRaw,
     finalSales,
     pmSales,
     needSource,
-    manualTomorrowForecastRaw: eonInputs.manualTomorrowForecastRaw ?? null,
+    manualTomorrowForecastRaw: manualRaw,
     manualTomorrowForecast,
     bibleUsed,
     bibleName,
     tomorrowRowMatched,
     need,
+    boliNeed,
     eonLeft,
+    boliLeft,
     traysShort,
+    boliTraysShort,
     sicBallsShort,
-    pmUse,
     flags: {
-      pmSalesAvailable: pmSales !== null,
-      tomorrowCheckAvailable: need !== null,
-      pmUseAvailable: pmUse !== null,
-      negativePmUseSizes: pmUse
-        ? ALL_SIZES.filter((size) => pmUse![size] < 0)
-        : [],
+      tomorrowCheckAvailable: checkAvailable,
+      closedTomorrow,
     },
   };
 }

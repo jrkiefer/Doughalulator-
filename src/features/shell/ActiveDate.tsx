@@ -10,6 +10,7 @@ export function ActiveDate(props: {
   date: string;
   onChange: (date: string) => void;
   onLoad: () => void;
+  loadArmed: boolean;
   loadMsg: string;
 }) {
   return (
@@ -26,7 +27,7 @@ export function ActiveDate(props: {
           />
         </div>
         <button className="btn-primary" onClick={props.onLoad}>
-          LOAD FROM SHEET
+          {props.loadArmed ? 'REPLACE UNSYNCED EDITS?' : 'LOAD FROM SHEET'}
         </button>
         {props.loadMsg && <div className="coming-note">{props.loadMsg}</div>}
       </div>

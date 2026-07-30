@@ -6,7 +6,7 @@ Goal: the remaining two modes, reusing phase 2's components and design system ex
 - **01 End of Night Sales** ("DOLLARS"): Final Sales field, shorthand hint applies.
 - **02 Current Dough Counts** ("CLOSING COUNT"): same card layout as 2 PM.
 - **08 EON Outlook** ("HAVE VS TOMORROW'S NEED"):
-  - With the day's 2 PM record: a big verdict — green "Covered for tomorrow" when every checked size is ≥ 0, otherwise red listing each short size with trays short (Sic also in balls). Boil is never part of the check.
+  - With the day's 2 PM record: a big verdict — green "Covered for tomorrow" when every checked size is ≥ 0, otherwise red listing each short size with trays short (Sic also in balls). Boli is never part of the check.
   - Below the verdict: PM Sales and the PM Use table (all five sizes; negatives shown as-is with a small "check count?" hint).
   - With NO 2 PM save for this date: show a Tomorrow's Forecast field labeled "No 2 PM save — enter manually"; compute Need via the engine's manual path and render the check. The PM Use area alone shows "needs today's 2 PM save".
 - **Dough Bible viewer** at the bottom, same as 2 PM.

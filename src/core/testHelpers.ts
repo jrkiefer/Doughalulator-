@@ -6,18 +6,23 @@ export const regularBible = doughBibleJson as Bible;
 export const peachBible = peachBibleJson as Bible;
 export const bibles: Bibles = { regular: regularBible, peach: peachBible };
 
-/** Build a full inventory count from just the non-zero parts. */
-export function counts(partial: Partial<CountedInventory> = {}): CountedInventory {
+/**
+ * Build an inventory count from just the entered parts. Anything not listed
+ * is null — "left blank" — matching how the form parses untouched fields.
+ */
+export function counts(
+  partial: Partial<Record<keyof CountedInventory, number>> = {},
+): CountedInventory {
   return {
-    indiTrays: 0,
-    indiSingles: 0,
-    smallTrays: 0,
-    smallSingles: 0,
-    largeTrays: 0,
-    largeSingles: 0,
-    sicSingles: 0,
-    boilTrays: 0,
-    boilSingles: 0,
+    indiTrays: null,
+    indiSingles: null,
+    smallTrays: null,
+    smallSingles: null,
+    largeTrays: null,
+    largeSingles: null,
+    sicSingles: null,
+    boliTrays: null,
+    boliSingles: null,
     ...partial,
   };
 }

@@ -1,39 +1,52 @@
 import type { AppConfig } from '../config';
 import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
-import { computeHave } from './counting';
+import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
   BatchOption,
   BibleSizeKey,
   Bibles,
   CountedInventory,
+  CountedSizes,
   DoughDayRecord,
   DoughInputs,
   FinalDough,
-  PerBibleSize,
-  PerSize,
+  Maybe,
+  PerBibleSizeMaybe,
+  PerSizeMaybe,
 } from './types';
 
 const BIBLE_SIZES: BibleSizeKey[] = ['indi', 'small', 'large', 'sic'];
 
-const ZERO_USE: PerBibleSize = { indi: 0, small: 0, large: 0, sic: 0 };
-
-/** Split a tray delta between Small and Large (40/60 by default). */
+/** Split a tray delta between Small and Large (40/60 by default). If only one
+ * of them was counted, it absorbs the whole delta; if neither, nothing moves. */
 export function splitTrayDelta(
   delta: number,
   config: AppConfig,
+  smallCounted = true,
+  largeCounted = true,
 ): { smallTrayDelta: number; largeTrayDelta: number } {
-  const smallTrayDelta = Math.round(config.batchAdjustSplit.small * delta);
-  return { smallTrayDelta, largeTrayDelta: delta - smallTrayDelta };
+  if (smallCounted && largeCounted) {
+    const smallTrayDelta = Math.round(config.batchAdjustSplit.small * delta);
+    return { smallTrayDelta, largeTrayDelta: delta - smallTrayDelta };
+  }
+  if (smallCounted) return { smallTrayDelta: delta, largeTrayDelta: 0 };
+  if (largeCounted) return { smallTrayDelta: 0, largeTrayDelta: delta };
+  return { smallTrayDelta: 0, largeTrayDelta: 0 };
 }
 
 interface BatchOptionParts {
   totalTrays: number;
-  trays: PerBibleSize;
-  sicBalls: number;
-  boilTrays: number;
+  trays: PerBibleSizeMaybe;
+  sicBalls: Maybe;
+  boliTrays: Maybe;
   counts: CountedInventory;
-  have: PerSize;
+  countedSizes: CountedSizes;
+  have: PerSizeMaybe;
+}
+
+function addMaybe(a: Maybe, b: Maybe): Maybe {
+  return a === null || b === null ? null : a + b;
 }
 
 /** Build one batch choice: adjust Small/Large trays to hit batches × traysPerBatch. */
@@ -42,42 +55,47 @@ export function buildBatchOption(
   parts: BatchOptionParts,
   config: AppConfig,
 ): BatchOption {
-  const { totalTrays, trays, sicBalls, boilTrays, counts, have } = parts;
+  const { totalTrays, trays, sicBalls, boliTrays, counts, countedSizes, have } = parts;
   const bpt = config.ballsPerTray;
   const targetTrays = batches * config.traysPerBatch;
   const trayDelta = targetTrays - totalTrays;
-  const { smallTrayDelta, largeTrayDelta } = splitTrayDelta(trayDelta, config);
+  const { smallTrayDelta, largeTrayDelta } = splitTrayDelta(
+    trayDelta,
+    config,
+    countedSizes.small && trays.small !== null,
+    countedSizes.large && trays.large !== null,
+  );
 
-  const finalTraysToMake: PerSize = {
+  const finalTraysToMake: PerSizeMaybe = {
     indi: trays.indi,
-    small: Math.max(0, trays.small + smallTrayDelta),
-    large: Math.max(0, trays.large + largeTrayDelta),
+    small: trays.small === null ? null : Math.max(0, trays.small + smallTrayDelta),
+    large: trays.large === null ? null : Math.max(0, trays.large + largeTrayDelta),
     sic: trays.sic,
-    boil: boilTrays,
+    boli: boliTrays,
   };
 
-  const ballsMade: PerSize = {
-    indi: finalTraysToMake.indi * bpt.indi,
-    small: finalTraysToMake.small * bpt.small,
-    large: finalTraysToMake.large * bpt.large,
+  const ballsMade: PerSizeMaybe = {
+    indi: finalTraysToMake.indi === null ? null : finalTraysToMake.indi * bpt.indi,
+    small: finalTraysToMake.small === null ? null : finalTraysToMake.small * bpt.small,
+    large: finalTraysToMake.large === null ? null : finalTraysToMake.large * bpt.large,
     sic: sicBalls,
-    boil: finalTraysToMake.boil * bpt.boil,
+    boli: finalTraysToMake.boli === null ? null : finalTraysToMake.boli * bpt.boli,
   };
 
   const finalDough: FinalDough = {
-    indiTrays: counts.indiTrays + finalTraysToMake.indi,
-    indiSingles: counts.indiSingles,
-    indiTotal: have.indi + ballsMade.indi,
-    smallTrays: counts.smallTrays + finalTraysToMake.small,
-    smallSingles: counts.smallSingles,
-    smallTotal: have.small + ballsMade.small,
-    largeTrays: counts.largeTrays + finalTraysToMake.large,
-    largeSingles: counts.largeSingles,
-    largeTotal: have.large + ballsMade.large,
-    sicTotal: have.sic + ballsMade.sic,
-    boilTrays: counts.boilTrays + finalTraysToMake.boil,
-    boilSingles: counts.boilSingles,
-    boilTotal: have.boil + ballsMade.boil,
+    indiTrays: addMaybe(counts.indiTrays ?? (countedSizes.indi ? 0 : null), finalTraysToMake.indi),
+    indiSingles: countedSizes.indi ? (counts.indiSingles ?? 0) : null,
+    indiTotal: addMaybe(have.indi, ballsMade.indi),
+    smallTrays: addMaybe(counts.smallTrays ?? (countedSizes.small ? 0 : null), finalTraysToMake.small),
+    smallSingles: countedSizes.small ? (counts.smallSingles ?? 0) : null,
+    smallTotal: addMaybe(have.small, ballsMade.small),
+    largeTrays: addMaybe(counts.largeTrays ?? (countedSizes.large ? 0 : null), finalTraysToMake.large),
+    largeSingles: countedSizes.large ? (counts.largeSingles ?? 0) : null,
+    largeTotal: addMaybe(have.large, ballsMade.large),
+    sicTotal: addMaybe(have.sic, ballsMade.sic),
+    boliTrays: addMaybe(counts.boliTrays ?? (countedSizes.boli ? 0 : null), finalTraysToMake.boli),
+    boliSingles: countedSizes.boli ? (counts.boliSingles ?? 0) : null,
+    boliTotal: addMaybe(have.boli, ballsMade.boli),
   };
 
   return {
@@ -92,77 +110,129 @@ export function buildBatchOption(
   };
 }
 
-/** The whole 2 PM calculation. Pure: everything comes in, everything lands on the record. */
+/**
+ * The whole 2 PM calculation. Pure: everything comes in, everything lands on
+ * the record. Blank inputs are null and stay null ("—"), a typed 0 is a real
+ * zero, and a tomorrow forecast of exactly 0 means the shop is closed
+ * tomorrow (zero need for every size, including Boli).
+ */
 export function runDoughCalculation(
   inputs: DoughInputs,
   bibles: Bibles,
   config: AppConfig,
 ): DoughDayRecord {
   const bpt = config.ballsPerTray;
+  const norm = (raw: Maybe): Maybe =>
+    raw === null ? null : normalizeSales(raw, config.salesShorthand);
 
-  const todayForecast = normalizeSales(inputs.todayForecastRaw, config.salesShorthand);
-  const currentSales = normalizeSales(inputs.currentSalesRaw, config.salesShorthand);
-  const tomorrowForecast = normalizeSales(inputs.tomorrowForecastRaw, config.salesShorthand);
+  const todayForecast = norm(inputs.todayForecastRaw);
+  const currentSales = norm(inputs.currentSalesRaw);
+  const tomorrowForecast = norm(inputs.tomorrowForecastRaw);
 
   const bibleUsed = selectBibleId(inputs.date, config, inputs.bibleOverride);
   const bible = getBible(bibles, bibleUsed);
 
+  const countedSizes = computeCountedSizes(inputs.counts);
   const have = computeHave(inputs.counts, config);
 
   // Tonight: how much of what we have gets used before close.
-  const salesLeft = todayForecast - currentSales;
-  const negativeSalesLeft = salesLeft < 0;
-  const tonightRowMatched = salesLeft > 0 ? lookupBibleRow(bible, salesLeft, config) : null;
-  const use = tonightRowMatched ? rowToNeeds(tonightRowMatched) : { ...ZERO_USE };
+  const tonightKnown = todayForecast !== null && currentSales !== null;
+  const salesLeft = tonightKnown ? todayForecast! - currentSales! : null;
+  const negativeSalesLeft = salesLeft !== null && salesLeft < 0;
+  const tonightRowMatched =
+    salesLeft !== null && salesLeft > 0 ? lookupBibleRow(bible, salesLeft, config) : null;
+  const tonightUse = tonightRowMatched
+    ? rowToNeeds(tonightRowMatched)
+    : tonightKnown
+      ? { indi: 0, small: 0, large: 0, sic: 0 }
+      : null;
 
-  const leftRaw: PerBibleSize = {
-    indi: have.indi - use.indi,
-    small: have.small - use.small,
-    large: have.large - use.large,
-    sic: have.sic - use.sic,
+  const use: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const left: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const setOutTrays: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const setOutBalls: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const perTray: Record<BibleSizeKey, number> = {
+    indi: bpt.indi,
+    small: bpt.small,
+    large: bpt.large,
+    sic: config.sicMakeTraySize,
   };
-  const left: PerBibleSize = {
-    indi: Math.max(0, leftRaw.indi),
-    small: Math.max(0, leftRaw.small),
-    large: Math.max(0, leftRaw.large),
-    sic: Math.max(0, leftRaw.sic),
-  };
-  const shortageSizes = BIBLE_SIZES.filter((size) => leftRaw[size] < 0);
+  for (const size of BIBLE_SIZES) {
+    if (!tonightUse || !countedSizes[size]) continue;
+    use[size] = tonightUse[size];
+    left[size] = have[size]! - tonightUse[size];
+    const shortfall = left[size]! < 0 ? -left[size]! : 0;
+    setOutBalls[size] = shortfall;
+    setOutTrays[size] = shortfall > 0 ? Math.ceil(shortfall / perTray[size]) : 0;
+  }
+  const shortageSizes = BIBLE_SIZES.filter((size) => (left[size] ?? 0) < 0);
 
-  // Tomorrow: what the bible says we need, minus what will be left tonight.
-  const tomorrowRowMatched = lookupBibleRow(bible, tomorrowForecast, config);
-  const need = rowToNeeds(tomorrowRowMatched);
-  const make: PerBibleSize = {
-    indi: Math.max(0, need.indi - left.indi),
-    small: Math.max(0, need.small - left.small),
-    large: Math.max(0, need.large - left.large),
-    sic: Math.max(0, need.sic - left.sic),
-  };
+  // Tomorrow: the bible's need — or zero everywhere when the shop is closed.
+  const closedTomorrow = tomorrowForecast === 0;
+  const tomorrowRowMatched =
+    tomorrowForecast !== null && !closedTomorrow
+      ? lookupBibleRow(bible, tomorrowForecast, config)
+      : null;
+  const tomorrowNeed = closedTomorrow
+    ? { indi: 0, small: 0, large: 0, sic: 0 }
+    : tomorrowRowMatched
+      ? rowToNeeds(tomorrowRowMatched)
+      : null;
 
-  const trays: PerBibleSize = {
-    indi: Math.ceil(make.indi / bpt.indi),
-    small: Math.ceil(make.small / bpt.small),
-    large: Math.ceil(make.large / bpt.large),
-    sic: Math.ceil(make.sic / config.sicMakeTraySize),
-  };
+  const need: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const make: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  const trays: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
+  for (const size of BIBLE_SIZES) {
+    if (!tomorrowNeed) continue;
+    need[size] = tomorrowNeed[size];
+    if (closedTomorrow) {
+      // Closed tomorrow: nothing gets made, whatever the counts say.
+      make[size] = 0;
+      trays[size] = 0;
+    } else if (left[size] !== null) {
+      // Set-out replacement: left may be negative, so tomorrow's make
+      // includes tonight's set-out dough. Floor at zero only after that.
+      make[size] = Math.max(0, tomorrowNeed[size] - left[size]!);
+      trays[size] = Math.ceil(make[size]! / perTray[size]);
+    }
+  }
   const sicBalls = make.sic;
 
-  // Boil skips the bible entirely: top the count back up to the target.
-  const boilTrays = Math.max(0, config.boilTargetTrays - inputs.counts.boilTrays);
+  // Boli skips the bible: top up to the target, counting trays AND singles.
+  const boliTargetBalls = config.boliTargetTrays * bpt.boli;
+  const boliTrays = closedTomorrow
+    ? 0
+    : countedSizes.boli
+      ? Math.ceil(Math.max(0, boliTargetBalls - have.boli!) / bpt.boli)
+      : null;
 
-  const totalTrays = trays.indi + trays.small + trays.large + trays.sic + boilTrays;
-  const exactBatches = totalTrays / config.traysPerBatch;
+  // Batches need tonight AND tomorrow to be known; uncounted sizes are excluded.
+  const batchesKnown = tonightKnown && tomorrowNeed !== null;
+  let totalTrays: Maybe = null;
+  if (batchesKnown) {
+    totalTrays = closedTomorrow
+      ? 0
+      : BIBLE_SIZES.reduce((sum, size) => sum + (trays[size] ?? 0), 0) + (boliTrays ?? 0);
+  }
+  const exactBatches = totalTrays === null ? null : totalTrays / config.traysPerBatch;
 
-  const parts: BatchOptionParts = {
-    totalTrays,
-    trays,
-    sicBalls,
-    boilTrays,
-    counts: inputs.counts,
-    have,
-  };
-  const batchDown = buildBatchOption(Math.floor(exactBatches), parts, config);
-  const batchUp = buildBatchOption(Math.ceil(exactBatches), parts, config);
+  let batchDown: BatchOption | null = null;
+  let batchUp: BatchOption | null = null;
+  if (totalTrays !== null && totalTrays > 0) {
+    const parts: BatchOptionParts = {
+      totalTrays,
+      trays,
+      sicBalls,
+      boliTrays,
+      counts: inputs.counts,
+      countedSizes,
+      have,
+    };
+    // Round-down is floored at one batch: a night with dough to make never
+    // gets offered a zero-batch option.
+    batchDown = buildBatchOption(Math.max(1, Math.floor(exactBatches!)), parts, config);
+    batchUp = buildBatchOption(Math.ceil(exactBatches!), parts, config);
+  }
 
   return {
     date: inputs.date,
@@ -178,20 +248,27 @@ export function runDoughCalculation(
     tonightRowMatched,
     tomorrowRowMatched,
     counts: inputs.counts,
+    countedSizes,
     have,
     use,
-    leftRaw,
     left,
+    setOutTrays,
+    setOutBalls,
     need,
     make,
     trays,
     sicBalls,
-    boilTrays,
+    boliTrays,
     totalTrays,
     exactBatches,
     batchDown,
     batchUp,
     chosenBatchOption: null,
-    flags: { negativeSalesLeft, shortageSizes },
+    flags: {
+      closedTomorrow,
+      negativeSalesLeft,
+      boliNotCounted: !countedSizes.boli,
+      shortageSizes,
+    },
   };
 }
