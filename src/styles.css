@@ -14,8 +14,10 @@
   --large: #356ea3;
   --sic: #bb527a;
   --boil: #733d89;
-  --serif: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
-  --mono: 'Space Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  /* Calibri where the device has it (Windows/Office); Carlito — its
+     metric-identical free twin — bundled for everywhere else. */
+  --serif: Calibri, 'Carlito', -apple-system, 'Segoe UI', sans-serif;
+  --mono: Calibri, 'Carlito', -apple-system, 'Segoe UI', sans-serif;
   --r-card: 18px;
   --r-input: 12px;
 }
@@ -30,7 +32,7 @@ html {
 
 body {
   margin: 0;
-  background: var(--band);
+  background: var(--cream);
   color: var(--ink);
   font-family: var(--mono);
   font-size: 15px;
@@ -55,16 +57,6 @@ body {
   padding: 0 16px 26px;
 }
 
-.band-dark {
-  background: var(--band);
-  color: var(--cream);
-  padding: 30px 16px 34px;
-}
-
-.band-dark .btn-primary {
-  background: var(--card);
-  color: var(--ink);
-}
 
 /* ————— type ————— */
 .micro {
@@ -107,22 +99,6 @@ body {
   margin: 5px 0 0;
 }
 
-.band-dark .section-head {
-  margin-top: 0;
-}
-
-.band-dark .section-head h2 {
-  color: var(--cream);
-}
-
-.band-dark .section-head .note {
-  color: #98907e;
-}
-
-.band-dark .card + .section-head {
-  margin-top: 30px;
-}
-
 .badge {
   font-family: var(--mono);
   font-size: 12px;
@@ -134,10 +110,6 @@ body {
   flex: none;
 }
 
-.band-dark .badge {
-  border-color: rgba(251, 247, 238, 0.4);
-  color: rgba(251, 247, 238, 0.8);
-}
 
 /* ————— cards ————— */
 .card {
@@ -592,6 +564,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .bysize th {
@@ -827,12 +800,14 @@ button {
 
 /* ————— footer ————— */
 .footer {
-  background: var(--band);
+  background: var(--cream);
+  border-top: 1px solid var(--line);
   color: var(--muted);
   text-align: center;
-  padding: 26px 16px 34px;
+  padding: 24px 16px 34px;
   font-size: 12px;
   letter-spacing: 0.22em;
+  margin-top: auto;
 }
 
 .footer .settings {
