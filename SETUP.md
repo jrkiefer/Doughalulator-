@@ -35,8 +35,8 @@ Settings stores the two /exec addresses and the two secrets **on that phone only
 
 ## Everyday things worth knowing
 
-- **The colored dot** top-left: NEW NIGHT (fresh form) → SAVED (reached Google) → UNSYNCED (kept safely on the phone, will sync next time the app opens with internet) → LOADED (a saved day pulled back in).
-- **Nothing saves by accident.** A day only saves when a Save button is tapped, and the 2 PM save insists on a Round up/down choice first.
+- **The app saves by itself.** Every number typed is kept on the phone instantly and sent to Google a couple of seconds later — there are no Save buttons.
+- **The colored dot** top-left tells the truth: NEW NIGHT (nothing typed) → SAVED ON PHONE → SYNCING → SYNCED · OFFLINE — WILL RETRY (it sends itself when internet returns) · red warnings if the sheet refused a save or nothing could be saved anywhere.
 - **LOAD FROM SHEET** brings a saved date back into the form. **LOAD LAST TEMPS** pre-fills the previous readings (it never fills anything without being tapped).
 - **Don't rename** the two spreadsheets' tabs or their column headers, and don't rename the station tabs — the app finds everything by those exact names.
 - The dough bibles the app calculates from live in this repo (`src/data/`). The bible tabs in the spreadsheet are just a mirror for reading.

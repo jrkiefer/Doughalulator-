@@ -1,5 +1,6 @@
 import { defaultConfig } from '../../config';
-import type { BibleSizeKey, DoughDayRecord, PerSize } from '../../core/types';
+import type { BibleSizeKey, DoughDayRecord } from '../../core/types';
+import { fmtMaybe } from '../shared/counts';
 import { SectionHead } from '../shell/SectionHead';
 
 const ROWS: { key: BibleSizeKey; name: string; color: string }[] = [
@@ -9,19 +10,37 @@ const ROWS: { key: BibleSizeKey; name: string; color: string }[] = [
   { key: 'sic', name: 'SIC', color: 'var(--sic)' },
 ];
 
-export function BySizeTable(props: {
-  record: DoughDayRecord | null;
-  have: PerSize;
-  boilMake: number | null;
-}) {
-  const { record, have } = props;
+export function BySizeTable(props: { record: DoughDayRecord }) {
+  const { record } = props;
   const cfg = defaultConfig;
-  const dash = '—';
+
+  const setOuts = ROWS.filter(({ key }) => (record.setOutTrays[key] ?? 0) > 0);
 
   return (
     <>
       <SectionHead num="04" title="By Size" note="TONIGHT → EON → TOMORROW" />
       <div className="card bysize">
+        {setOuts.length > 0 && (
+          <div className="setout">
+            <span className="label">SET OUT TONIGHT</span>
+            <div className="setout-list">
+              {setOuts.map(({ key, name, color }) => (
+                <span key={key} className="tray-pill" style={{ ['--size' as string]: color }}>
+                  <span className="dot" />
+                  {name}{' '}
+                  <strong>
+                    {record.setOutTrays[key]} {record.setOutTrays[key] === 1 ? 'tray' : 'trays'}
+                  </strong>
+                  &nbsp;({record.setOutBalls[key]} balls)
+                </span>
+              ))}
+            </div>
+            <p className="days-work-note">
+              Tonight will run past these counts — set the dough out now; tomorrow's make replaces it.
+            </p>
+          </div>
+        )}
+
         <table>
           <thead>
             <tr>
@@ -36,7 +55,7 @@ export function BySizeTable(props: {
           </thead>
           <tbody>
             {ROWS.map(({ key, name, color }) => {
-              const shortage = record !== null && record.leftRaw[key] < 0;
+              const left = record.left[key];
               return (
                 <tr key={key}>
                   <td className="size-name" style={{ ['--size' as string]: color }}>
@@ -44,23 +63,19 @@ export function BySizeTable(props: {
                     {name}
                   </td>
                   <td>
-                    <strong>{have[key]}</strong>
+                    <strong>{fmtMaybe(record.have[key])}</strong>
                   </td>
-                  <td>{record ? record.use[key] : dash}</td>
-                  <td className={shortage ? 'neg' : ''}>
-                    {record ? (shortage ? record.leftRaw[key] : record.left[key]) : dash}
-                  </td>
-                  <td>{record ? record.need[key] : dash}</td>
-                  <td>{record ? record.make[key] : dash}</td>
+                  <td>{fmtMaybe(record.use[key])}</td>
+                  <td className={left !== null && left < 0 ? 'neg' : ''}>{fmtMaybe(left)}</td>
+                  <td>{fmtMaybe(record.need[key])}</td>
+                  <td>{fmtMaybe(record.make[key])}</td>
                   <td className="trays-cell" style={{ ['--size' as string]: color }}>
                     {key === 'sic' ? (
                       <>
-                        {record ? record.sicBalls : dash} <span className="micro">balls</span>
+                        {fmtMaybe(record.sicBalls)} <span className="micro">balls</span>
                       </>
-                    ) : record ? (
-                      record.trays[key]
                     ) : (
-                      dash
+                      fmtMaybe(record.trays[key])
                     )}
                   </td>
                 </tr>
@@ -69,31 +84,27 @@ export function BySizeTable(props: {
           </tbody>
         </table>
 
-        <div className="boil-row" style={{ ['--size' as string]: 'var(--boil)' }}>
-          <span className="size-name" style={{ ['--size' as string]: 'var(--boil)' }}>
+        <div className="boli-row" style={{ ['--size' as string]: 'var(--boli)' }}>
+          <span className="size-name" style={{ ['--size' as string]: 'var(--boli)' }}>
             <span className="dot" />
-            <strong>BOIL</strong>
+            <strong>BOLI</strong>
           </span>
           <span className="kv">
             <span className="micro">HAVE</span>
-            <strong>{have.boil}</strong>
+            <strong>{fmtMaybe(record.have.boli)}</strong>
           </span>
           <span className="kv">
             <span className="micro">TARGET</span>
-            <strong>{cfg.boilTargetTrays * cfg.ballsPerTray.boil}</strong>
+            <strong>{record.flags.closedTomorrow ? 0 : cfg.boliTargetTrays * cfg.ballsPerTray.boli}</strong>
           </span>
           <span className="kv">
             <span className="micro">MAKE</span>
-            <strong>{props.boilMake === null ? dash : props.boilMake}</strong>
+            <strong>{fmtMaybe(record.boliTrays)}</strong>
           </span>
-          <span className="note">whole trays only</span>
+          <span className="note">
+            {record.flags.boliNotCounted ? 'not counted' : 'whole trays only'}
+          </span>
         </div>
-
-        {!record && (
-          <p className="table-note">
-            Fill in the counts, sales, and both forecasts to get tonight's make.
-          </p>
-        )}
       </div>
     </>
   );

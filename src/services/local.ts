@@ -1,28 +1,59 @@
 /**
- * Everything kept on the phone: saved records (so the app works offline and
- * loads are instant) and the offline queue of saves that still need to reach
- * the sheets.
+ * Phone storage, version 2 (the v2 prefix discards pre-rename caches).
+ * One entry per date holding the raw FORM state for each record type plus
+ * sync bookkeeping — records themselves are recomputed from forms. Every
+ * read/write is guarded: a full phone can never crash the app (writes
+ * report failure so the sync engine can raise the §3e states).
  */
-import type { AmUseResult, DoughDayRecord, EonRecord } from '../core/types';
-import type { TempsPayload } from './mapping';
+import type { TempSlot } from '../core';
+import type { BibleId } from '../core/types';
+import type { HistorySummary } from './mapping';
 
-export interface CachedDay {
-  day?: DoughDayRecord;
-  amUse?: AmUseResult | null;
-  eon?: EonRecord;
+export const STORE_VERSION = 2;
+const PREFIX = `doughalulator.v${STORE_VERSION}.`;
+const DATE_PREFIX = `${PREFIX}date.`;
+const HISTORY_KEY = `${PREFIX}history`;
+const LATEST_TEMPS_KEY = `${PREFIX}temps.latest`;
+/** Old-model keys (pre-rename snapshots + the retired queue) — swept at boot. */
+const STALE_PREFIXES = ['doughalulator.day.', 'doughalulator.temps.', 'doughalulator.queue'];
+
+/** Sync bookkeeping shared by all three record types. */
+export interface SyncMeta {
+  /** Stamped on every edit. */
+  updatedAt: number;
+  /** Stamped when the sheet confirmed this content (0 = never). */
+  syncedAt: number;
+  /** Hash of the last payload the sheet acknowledged — dedupes identical resends. */
+  ackHash: string | null;
+  /** Set when the sheet terminally refused this record; cleared by the next edit. */
+  rejectedReason: string | null;
 }
 
-export interface QueueItem {
-  id: string;
-  target: 'dough' | 'temps';
-  payload: unknown;
-  queuedAt: string;
+export interface DayEntry extends SyncMeta {
+  form: Record<string, string>;
+  rounding: 'down' | 'up' | null;
+  bibleOverride: BibleId | null;
 }
 
-const DAY_PREFIX = 'doughalulator.day.';
-const TEMPS_PREFIX = 'doughalulator.temps.';
-const LATEST_TEMPS_KEY = 'doughalulator.temps.latest';
-const QUEUE_KEY = 'doughalulator.queue';
+export interface EonEntry extends SyncMeta {
+  form: Record<string, string>;
+}
+
+export interface TempsEntry extends SyncMeta {
+  readings: Record<TempSlot, Record<string, string>>;
+  /** Per-slot clock stamp of the last edit — keeps the payload hash stable. */
+  times?: Partial<Record<TempSlot, string>>;
+}
+
+export interface DateEntry {
+  day?: DayEntry;
+  eon?: EonEntry;
+  temps?: TempsEntry;
+}
+
+export function freshMeta(now: number): SyncMeta {
+  return { updatedAt: now, syncedAt: 0, ackHash: null, rejectedReason: null };
+}
 
 function read<T>(key: string): T | null {
   try {
@@ -33,59 +64,77 @@ function read<T>(key: string): T | null {
   }
 }
 
-function write(key: string, value: unknown): void {
-  localStorage.setItem(key, JSON.stringify(value));
+/** Returns false when the phone refused the write (storage full). */
+function write(key: string, value: unknown): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-// ————— day records —————
-
-export function cachedDay(date: string): CachedDay {
-  return read<CachedDay>(DAY_PREFIX + date) ?? {};
+export function loadEntry(date: string): DateEntry | null {
+  return read<DateEntry>(DATE_PREFIX + date);
 }
 
-export function cacheDayPatch(date: string, patch: Partial<CachedDay>): void {
-  write(DAY_PREFIX + date, { ...cachedDay(date), ...patch });
+export function saveEntry(date: string, entry: DateEntry): boolean {
+  return write(DATE_PREFIX + date, entry);
 }
 
-// ————— temps —————
+export function clearEntry(date: string): void {
+  try {
+    localStorage.removeItem(DATE_PREFIX + date);
+  } catch {
+    // nothing to do — a failed remove just leaves a stale cache entry
+  }
+}
+
+export function listCachedDates(): string[] {
+  const dates: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(DATE_PREFIX)) dates.push(key.slice(DATE_PREFIX.length));
+    }
+  } catch {
+    // storage unreadable — behave as empty
+  }
+  return dates.sort();
+}
+
+/** Drop pre-v2 keys so stale records with old field names are never half-read. */
+export function sweepStaleKeys(): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && STALE_PREFIXES.some((p) => key.startsWith(p))) stale.push(key);
+    }
+    stale.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // best effort
+  }
+}
+
+// ————— history card cache —————
+
+export function cachedHistory(): HistorySummary[] {
+  return read<HistorySummary[]>(HISTORY_KEY) ?? [];
+}
+
+export function cacheHistory(summaries: HistorySummary[]): void {
+  write(HISTORY_KEY, summaries);
+}
+
+// ————— latest temps (LOAD LAST TEMPS fallback) —————
 
 export type LatestTemps = Record<string, { temp: number; slot: string; when: string }>;
-
-export function cacheTempsSave(payload: TempsPayload): void {
-  const grid = read<Record<string, Record<string, number>>>(TEMPS_PREFIX + payload.date) ?? {};
-  for (const r of payload.readings) {
-    grid[r.station] = { ...grid[r.station], [payload.slot]: r.temp };
-  }
-  write(TEMPS_PREFIX + payload.date, grid);
-
-  const latest = read<LatestTemps>(LATEST_TEMPS_KEY) ?? {};
-  for (const r of payload.readings) {
-    latest[r.station] = { temp: r.temp, slot: payload.slot, when: `${payload.date} ${payload.time}` };
-  }
-  write(LATEST_TEMPS_KEY, latest);
-}
 
 export function cachedLatestTemps(): LatestTemps | null {
   return read<LatestTemps>(LATEST_TEMPS_KEY);
 }
 
-// ————— offline queue —————
-
-export function queuedItems(): QueueItem[] {
-  return read<QueueItem[]>(QUEUE_KEY) ?? [];
-}
-
-export function enqueue(target: 'dough' | 'temps', payload: unknown): void {
-  const items = queuedItems();
-  items.push({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    target,
-    payload,
-    queuedAt: new Date().toISOString(),
-  });
-  write(QUEUE_KEY, items);
-}
-
-export function replaceQueue(items: QueueItem[]): void {
-  write(QUEUE_KEY, items);
+export function cacheLatestTemps(latest: LatestTemps): void {
+  write(LATEST_TEMPS_KEY, latest);
 }

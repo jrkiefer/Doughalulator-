@@ -13,7 +13,7 @@
   --small: #a63b27;
   --large: #356ea3;
   --sic: #bb527a;
-  --boil: #733d89;
+  --boli: #733d89;
   /* Calibri where the device has it (Windows/Office); Carlito — its
      metric-identical free twin — bundled for everywhere else. */
   --serif: Calibri, 'Carlito', -apple-system, 'Segoe UI', sans-serif;
@@ -622,7 +622,7 @@ button {
   font-weight: 700;
 }
 
-.bysize .boil-row {
+.bysize .boli-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -633,18 +633,18 @@ button {
   font-size: 13px;
 }
 
-.bysize .boil-row .note {
+.bysize .boli-row .note {
   flex-basis: 100%;
   margin-left: 0;
   text-align: right;
 }
 
-.bysize .boil-row .kv .micro {
+.bysize .boli-row .kv .micro {
   display: block;
   margin-bottom: 3px;
 }
 
-.bysize .boil-row .note {
+.bysize .boli-row .note {
   margin-left: auto;
   color: var(--muted);
   font-size: 11px;
@@ -821,6 +821,159 @@ button {
   text-decoration: underline;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* ————— parity additions ————— */
+.input-wrap {
+  position: relative;
+  flex: none;
+  width: clamp(110px, 44%, 150px);
+}
+
+.field-row .input-wrap .input {
+  width: 100%;
+}
+
+.fld .input-wrap {
+  width: 100%;
+}
+
+.chip {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  background: var(--indi);
+  color: var(--card);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.chip-temp {
+  top: -7px;
+  right: -5px;
+}
+
+.dollar-echo {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 2px 0;
+  text-align: right;
+}
+
+.closed-chip {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--large);
+  padding: 8px 2px;
+}
+
+.setout {
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.setout > .label {
+  color: var(--accent);
+}
+
+.setout-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.banner-danger {
+  background: var(--accent);
+  color: var(--card);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  margin: 6px 0 4px;
+}
+
+.status-pill.status-rejected,
+.status-pill.status-unsaved {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.status-pill.status-rejected::before,
+.status-pill.status-unsaved::before {
+  background: var(--accent);
+}
+
+.status-pill.status-synced::before {
+  background: var(--indi);
+}
+
+.status-pill.status-syncing::before,
+.status-pill.status-saving::before {
+  background: var(--large);
+}
+
+.btn-reset.armed {
+  background: var(--accent);
+  color: var(--card);
+  border-color: var(--accent);
+}
+
+.collapsible .bar {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 14px 2px;
+}
+
+.collapsible .bar .name {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.history .history-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 12px 2px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.history .history-row:first-child {
+  border-top: none;
+}
+
+.history .history-row .date {
+  font-weight: 700;
+}
+
+.history .history-row .detail {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.history .short-dot {
+  color: var(--accent);
+  font-size: 10px;
 }
 
 /* ————— misc ————— */
