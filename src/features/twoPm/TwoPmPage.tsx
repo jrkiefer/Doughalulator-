@@ -44,7 +44,7 @@ export function TwoPmPage(props: {
         <CountCards fields={form} onChange={props.onFormChange} have={have} note="TRAYS + SINGLES" />
       </div>
 
-      <div className="band band-dark">
+      <div className="band">
         <DaysWork record={record} rounding={props.rounding} onRounding={props.onRounding} />
         <BySizeTable record={record} have={have} boilMake={record ? record.boilTrays : null} />
         <AmUseBlock result={props.amUse} />

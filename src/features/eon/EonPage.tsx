@@ -85,7 +85,7 @@ export function EonPage(props: {
         />
       </div>
 
-      <div className="band band-dark">
+      <div className="band">
         <SectionHead num="08" title="EON Outlook" note="HAVE VS TOMORROW'S NEED" />
         <div className="card">
           {!dayRecord && (
