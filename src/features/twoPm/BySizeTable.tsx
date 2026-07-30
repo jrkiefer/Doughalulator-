@@ -52,19 +52,16 @@ export function BySizeTable(props: {
                   </td>
                   <td>{record ? record.need[key] : dash}</td>
                   <td>{record ? record.make[key] : dash}</td>
-                  <td className="trays-cell">
-                    <div className="trays-box" style={{ ['--size' as string]: color }}>
-                      {key === 'sic' ? (
-                        <>
-                          {record ? record.sicBalls : dash}
-                          <span className="micro">BALLS</span>
-                        </>
-                      ) : record ? (
-                        record.trays[key]
-                      ) : (
-                        dash
-                      )}
-                    </div>
+                  <td className="trays-cell" style={{ ['--size' as string]: color }}>
+                    {key === 'sic' ? (
+                      <>
+                        {record ? record.sicBalls : dash} <span className="micro">balls</span>
+                      </>
+                    ) : record ? (
+                      record.trays[key]
+                    ) : (
+                      dash
+                    )}
                   </td>
                 </tr>
               );

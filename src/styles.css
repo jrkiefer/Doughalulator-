@@ -52,16 +52,13 @@ body {
 
 /* ————— bands ————— */
 .band {
-  padding: 0 16px;
+  padding: 0 16px 26px;
 }
 
 .band-dark {
   background: var(--band);
   color: var(--cream);
-  padding: 26px 16px 30px;
-  clip-path: polygon(0 30px, 58% 7px, 100% 0, 100% 100%, 0 100%);
-  margin-top: -6px;
-  padding-top: 56px;
+  padding: 30px 16px 34px;
 }
 
 .band-dark .btn-primary {
@@ -87,32 +84,43 @@ body {
 }
 
 .section-head {
+  margin: 30px 2px 12px;
+}
+
+.section-head .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  margin: 26px 2px 12px;
 }
 
 .section-head h2 {
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: clamp(20px, 6.6vw, 23px);
   font-weight: 800;
   margin: 0;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
-.section-head .micro {
-  margin-left: auto;
-  white-space: nowrap;
+.section-head .note {
+  display: block;
+  margin: 5px 0 0;
+}
+
+.band-dark .section-head {
+  margin-top: 0;
 }
 
 .band-dark .section-head h2 {
-  color: #57503f;
+  color: var(--cream);
 }
 
-.band-dark .section-head .micro {
-  color: #6d6552;
+.band-dark .section-head .note {
+  color: #98907e;
+}
+
+.band-dark .card + .section-head {
+  margin-top: 30px;
 }
 
 .badge {
@@ -123,12 +131,12 @@ body {
   border: 2px solid var(--ink);
   border-radius: 8px;
   padding: 1px 7px;
-  align-self: center;
+  flex: none;
 }
 
 .band-dark .badge {
-  border-color: #57503f;
-  color: #57503f;
+  border-color: rgba(251, 247, 238, 0.4);
+  color: rgba(251, 247, 238, 0.8);
 }
 
 /* ————— cards ————— */
@@ -174,6 +182,7 @@ button {
   padding: 9px 18px;
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .pill.active {
@@ -258,10 +267,10 @@ button {
 
 .title {
   font-family: var(--serif);
-  font-size: 46px;
+  font-size: clamp(36px, 11.5vw, 46px);
   font-weight: 900;
   letter-spacing: -0.015em;
-  margin: 2px 2px 14px;
+  margin: 2px 2px 6px;
   line-height: 1;
 }
 
@@ -377,7 +386,7 @@ button {
 }
 
 .field-row .input {
-  width: 150px;
+  width: clamp(110px, 44%, 150px);
   flex: none;
 }
 
@@ -404,7 +413,7 @@ button {
 /* ————— count cards ————— */
 .count-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 
@@ -423,14 +432,11 @@ button {
 }
 
 .count-card .head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
   margin-bottom: 10px;
 }
 
 .count-card .name {
+  display: block;
   color: var(--size, var(--ink));
   font-size: 13px;
   font-weight: 700;
@@ -439,10 +445,11 @@ button {
 }
 
 .count-card .hint {
+  display: block;
+  margin-top: 3px;
   font-size: 10px;
   color: var(--muted);
   letter-spacing: 0.08em;
-  white-space: nowrap;
 }
 
 .count-card .fields {
@@ -477,6 +484,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 10px;
 }
 
 .tray-pill {
@@ -516,7 +524,7 @@ button {
 .batch-hero .numeral {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 104px;
+  font-size: clamp(80px, 25vw, 104px);
   font-weight: 600;
   line-height: 0.82;
   color: var(--accent);
@@ -528,7 +536,7 @@ button {
 
 .batch-hero h3 {
   font-family: var(--serif);
-  font-size: 30px;
+  font-size: clamp(23px, 7vw, 30px);
   font-weight: 800;
   margin: 0 0 10px;
   letter-spacing: -0.01em;
@@ -563,12 +571,14 @@ button {
 .rounding-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 16px;
 }
 
 .rounding-row .label {
   margin-right: auto;
+  padding-right: 4px;
 }
 
 .days-work-note {
@@ -585,13 +595,13 @@ button {
 }
 
 .bysize th {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.05em;
   color: var(--muted);
   text-transform: uppercase;
   text-align: right;
-  padding: 6px 4px;
+  padding: 8px 3px;
 }
 
 .bysize th:first-child {
@@ -600,15 +610,16 @@ button {
 
 .bysize td {
   text-align: right;
-  padding: 10px 4px;
+  padding: 12px 3px;
+  font-size: 13px;
   border-top: 1px solid var(--line);
 }
 
 .bysize td.size-name {
   text-align: left;
   font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -618,27 +629,19 @@ button {
   height: 8px;
   border-radius: 50%;
   background: var(--size, var(--ink));
-  margin-right: 6px;
+  margin-right: 5px;
 }
 
 .bysize td.trays-cell {
-  padding: 6px 0 6px 8px;
-}
-
-.bysize .trays-box {
-  background: var(--tint);
-  border-radius: 10px;
-  padding: 8px 6px;
-  text-align: center;
   font-weight: 700;
   color: var(--size, var(--ink));
-  min-width: 44px;
+  white-space: nowrap;
 }
 
-.bysize .trays-box .micro {
-  display: block;
-  font-size: 8px;
+.bysize td.trays-cell .micro {
   color: var(--size, var(--ink));
+  font-size: 8px;
+  letter-spacing: 0.04em;
 }
 
 .bysize .neg {
@@ -649,11 +652,18 @@ button {
 .bysize .boil-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   border-top: 2px solid var(--line);
   margin-top: 4px;
   padding-top: 12px;
   font-size: 13px;
+}
+
+.bysize .boil-row .note {
+  flex-basis: 100%;
+  margin-left: 0;
+  text-align: right;
 }
 
 .bysize .boil-row .kv .micro {
@@ -725,7 +735,7 @@ button {
 
 .temp-input {
   position: relative;
-  width: 190px;
+  width: clamp(120px, 50%, 190px);
   flex: none;
 }
 
