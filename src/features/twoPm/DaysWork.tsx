@@ -32,7 +32,7 @@ export function DaysWork(props: {
       <SectionHead num="03" title="The Day's Work" note="TRAYS TO MAKE" />
       <div className="card">
         <span className="micro">TRAYS</span>
-        <div className="tray-pills" style={{ marginTop: 10 }}>
+        <div className="tray-pills">
           <TrayPill name="INDI" color="var(--indi)" value={trays ? String(trays.indi) : '—'} />
           <TrayPill name="SM" color="var(--small)" value={trays ? String(trays.small) : '—'} />
           <TrayPill name="LG" color="var(--large)" value={trays ? String(trays.large) : '—'} />

@@ -83,7 +83,6 @@ export function EonPage(props: {
           have={eonHave}
           note="CLOSING COUNT"
         />
-        <div style={{ height: 30 }} />
       </div>
 
       <div className="band band-dark">

@@ -42,7 +42,6 @@ export function TwoPmPage(props: {
           negativeSalesLeft={salesLeft !== null && salesLeft < 0}
         />
         <CountCards fields={form} onChange={props.onFormChange} have={have} note="TRAYS + SINGLES" />
-        <div style={{ height: 30 }} />
       </div>
 
       <div className="band band-dark">
