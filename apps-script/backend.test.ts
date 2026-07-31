@@ -331,3 +331,61 @@ describe('temps script (§7)', () => {
     });
   });
 });
+
+describe('wipe — deliberate clean slate (secret + confirm phrase)', () => {
+  it('dough: erases every data row, keeps headers and bible mirrors, drops fitted tabs', () => {
+    const script = freshDough();
+    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    post(script, dayPayload('2026-08-01'));
+    post(script, dayPayload('2026-08-02'));
+    script.fns.generateFittedBibles();
+    expect(script.world.ss.getSheetByName('New Dough Bible')).not.toBeNull();
+
+    // Without the confirm phrase nothing happens.
+    const refused = post(script, { secret: SECRET, type: 'wipe' });
+    expect(refused.ok).toBe(false);
+    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(3);
+
+    const answer = post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' });
+    expect(answer).toMatchObject({ ok: true });
+    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(1); // header only
+    expect(script.world.ss.getSheetByName('Dough Count')!.getLastRow()).toBe(1);
+    expect(script.world.ss.getSheetByName('Summary')!.headerRow(3)).toEqual([
+      'Date', 'Bible Used', 'Forecast Tonight $',
+    ]);
+    // The real-data bible mirror survives; the test-derived suggestions do not.
+    expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow()).toBeGreaterThan(5);
+    expect(script.world.ss.getSheetByName('New Dough Bible')).toBeNull();
+    // Life goes on: the next save starts cleanly at row 2.
+    post(script, dayPayload('2026-08-03'));
+    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(2);
+  });
+
+  it('temps: clears Log, station tabs, and Overview readings but keeps station names', () => {
+    const script = freshTemps();
+    post(script, {
+      secret: SECRET,
+      type: 'temps',
+      date: '2026-08-01',
+      items: [
+        {
+          time: '07:02',
+          slot: 'Morning',
+          readings: [
+            { station: 'Pizza 1', temp: 38.5 },
+            { station: 'Freezer', temp: -4 },
+          ],
+        },
+      ],
+    });
+    expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(3);
+
+    const answer = post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' });
+    expect(answer).toMatchObject({ ok: true });
+    expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(1);
+    expect(script.world.ss.getSheetByName('Pizza 1')!.getLastRow()).toBe(1);
+    const overview = script.world.ss.getSheetByName('Overview')!;
+    expect(overview.rowByIndex(2, 4)).toEqual(['Pizza 1', '', '', '']);
+    expect(overview.rowByIndex(9, 4)).toEqual(['Freezer', '', '', '']);
+  });
+});

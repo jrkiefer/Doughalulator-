@@ -139,8 +139,9 @@ function rebuildDoughUse() {
   var SIZE_COL = { indi: 4, small: 7, large: 10, sic: 11, boli: 14 };
   var sizes = ['indi', 'small', 'large', 'sic', 'boli'];
 
+  // IFERROR: an empty log (fresh sheet or after a wipe) shows blank, not #N/A.
   var dates =
-    '=SORT(UNIQUE(FILTER({\'Dough Count\'!A2:A;\'EON Count\'!A2:A},{\'Dough Count\'!A2:A;\'EON Count\'!A2:A}<>"")))';
+    '=IFERROR(SORT(UNIQUE(FILTER({\'Dough Count\'!A2:A;\'EON Count\'!A2:A},{\'Dough Count\'!A2:A;\'EON Count\'!A2:A}<>""))),)';
   var amSales =
     '=ARRAYFORMULA(IF($A2:$A="",,IFERROR(VLOOKUP($A2:$A,Sales!$A:$E,5,FALSE),)))';
   var pmSales =
@@ -314,6 +315,12 @@ function doPost(e) {
     if (body.type === 'bibles') {
       return jsonOut(writeBibles(body));
     }
+    if (body.type === 'wipe') {
+      if (body.confirm !== 'WIPE ALL DATA') {
+        return jsonOut({ ok: false, error: "wipe needs confirm: 'WIPE ALL DATA'" });
+      }
+      return jsonOut({ ok: true, wiped: wipeAllData() });
+    }
     return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
@@ -377,6 +384,32 @@ function upsertRow(tabName, row) {
     if (col > 0) values[col] = row[key];
   });
   sheet.getRange(rowIndex, 1, 1, headers.length).setValues([values]);
+}
+
+/**
+ * Erase every data row in every data tab (headers stay) and delete the
+ * fitted-bible suggestion tabs (their source history is gone). The bible
+ * mirror tabs and the Dough Use formulas are untouched. Reached only via
+ * doPost { type: 'wipe', confirm: 'WIPE ALL DATA' } — the app never sends
+ * it; it exists for deliberate clean-slate moments.
+ */
+function wipeAllData() {
+  var ss = SpreadsheetApp.getActive();
+  var wiped = 0;
+  Object.keys(TABS).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var last = sheet.getLastRow();
+    if (last > 1) {
+      sheet.deleteRows(2, last - 1);
+      wiped += last - 1;
+    }
+  });
+  Object.keys(FITTED_TABS).forEach(function (key) {
+    var sheet = ss.getSheetByName(FITTED_TABS[key]);
+    if (sheet) ss.deleteSheet(sheet);
+  });
+  return wiped;
 }
 
 /**

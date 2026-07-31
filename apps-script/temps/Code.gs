@@ -73,6 +73,12 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
+    if (body.type === 'wipe') {
+      if (body.confirm !== 'WIPE ALL DATA') {
+        return jsonOut({ ok: false, error: "wipe needs confirm: 'WIPE ALL DATA'" });
+      }
+      return jsonOut({ ok: true, wiped: wipeAllData() });
+    }
     if (body.type !== 'temps') return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
 
     var problem = validateTemps(body);
@@ -143,6 +149,33 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Erase the audit Log, every station tab's data rows, and the Overview
+ * readings (station names stay). Headers stay everywhere. Reached only via
+ * doPost { type: 'wipe', confirm: 'WIPE ALL DATA' } — the app never sends
+ * it; it exists for deliberate clean-slate moments.
+ */
+function wipeAllData() {
+  var ss = SpreadsheetApp.getActive();
+  var wiped = 0;
+  ['Log'].concat(STATIONS).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var last = sheet.getLastRow();
+    if (last > 1) {
+      sheet.deleteRows(2, last - 1);
+      wiped += last - 1;
+    }
+  });
+  var overview = ss.getSheetByName('Overview');
+  if (overview) {
+    overview.getRange(2, 2, STATIONS.length, 3).setValues(
+      STATIONS.map(function () { return ['', '', '']; }),
+    );
+  }
+  return wiped;
 }
 
 /** Terminal validation. Temps MAY be negative (the freezer) — that is not an error. */

@@ -128,6 +128,22 @@ export class FakeSheet {
     return this;
   }
 
+  /** Remove rows [startRow, startRow+numRows), shifting everything below up. */
+  deleteRows(startRow: number, numRows: number) {
+    const shift = <T>(entries: Map<string, T>) => {
+      const next = new Map<string, T>();
+      for (const [key, value] of entries) {
+        const [r, c] = key.split(':').map(Number);
+        if (r >= startRow && r < startRow + numRows) continue;
+        next.set(`${r >= startRow + numRows ? r - numRows : r}:${c}`, value);
+      }
+      return next;
+    };
+    this.grid = shift(this.grid);
+    this.formulas = shift(this.formulas);
+    this.maxRow = Math.max(0, ...[...this.grid.keys()].map((k) => Number(k.split(':')[0])));
+  }
+
   clear() {
     this.grid.clear();
     this.formulas.clear();
