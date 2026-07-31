@@ -143,6 +143,15 @@ describe('debounced background sync (§3b)', () => {
     expect(world.posts).toHaveLength(0);
   });
 
+  it('a direct flush (leaving a field, tapping a choice) cancels the pending debounce', async () => {
+    const world = makeWorld();
+    typeSales(world);
+    expect(world.pendingTimers()).toBe(1);
+    await world.engine.flush();
+    expect(world.pendingTimers()).toBe(0); // no second, redundant flush later
+    expect(world.posts).toHaveLength(1);
+  });
+
   it('single-flight: a flush during a flush schedules exactly one rerun', async () => {
     const world = makeWorld();
     typeSales(world);
@@ -190,6 +199,27 @@ describe('"sheet said no" vs "no internet" (§3d)', () => {
     typeSales(world, '10');
     await world.engine.flush();
     expect(world.posts).toHaveLength(3);
+    expect(world.engine.status(D).state).toBe('synced');
+  });
+});
+
+describe('the two sheets sync in parallel', () => {
+  it('a dough network failure never blocks the temps sheet, and only dough retries', async () => {
+    const world = makeWorld();
+    world.setOutcomes([
+      { kind: 'retryable', error: 'timeout' }, // dough (day)
+      { kind: 'ok', data: {} }, // temps sails through regardless
+    ]);
+    typeSales(world);
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    await world.engine.flush();
+    expect(world.posts.map((p) => p.target)).toEqual(['dough', 'temps']);
+    expect(world.engine.status(D).state).toBe('offline'); // the day record is still dirty
+    // The next trigger resends ONLY the dough side — temps is already done.
+    await world.engine.flush();
+    expect(world.posts.map((p) => p.target)).toEqual(['dough', 'temps', 'dough']);
     expect(world.engine.status(D).state).toBe('synced');
   });
 });

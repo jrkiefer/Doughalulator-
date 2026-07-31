@@ -82,35 +82,60 @@ function doPost(e) {
     var date = normalizeDate(body.date);
     var saved = 0;
 
+    // Cell-by-cell writes were the slowest part of every save — each section
+    // below batches its whole update into ranged writes instead.
+
+    // 1. Append-only audit trail: every reading, one ranged write.
+    var logRows = [];
     body.items.forEach(function (item) {
-      // 1. Append-only audit trail.
-      var log = ss.getSheetByName('Log');
       item.readings.forEach(function (r) {
-        log.appendRow([date, item.time, item.slot, r.station, r.temp]);
+        logRows.push([date, item.time, item.slot, r.station, r.temp]);
         saved++;
       });
+    });
+    var log = ss.getSheetByName('Log');
+    log.getRange(log.getLastRow() + 1, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
 
-      // 2. Merge-upsert each station tab by date, touching only this slot's column.
+    // 2. Merge-upsert each station tab by date: overlay this save's slots on
+    // the current row and write the row back in one stroke per station.
+    var slotsByStation = {};
+    body.items.forEach(function (item) {
       item.readings.forEach(function (r) {
-        var sheet = ss.getSheetByName(r.station);
-        if (!sheet) return; // unknown station: still in the Log above
-        var rowIndex = findDateRow(sheet, date);
-        if (rowIndex === -1) {
-          rowIndex = sheet.getLastRow() + 1;
-          sheet.getRange(rowIndex, 1).setValue(date);
-        }
-        var col = STATION_HEADERS.indexOf(item.slot) + 1;
-        sheet.getRange(rowIndex, col).setValue(r.temp);
+        if (!slotsByStation[r.station]) slotsByStation[r.station] = {};
+        slotsByStation[r.station][item.slot] = r.temp;
       });
+    });
+    Object.keys(slotsByStation).forEach(function (station) {
+      var sheet = ss.getSheetByName(station);
+      if (!sheet) return; // unknown station: still in the Log above
+      var rowIndex = findDateRow(sheet, date);
+      var values;
+      if (rowIndex === -1) {
+        rowIndex = sheet.getLastRow() + 1;
+        values = STATION_HEADERS.map(function () { return ''; });
+      } else {
+        values = sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).getValues()[0];
+      }
+      values[0] = date;
+      Object.keys(slotsByStation[station]).forEach(function (slot) {
+        values[STATION_HEADERS.indexOf(slot)] = slotsByStation[station][slot];
+      });
+      sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).setValues([values]);
+    });
 
-      // 3. Refresh the Overview row for each submitted station.
-      var overview = ss.getSheetByName('Overview');
+    // 3. Refresh the Overview block in one ranged write (later slots win).
+    var overview = ss.getSheetByName('Overview');
+    var block = overview.getRange(2, 2, STATIONS.length, 3).getValues();
+    var touched = false;
+    body.items.forEach(function (item) {
       item.readings.forEach(function (r) {
         var idx = STATIONS.indexOf(r.station);
         if (idx === -1) return;
-        overview.getRange(idx + 2, 2, 1, 3).setValues([[r.temp, item.slot, date + ' ' + item.time]]);
+        block[idx] = [r.temp, item.slot, date + ' ' + item.time];
+        touched = true;
       });
     });
+    if (touched) overview.getRange(2, 2, STATIONS.length, 3).setValues(block);
 
     return jsonOut({ ok: true, saved: saved, date: date });
   } catch (err) {

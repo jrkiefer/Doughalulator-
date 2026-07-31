@@ -350,7 +350,12 @@ function validateSave(body) {
   return null;
 }
 
-/** Merge-upsert one row into a tab by Date: writes only the provided columns (blank = clear). */
+/**
+ * Merge-upsert one row into a tab by Date. Only the provided columns change
+ * (blank = clear): the current row is read whole, the payload's columns are
+ * overlaid, and the row goes back in ONE ranged write — cell-by-cell writes
+ * were the slowest part of every save.
+ */
 function upsertRow(tabName, row) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(tabName);
   if (!sheet) throw new Error('missing tab (run setup): ' + tabName);
@@ -358,15 +363,20 @@ function upsertRow(tabName, row) {
   var date = normalizeDate(row.Date);
 
   var rowIndex = findDateRow(sheet, date);
+  var values;
   if (rowIndex === -1) {
     rowIndex = sheet.getLastRow() + 1;
-    sheet.getRange(rowIndex, 1).setValue(date);
+    values = headers.map(function () { return ''; });
+  } else {
+    values = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
   }
+  values[0] = date;
   Object.keys(row).forEach(function (key) {
     if (key === 'Date') return;
-    var col = headers.indexOf(key) + 1;
-    if (col > 0) sheet.getRange(rowIndex, col).setValue(row[key]);
+    var col = headers.indexOf(key);
+    if (col > 0) values[col] = row[key];
   });
+  sheet.getRange(rowIndex, 1, 1, headers.length).setValues([values]);
 }
 
 /**

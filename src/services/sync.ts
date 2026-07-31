@@ -112,7 +112,7 @@ function metaOf(entry: DateEntry, type: RecordType): SyncMeta | undefined {
   return entry[type];
 }
 
-export function createSyncEngine(deps: SyncDeps, debounceMs = 2500): SyncEngine {
+export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine {
   const memory = new Map<string, DateEntry>();
   const phoneFailed = new Set<string>(); // `${date}` whose last phone write failed
   const editSeqs = new Map<string, number>();
@@ -179,66 +179,84 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 2500): SyncEngine 
     notify();
   }
 
+  /**
+   * Push one sheet's dirty records in order (dates ascending, day before
+   * eon). Returns true when a network-class failure stopped this sheet —
+   * the record stays dirty for the next trigger.
+   */
+  async function flushTarget(
+    target: 'dough' | 'temps',
+    dates: string[],
+    opts: { keepalive?: boolean },
+  ): Promise<boolean> {
+    for (const date of dates) {
+      const entry = getEntry(date);
+      for (const type of TYPE_ORDER) {
+        if (TARGET_OF[type] !== target) continue;
+        const rec = metaOf(entry, type);
+        if (!rec || !isDirtyRecord(rec)) continue;
+
+        const editStamp = rec.updatedAt;
+        const payload = deps.buildPayload(type, date, entry);
+        if (payload === null) {
+          // Nothing worth sending — an empty record is clean by definition.
+          rec.syncedAt = editStamp;
+          persist(date);
+          continue;
+        }
+        const hash = hashString(JSON.stringify(payload));
+        if (hash === rec.ackHash) {
+          rec.syncedAt = editStamp;
+          persist(date);
+          continue;
+        }
+
+        if (opts.keepalive) {
+          // Page is going away: fire and forget. NEVER marked synced here —
+          // if it landed, the next boot's resend dedupes server-side by merge.
+          void deps.post(target, payload, { keepalive: true });
+          continue;
+        }
+
+        const outcome = await deps.post(target, payload);
+        if (outcome.kind === 'ok') {
+          rec.syncedAt = editStamp;
+          rec.ackHash = hash;
+          offline = false;
+          persist(date);
+        } else if (outcome.kind === 'retryable') {
+          // Network-class: keep dirty, stop bothering this sheet for now.
+          return true;
+        } else {
+          // Terminal: park THIS record with the reason; everything else continues.
+          rec.rejectedReason = outcome.reason;
+          persist(date);
+        }
+        notify();
+      }
+    }
+    return false;
+  }
+
   async function flush(opts: { keepalive?: boolean } = {}): Promise<void> {
     if (inFlight) {
       rerunAfterFlight = true;
       return;
     }
     inFlight = true;
+    // A direct flush (blur, tap, reconnect) supersedes the pending debounce.
+    if (debounceTimer !== null) {
+      deps.clearTimer(debounceTimer);
+      debounceTimer = null;
+    }
     notify();
-    const blocked: Record<'dough' | 'temps', boolean> = { dough: false, temps: false };
-    let sawRetryable = false;
     try {
-      const dates = new Set<string>([...deps.listDates(), ...memory.keys()]);
-      for (const date of [...dates].sort()) {
-        const entry = getEntry(date);
-        for (const type of TYPE_ORDER) {
-          const rec = metaOf(entry, type);
-          if (!rec || !isDirtyRecord(rec)) continue;
-          const target = TARGET_OF[type];
-          if (blocked[target]) continue;
-
-          const editStamp = rec.updatedAt;
-          const payload = deps.buildPayload(type, date, entry);
-          if (payload === null) {
-            // Nothing worth sending — an empty record is clean by definition.
-            rec.syncedAt = editStamp;
-            persist(date);
-            continue;
-          }
-          const hash = hashString(JSON.stringify(payload));
-          if (hash === rec.ackHash) {
-            rec.syncedAt = editStamp;
-            persist(date);
-            continue;
-          }
-
-          if (opts.keepalive) {
-            // Page is going away: fire and forget. NEVER marked synced here —
-            // if it landed, the next boot's resend dedupes server-side by merge.
-            void deps.post(target, payload, { keepalive: true });
-            continue;
-          }
-
-          const outcome = await deps.post(target, payload);
-          if (outcome.kind === 'ok') {
-            rec.syncedAt = editStamp;
-            rec.ackHash = hash;
-            offline = false;
-            persist(date);
-          } else if (outcome.kind === 'retryable') {
-            // Network-class: keep dirty, stop bothering this target for now.
-            sawRetryable = true;
-            blocked[target] = true;
-          } else {
-            // Terminal: park THIS record with the reason; everything else continues.
-            rec.rejectedReason = outcome.reason;
-            persist(date);
-          }
-          notify();
-        }
-      }
-      offline = sawRetryable;
+      const dates = [...new Set<string>([...deps.listDates(), ...memory.keys()])].sort();
+      // The two sheets are independent, so they sync at the same time.
+      const sawRetryable = await Promise.all(
+        (['dough', 'temps'] as const).map((target) => flushTarget(target, dates, opts)),
+      );
+      offline = sawRetryable.some(Boolean);
     } finally {
       inFlight = false;
       notify();

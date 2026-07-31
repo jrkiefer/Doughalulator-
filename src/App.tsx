@@ -198,16 +198,20 @@ export default function App() {
     engine.start();
     const unsubscribe = engine.subscribe(() => setTick((t) => t + 1));
     const onOnline = () => void engine.flush();
+    // Leaving any field syncs right away instead of waiting out the debounce.
+    const onFocusOut = () => void engine.flush();
     const onHide = () => {
       if (document.visibilityState === 'hidden') void engine.flush({ keepalive: true });
     };
     const onPageHide = () => void engine.flush({ keepalive: true });
     window.addEventListener('online', onOnline);
+    document.addEventListener('focusout', onFocusOut);
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onPageHide);
     return () => {
       unsubscribe();
       window.removeEventListener('online', onOnline);
+      document.removeEventListener('focusout', onFocusOut);
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onPageHide);
     };
@@ -252,6 +256,7 @@ export default function App() {
     engine.edit(date, 'day', (rec) => {
       rec.rounding = r;
     });
+    void engine.flush(); // a tap is a finished decision — no debounce wait
   }
 
   function editBible(id: BibleId) {
@@ -259,6 +264,7 @@ export default function App() {
     engine.edit(date, 'day', (rec) => {
       rec.bibleOverride = id;
     });
+    void engine.flush();
   }
 
   function editEon(patch: Partial<EonForm>) {
