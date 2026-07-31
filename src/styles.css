@@ -218,14 +218,6 @@ button {
   background: var(--muted);
 }
 
-.status-pill.status-saved::before,
-.status-pill.status-loaded::before {
-  background: var(--indi);
-}
-
-.status-pill.status-unsynced::before {
-  background: var(--accent);
-}
 
 .btn-reset {
   border: 1px solid var(--line);
@@ -910,8 +902,18 @@ button {
   background: var(--accent);
 }
 
-.status-pill.status-synced::before {
+/* SYNCED is the state the owner watches for — make it an unmissable green badge. */
+.status-pill.status-synced {
   background: var(--indi);
+  color: var(--card);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.status-pill.status-synced::before {
+  background: var(--card);
 }
 
 .status-pill.status-syncing::before,

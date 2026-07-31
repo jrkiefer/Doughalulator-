@@ -4,7 +4,7 @@ const LABELS: Record<SyncStatus['state'], string> = {
   new: 'NEW NIGHT',
   saving: 'SAVED ON PHONE',
   syncing: 'SYNCING…',
-  synced: 'SYNCED',
+  synced: 'SYNCED ✓',
   offline: 'OFFLINE — WILL RETRY',
   rejected: 'SHEET REFUSED A SAVE',
   unsaved: 'NOT SAVED ANYWHERE',
