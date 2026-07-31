@@ -31,8 +31,16 @@ function makeWorld(opts: { debounceMs?: number } = {}) {
     listDates: () => [...store.keys()],
     buildPayload: (type: RecordType, date, entry) => {
       // Trivial builder: send the record's form-ish content; null when empty.
+      // Like the real builder, the eon payload derives from the day record
+      // too (its tomorrow-need feeds the EON check).
       const rec = entry[type];
       if (!rec) return null;
+      if (type === 'eon') {
+        const form = (rec as { form: Record<string, string> }).form;
+        if (Object.values(form).every((v) => v === '')) return null;
+        const day = entry.day as { form?: Record<string, string> } | undefined;
+        return { type, date, body: form, need: day?.form?.tomorrowForecast ?? null };
+      }
       const body =
         type === 'temps'
           ? (rec as { readings: object }).readings
@@ -288,6 +296,64 @@ describe('two-phone merge (§4)', () => {
     });
     expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('8');
     expect(world.engine.isDirty(D)).toBe(false);
+  });
+});
+
+describe('derived records resync — the new math is always saved', () => {
+  function typeEon(world: ReturnType<typeof makeWorld>, value = '7.9') {
+    world.engine.edit(D, 'eon', (rec) => {
+      rec.form = { ...rec.form, finalSales: value };
+    });
+  }
+
+  it('a 2 PM edit re-dirties the EON record so its recomputed check re-syncs', async () => {
+    const world = makeWorld();
+    world.engine.edit(D, 'day', (rec) => {
+      rec.form = { ...rec.form, tomorrowForecast: '9.1' };
+    });
+    typeEon(world);
+    await world.engine.flush();
+    expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual(['day', 'eon']);
+
+    // Change ONLY the 2 PM tomorrow forecast — the EON check depends on it.
+    world.engine.edit(D, 'day', (rec) => {
+      rec.form = { ...rec.form, tomorrowForecast: '10.5' };
+    });
+    await world.engine.flush();
+    const types = world.posts.map((p) => (p.payload as { type: string }).type);
+    expect(types).toEqual(['day', 'eon', 'day', 'eon']);
+    expect((world.posts[3].payload as { need: string }).need).toBe('10.5');
+    expect(world.engine.status(D).state).toBe('synced');
+  });
+
+  it('a day edit never conjures an EON record that was never started', async () => {
+    const world = makeWorld();
+    typeSales(world);
+    await world.engine.flush();
+    expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual(['day']);
+  });
+
+  it('a day edit clears a parked EON rejection so it retries with the new math', async () => {
+    const world = makeWorld();
+    world.setOutcomes([
+      { kind: 'ok', data: {} }, // day
+      { kind: 'rejected', reason: 'negative value where it makes no sense' }, // eon
+    ]);
+    world.engine.edit(D, 'day', (rec) => {
+      rec.form = { ...rec.form, tomorrowForecast: '9.1' };
+    });
+    typeEon(world);
+    await world.engine.flush();
+    expect(world.engine.status(D).state).toBe('rejected');
+
+    world.engine.edit(D, 'day', (rec) => {
+      rec.form = { ...rec.form, tomorrowForecast: '12' };
+    });
+    await world.engine.flush();
+    expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual([
+      'day', 'eon', 'day', 'eon',
+    ]);
+    expect(world.engine.status(D).state).toBe('synced');
   });
 });
 
