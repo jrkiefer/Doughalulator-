@@ -15,10 +15,10 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 
 ## How to work (prevents overload — follow it exactly)
 
-1. The build is five phases. The spec for each lives in its own file in the repo root. **Read ONLY the current phase's spec file** (plus this file and PROGRESS.md) — do not read ahead.
-2. Finish a phase completely: build it, run the tests, fix until green.
-3. After each phase: update **PROGRESS.md**, then tell the owner in plain words what just got finished and what it means, and ask them to say **"next"** before starting the following phase.
-4. If a chat gets very long, or anything resets: it's safe. A fresh session should read BUILD-PLAN.md + PROGRESS.md + CLAUDE.md and continue from the first unfinished phase.
+1. **Work directly on `main`** (owner's explicit choice, July 2026): commit there and `git push origin main` — no feature branches, no pull requests unless the owner asks for one. The deploy workflow re-runs lint + tests + build on every push and only publishes green builds, so a bad push can never take down the live site.
+2. Never push with a failing local gate: `npm run typecheck && npm run lint && npm test && npm run build` before every push.
+3. The original build was five phases (spec files in the repo root) plus later parity specs (6–9). For any new work: finish it completely, keep tests green, update **PROGRESS.md**, then tell the owner in plain words what changed.
+4. If a chat gets very long, or anything resets: it's safe. A fresh session should read BUILD-PLAN.md + PROGRESS.md + CLAUDE.md and continue. If the working tree looks stale or wrong, `git fetch origin && git checkout -B main origin/main` — the remote is the source of truth.
 
 ## Folder rules
 
