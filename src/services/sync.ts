@@ -28,6 +28,12 @@ const TARGET_OF: Record<RecordType, 'dough' | 'temps'> = {
   eon: 'dough',
   temps: 'temps',
 };
+/**
+ * Records whose payload is DERIVED from another record's content: the EON
+ * check depends on the day record's tomorrow-need. Editing the source
+ * re-dirties existing dependents so the recomputed math re-syncs too.
+ */
+const DEPENDENTS: Partial<Record<RecordType, RecordType[]>> = { day: ['eon'] };
 
 export interface SyncDeps {
   now(): number;
@@ -158,6 +164,15 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 2500): SyncEngine 
     apply(rec as never);
     rec.updatedAt = now;
     rec.rejectedReason = null; // an edit is a fresh attempt
+    // A change here changes math derived elsewhere: re-dirty existing
+    // dependents (never create one) so the whole picture re-syncs.
+    for (const dependent of DEPENDENTS[type] ?? []) {
+      const dep = entry[dependent];
+      if (dep) {
+        dep.updatedAt = now;
+        dep.rejectedReason = null;
+      }
+    }
     editSeqs.set(date, (editSeqs.get(date) ?? 0) + 1);
     persist(date);
     scheduleFlush();
