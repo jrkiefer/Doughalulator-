@@ -41,6 +41,14 @@ Settings stores the two /exec addresses and the two secrets **on that phone only
 - **Don't rename** the two spreadsheets' tabs or their column headers, and don't rename the station tabs — the app finds everything by those exact names.
 - The dough bibles the app calculates from live in this repo (`src/data/`). The bible tabs in the spreadsheet are just a mirror for reading.
 
+## The old tracker's history lives in the Dough Log too
+
+In August 2026 the owner's previous tracking spreadsheets (Apr 1 – Aug 6, 2026) were imported into the Dough Log so past dates are filled in. End-of-night sales came from the owner's "End of Night Sales Completed" file, which prefers the DOR weekly report emails over crew entries. A few details future helpers should know:
+
+- Old counts were whole-ball totals, so they appear in the Singles/Have columns with Trays blank — that's faithful, not a bug.
+- 14 early-April dates have no Final Dough row: the real post-make final was never recorded back then, and inventing one would corrupt the PM-use math.
+- 13 nights have no final sales yet (their DOR report email never arrived). When those numbers turn up, a Claude session can add them to the history file and re-run `scripts/import-history.ts` (dry → live → verify) — saves merge by date, so re-imports are safe.
+
 ## If something ever looks wrong
 
 - App won't save ("will sync" forever): open SETTINGS and tap both **Test Connection** buttons. If one fails, re-copy that sheet's URL and secret (steps above).
