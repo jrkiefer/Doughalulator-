@@ -71,8 +71,8 @@ function arg(name: string): string | undefined {
 
 const jsonPath = arg('json');
 const mode = arg('mode');
-if (!jsonPath || !mode || !['dry', 'live', 'verify'].includes(mode)) {
-  console.error('usage: --json <history.json> --mode dry|live|verify [--url <exec> --secret <s>]');
+if (!jsonPath || !mode || !['dry', 'live', 'verify', 'wipe'].includes(mode)) {
+  console.error('usage: --json <history.json> --mode dry|live|verify|wipe [--url <exec> --secret <s>]');
   process.exit(2);
 }
 const history = JSON.parse(readFileSync(jsonPath, 'utf8')) as Record<string, HistoryEntry>;
@@ -287,6 +287,24 @@ async function main() {
   if (!url || !secret) {
     console.error(`mode ${mode} needs --url and --secret`);
     process.exit(2);
+  }
+
+  if (mode === 'wipe') {
+    // Owner-approved reset before a filtered re-import: erases every data row
+    // in the DOUGH sheet (bible mirrors and Dough Use formulas survive).
+    // Refuses to run without the same confirm phrase the backend demands.
+    if (arg('confirm') !== 'WIPE ALL DATA') {
+      console.error("wipe mode needs --confirm 'WIPE ALL DATA'");
+      process.exit(2);
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ secret, type: 'wipe', confirm: 'WIPE ALL DATA' }),
+    });
+    console.log('wipe answer:', await res.text());
+    return;
   }
 
   if (mode === 'live') {
