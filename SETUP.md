@@ -43,11 +43,11 @@ Settings stores the two /exec addresses and the two secrets **on that phone only
 
 ## The old tracker's history lives in the Dough Log too
 
-In August 2026 the owner's previous tracking spreadsheets (Apr 1 – Aug 6, 2026) were imported into the Dough Log so past dates are filled in. End-of-night sales came from the owner's "End of Night Sales Completed" file, which prefers the DOR weekly report emails over crew entries. A few details future helpers should know:
+In August 2026 the owner's previous tracking spreadsheets were imported into the Dough Log so past dates are filled in — 58 complete days (Apr 1 – Jul 29, 2026), each having both a 2 PM record and a verified final-sales figure; the owner chose to leave incomplete days out. End-of-night sales came from the owner's "End of Night Sales Completed" file, which prefers the DOR weekly report emails over crew entries. A few details future helpers should know:
 
 - Old counts were whole-ball totals, so they appear in the Singles/Have columns with Trays blank — that's faithful, not a bug.
-- 14 early-April dates have no Final Dough row: the real post-make final was never recorded back then, and inventing one would corrupt the PM-use math.
-- 13 nights have no final sales yet (their DOR report email never arrived). When those numbers turn up, a Claude session can add them to the history file and re-run `scripts/import-history.ts` (dry → live → verify) — saves merge by date, so re-imports are safe.
+- Some early-April dates have no Final Dough row: the real post-make final was never recorded back then, and inventing one would corrupt the PM-use math.
+- Days missing their final sales (no DOR report email ever arrived) or missing a 2 PM record were left out on purpose. When missing numbers turn up, a Claude session can rebuild the history file from the owner's uploads and re-run `scripts/import-history.ts` (dry → live → verify) — saves merge by date, so re-imports are safe.
 
 ## If something ever looks wrong
 
