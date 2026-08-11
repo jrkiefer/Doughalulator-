@@ -120,41 +120,9 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
         ? 'up'
         : null);
   const record: DoughDayRecord = { ...base, chosenBatchOption: rounding };
-  let tabs = dayRecordToTabWrites(record);
-
-  // Overlay recorded reality.
-  const summary = tabs.find((w) => w.tab === 'Summary');
-  if (summary) summary.row['Batches Made'] = t.batchesMade;
-
-  const engineFinal = tabs.find((w) => w.tab === 'Final Dough');
-  if (e.finalDoughUnrecorded) {
-    tabs = tabs.filter((w) => w.tab !== 'Final Dough');
-  } else if (e.finalDough) {
-    const fd = e.finalDough;
-    const engineMatches =
-      engineFinal &&
-      engineFinal.row['Indi Final'] === fd.indi &&
-      engineFinal.row['Small Final'] === fd.small &&
-      engineFinal.row['Large Final'] === fd.large &&
-      engineFinal.row['Sic Final'] === fd.sic &&
-      engineFinal.row['Boli Final'] === fd.boli;
-    if (!engineMatches) {
-      // Reality differs from the recomputed plan: write the recorded finals
-      // alone, with no invented tray/singles split.
-      tabs = tabs.filter((w) => w.tab !== 'Final Dough');
-      tabs.push({
-        tab: 'Final Dough',
-        row: {
-          Date: date,
-          'Indi Final': fd.indi,
-          'Small Final': fd.small,
-          'Large Final': fd.large,
-          'Sic Final': fd.sic,
-          'Boli Final': fd.boli,
-        },
-      });
-    }
-  }
+  // Only the counts travel: the sheet's formulas work out the make, the
+  // batches and the final dough from them.
+  const tabs = dayRecordToTabWrites(record);
   return { record, payload: { type: 'day', date, tabs } };
 }
 
@@ -207,44 +175,42 @@ function near(a: string | undefined, b: number | null): boolean {
 
 function diffDate(date: string, e: HistoryEntry, sheet: SheetDate | null): string[] {
   const bad: string[] = [];
-  const row = (tab: string) => (sheet ? sheet[tab] : null);
+  const day = sheet ? sheet['2PM Dough Count'] : null;
+  const eon = sheet ? sheet['EON Dough Count'] : null;
+
   if (e.twoPm) {
     const t = e.twoPm;
-    const dc = row('Dough Count');
-    const sales = row('Sales');
-    const sum = row('Summary');
-    if (!dc || !sales || !sum) bad.push(`${date}: missing 2 PM rows`);
-    else {
-      (['Indi', 'Small', 'Large', 'Sic', 'Boli'] as const).forEach((label, i) => {
-        const want = [t.counts.indi, t.counts.small, t.counts.large, t.counts.sic, t.counts.boli][i];
-        if (!near(dc[`${label} Have`], want)) bad.push(`${date} Dough Count ${label} Have: ${dc[`${label} Have`]} != ${want}`);
+    if (!day) {
+      bad.push(`${date}: missing the 2 PM row`);
+    } else {
+      const cols: [string, number][] = [
+        ['Indi Count', t.counts.indi], ['Small Count', t.counts.small],
+        ['Large Count', t.counts.large], ['Sic Count', t.counts.sic], ['Boli Count', t.counts.boli],
+        ["Today's Forecast", t.todayForecast], ['Current Sales', t.currentSales],
+        ["Tomorrow's Forecast", t.tomorrowForecast],
+      ];
+      cols.forEach(([key, want]) => {
+        if (!near(day[key], want)) bad.push(`${date} ${key}: ${day[key]} != ${want}`);
       });
-      if (!near(sales['Forecast Tonight $'], t.todayForecast)) bad.push(`${date} forecast: ${sales['Forecast Tonight $']}`);
-      if (!near(sales['Current Sales $'], t.currentSales)) bad.push(`${date} current: ${sales['Current Sales $']}`);
-      if (!near(sales['Forecast Tomorrow $'], t.tomorrowForecast)) bad.push(`${date} tomorrow: ${sales['Forecast Tomorrow $']}`);
-      if (!near(sum['Batches Made'], t.batchesMade)) bad.push(`${date} batches made: ${sum['Batches Made']} != ${t.batchesMade}`);
+      if (day['Bible'] !== t.bible) bad.push(`${date} bible: ${day['Bible']} != ${t.bible}`);
     }
-    const fd = row('Final Dough');
-    if (e.finalDough) {
-      if (!fd) bad.push(`${date}: missing Final Dough row`);
-      else {
-        (['Indi', 'Small', 'Large', 'Sic', 'Boli'] as const).forEach((label, i) => {
-          const want = [e.finalDough!.indi, e.finalDough!.small, e.finalDough!.large, e.finalDough!.sic, e.finalDough!.boli][i];
-          if (!near(fd[`${label} Final`], want)) bad.push(`${date} Final ${label}: ${fd[`${label} Final`]} != ${want}`);
-        });
-      }
-    }
-    if (e.finalDoughUnrecorded && fd) bad.push(`${date}: Final Dough row exists but should be absent`);
   }
+
   if (e.eon) {
-    const eon = row('EON Count');
-    if (!eon) bad.push(`${date}: missing EON Count row`);
-    else {
-      if (!near(eon['Final Sales $'], e.eon.finalSales)) bad.push(`${date} EON sales: ${eon['Final Sales $']} != ${e.eon.finalSales}`);
+    if (!eon) {
+      bad.push(`${date}: missing the EON row`);
+    } else {
+      if (!near(eon['EON Sales'], e.eon.finalSales)) {
+        bad.push(`${date} EON sales: ${eon['EON Sales']} != ${e.eon.finalSales}`);
+      }
       if (e.eon.counts) {
-        (['Indi', 'Small', 'Large', 'Sic', 'Boli'] as const).forEach((label, i) => {
-          const want = [e.eon!.counts!.indi, e.eon!.counts!.small, e.eon!.counts!.large, e.eon!.counts!.sic, e.eon!.counts!.boli][i];
-          if (!near(eon[`${label} Have`], want)) bad.push(`${date} EON ${label} Have: ${eon[`${label} Have`]} != ${want}`);
+        const cols: [string, number][] = [
+          ['EON Indi Count', e.eon.counts.indi], ['EON Small Count', e.eon.counts.small],
+          ['EON Large Count', e.eon.counts.large], ['EON Sic Count', e.eon.counts.sic],
+          ['EON Boli Count', e.eon.counts.boli],
+        ];
+        cols.forEach(([key, want]) => {
+          if (!near(eon[key], want)) bad.push(`${date} ${key}: ${eon[key]} != ${want}`);
         });
       }
     }
