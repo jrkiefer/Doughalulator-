@@ -100,7 +100,9 @@ function doPost(e) {
       });
     });
     var log = ss.getSheetByName('Log');
-    log.getRange(log.getLastRow() + 1, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
+    var logStart = log.getLastRow() + 1;
+    ensureRows(log, logStart + logRows.length - 1);
+    log.getRange(logStart, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
 
     // 2. Merge-upsert each station tab by date: overlay this save's slots on
     // the current row and write the row back in one stroke per station.
@@ -118,13 +120,16 @@ function doPost(e) {
       var values;
       if (rowIndex === -1) {
         rowIndex = sheet.getLastRow() + 1;
+        ensureRows(sheet, rowIndex);
         values = STATION_HEADERS.map(function () { return ''; });
       } else {
         values = sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).getValues()[0];
       }
       values[0] = date;
       Object.keys(slotsByStation[station]).forEach(function (slot) {
-        values[STATION_HEADERS.indexOf(slot)] = slotsByStation[station][slot];
+        var col = STATION_HEADERS.indexOf(slot);
+        if (col < 1) return; // unknown slot: the Log above still has it
+        values[col] = slotsByStation[station][slot];
       });
       sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).setValues([values]);
     });
@@ -165,7 +170,9 @@ function wipeAllData() {
     if (!sheet) return;
     var last = sheet.getLastRow();
     if (last > 1) {
-      sheet.deleteRows(2, last - 1);
+      // clearContent, not deleteRows — keeps the formats setup() installed.
+      var width = name === 'Log' ? LOG_HEADERS.length : STATION_HEADERS.length;
+      sheet.getRange(2, 1, last - 1, width).clearContent();
       wiped += last - 1;
     }
   });
@@ -234,9 +241,16 @@ function doGet(e) {
   }
 }
 
-/** Normalize a date from the app OR a hand-typed sheet cell to YYYY-MM-DD. */
+/**
+ * Normalize a date from the app OR a sheet cell to YYYY-MM-DD — including the
+ * real Date objects getValues() hands back for date-formatted cells.
+ */
 function normalizeDate(value) {
   if (value === null || value === undefined) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    if (isNaN(value.getTime())) return '';
+    return value.getFullYear() + '-' + pad2(value.getMonth() + 1) + '-' + pad2(value.getDate());
+  }
   var s = String(value).trim();
   var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) return iso[1] + '-' + pad2(iso[2]) + '-' + pad2(iso[3]);
@@ -250,6 +264,16 @@ function normalizeDate(value) {
 
 function pad2(n) {
   return ('0' + n).slice(-2);
+}
+
+/**
+ * Grow a tab when a write would land past its last row. A new Google sheet
+ * stops at 1000 rows and a ranged write past that THROWS — and the Log grows
+ * by several rows every single save.
+ */
+function ensureRows(sheet, lastRow) {
+  var max = sheet.getMaxRows();
+  if (lastRow > max) sheet.insertRowsAfter(max, lastRow - max);
 }
 
 function findDateRow(sheet, date) {

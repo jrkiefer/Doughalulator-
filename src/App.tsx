@@ -198,8 +198,11 @@ export default function App() {
     engine.start();
     const unsubscribe = engine.subscribe(() => setTick((t) => t + 1));
     const onOnline = () => void engine.flush();
-    // Leaving any field syncs right away instead of waiting out the debounce.
-    const onFocusOut = () => void engine.flush();
+    // Leaving a FIELD syncs right away instead of waiting out the debounce.
+    // Scoped to inputs: blurring a button or a card header has nothing to send.
+    const onFocusOut = (event: FocusEvent) => {
+      if (event.target instanceof HTMLInputElement) void engine.flush();
+    };
     const onHide = () => {
       if (document.visibilityState === 'hidden') void engine.flush({ keepalive: true });
     };
@@ -218,19 +221,24 @@ export default function App() {
   }, [rehydrate]);
 
   // Behind the instant paint, fetch the date from the sheet and merge (§4).
+  // Short delay first: stepping through days with ◀ ▶ should fetch the day the
+  // owner lands on, not every day they pass through.
   useEffect(() => {
     let alive = true;
     const seqBefore = engine.editSeq(date);
-    fetchDate(date, loadSettings(), cfg).then((result) => {
-      if (!alive || result.kind !== 'loaded') return;
-      // Keystroke guard: typing during the fetch discards the fetched record.
-      if (engine.editSeq(date) !== seqBefore) return;
-      const applied = engine.applyFetched(date, (entry) => applyFetchedToEntry(entry, result.day, date));
-      if (applied === 'replaced') rehydrate(date);
-      else setLoadMsg('Phone copy kept — tap LOAD FROM SHEET to pull the sheet.');
-    });
+    const timer = setTimeout(() => {
+      fetchDate(date, loadSettings(), cfg).then((result) => {
+        if (!alive || result.kind !== 'loaded') return;
+        // Keystroke guard: typing during the fetch discards the fetched record.
+        if (engine.editSeq(date) !== seqBefore) return;
+        const applied = engine.applyFetched(date, (entry) => applyFetchedToEntry(entry, result.day, date));
+        if (applied === 'replaced') rehydrate(date);
+        else setLoadMsg('Phone copy kept — tap LOAD FROM SHEET to pull the sheet.');
+      });
+    }, 250);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [date, rehydrate]);
 

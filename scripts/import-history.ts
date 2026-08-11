@@ -159,7 +159,9 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
 }
 
 function buildEon(date: string, e: HistoryEntry, dayRecord: DoughDayRecord | null): Payload | null {
-  if (!e.eon) return null;
+  // An entry with neither sales nor counts would post a date-only row, which
+  // the backend terminally rejects — App.tsx guards the same case.
+  if (!e.eon || (e.eon.finalSales === null && !e.eon.counts)) return null;
   const form: EonForm = {
     ...emptyEonForm,
     finalSales: str(e.eon.finalSales),
@@ -303,7 +305,20 @@ async function main() {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ secret, type: 'wipe', confirm: 'WIPE ALL DATA' }),
     });
-    console.log('wipe answer:', await res.text());
+    const body = await res.text();
+    let answer: { ok?: boolean; wiped?: number; error?: string } = {};
+    try {
+      answer = JSON.parse(body) as typeof answer;
+    } catch {
+      answer = {};
+    }
+    if (answer.ok !== true) {
+      // Silence here would be dangerous: the next step re-imports onto a sheet
+      // the operator believes is empty.
+      console.error(`wipe FAILED: ${answer.error ?? body}`);
+      process.exit(1);
+    }
+    console.log(`wiped ${answer.wiped} rows`);
     return;
   }
 

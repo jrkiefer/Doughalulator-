@@ -244,8 +244,10 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       return;
     }
     inFlight = true;
-    // A direct flush (blur, tap, reconnect) supersedes the pending debounce.
-    if (debounceTimer !== null) {
+    // A direct flush (blur, tap, reconnect) supersedes the pending debounce —
+    // but NOT a keepalive one, which never marks anything synced. Cancelling
+    // there would leave a backgrounded page dirty with no retry scheduled.
+    if (debounceTimer !== null && !opts.keepalive) {
       deps.clearTimer(debounceTimer);
       debounceTimer = null;
     }

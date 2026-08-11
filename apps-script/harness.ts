@@ -1,15 +1,30 @@
 /**
  * In-process Apps Script harness: enough of SpreadsheetApp, LockService,
  * ContentService, and PropertiesService to run both Code.gs files inside
- * Vitest. The fake sheet is a sparse 1-based grid; display values are the
- * String() of what was set (Sheets' date coercion is out of scope — the
- * scripts normalize dates themselves, which is exactly what we test).
+ * Vitest. The fake sheet is a sparse 1-based grid.
+ *
+ * Sheets' date coercion IS modelled: text written into a column formatted
+ * 'yyyy-mm-dd' is stored as a real Date and reads back as one from
+ * getValues(), while getDisplayValues() renders it ISO. A merge-upsert that
+ * matched on the raw value instead of the display value once appended a
+ * duplicate row on every save, and the harness could not see it — so the
+ * quirk that hid the bug is now part of the fake.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-type Cell = string | number;
+type Cell = string | number | Date;
+
+/** How Sheets renders a stored cell: dates ISO, everything else as text. */
+function display(value: Cell): string {
+  if (value === '') return '';
+  if (value instanceof Date) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+  return String(value);
+}
 
 class FakeRange {
   constructor(
@@ -43,11 +58,21 @@ class FakeRange {
   }
 
   getDisplayValues(): string[][] {
-    return this.getValues().map((row) => row.map((v) => (v === '' ? '' : String(v))));
+    return this.getValues().map((row) => row.map(display));
   }
 
   getDisplayValue(): string {
     return this.getDisplayValues()[0][0];
+  }
+
+  /** Erase the cells but keep the rows — formats and rule ranges survive. */
+  clearContent() {
+    for (let r = 0; r < this.numRows; r++) {
+      for (let c = 0; c < this.numCols; c++) {
+        this.sheet.setCell(this.row + r, this.col + c, '');
+      }
+    }
+    return this;
   }
 
   setFormula(formula: string) {
@@ -72,10 +97,21 @@ class FakeRange {
   }
 }
 
-class NoopRange {
-  setNumberFormat() {
+/** A whole-column range (e.g. 'A2:A') — only its formatting calls matter here. */
+class ColumnRange {
+  constructor(
+    private sheet: FakeSheet,
+    private column: number,
+  ) {}
+
+  setNumberFormat(format: string) {
+    // Sheets PARSES text written into a date-formatted cell and stores a real
+    // Date. Modelling that is the point: code reading such a column back with
+    // getValues() gets Date objects, not the strings it wrote.
+    if (/y+.*m+.*d+/i.test(format)) this.sheet.dateColumns.add(this.column);
     return this;
   }
+
   setFontWeight() {
     return this;
   }
@@ -86,7 +122,9 @@ export class FakeSheet {
   formulas = new Map<string, string>();
   rules: unknown[] = [];
   frozenRows = 0;
-  private maxRow = 0;
+  /** Columns formatted as dates — writes of date-like text become Date objects. */
+  dateColumns = new Set<number>();
+  private maxRows = 1000; // a fresh Google sheet's row ceiling
 
   constructor(public name: string) {}
 
@@ -94,11 +132,16 @@ export class FakeSheet {
     if (value === '' || value === null || value === undefined) {
       this.grid.delete(`${row}:${col}`);
     } else {
-      this.grid.set(`${row}:${col}`, value);
+      this.grid.set(`${row}:${col}`, this.coerce(row, col, value));
     }
-    // Once a row was written it counts toward lastRow even if later cleared —
-    // close enough to Sheets for these tests.
-    if (value !== '' && row > this.maxRow) this.maxRow = row;
+  }
+
+  /** Date-formatted columns store dates, exactly as Sheets does (header row excluded). */
+  private coerce(row: number, col: number, value: Cell): Cell {
+    if (row === 1 || !this.dateColumns.has(col) || typeof value !== 'string') return value;
+    const iso = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!iso) return value;
+    return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
   }
 
   getCell(row: number, col: number): Cell {
@@ -106,16 +149,27 @@ export class FakeSheet {
   }
 
   getRange(a: number | string, b?: number, c?: number, d?: number) {
-    if (typeof a === 'string') return new NoopRange();
+    if (typeof a === 'string') {
+      const column = a.trim().charCodeAt(0) - 64; // 'A2:A' → 1
+      return new ColumnRange(this, column);
+    }
     return new FakeRange(this, a, b!, c ?? 1, d ?? 1);
   }
 
+  /** The last row holding anything — content, not history, exactly like Sheets. */
   getLastRow() {
-    return this.maxRow;
+    const rows = [...this.grid.keys(), ...this.formulas.keys()].map((k) => Number(k.split(':')[0]));
+    return rows.length ? Math.max(...rows) : 0;
   }
 
   getMaxRows() {
-    return 1000;
+    return this.maxRows;
+  }
+
+  /** Grow the sheet, as Apps Script does when a write needs more room. */
+  insertRowsAfter(after: number, count: number) {
+    if (after >= this.maxRows) this.maxRows += count;
+    return this;
   }
 
   setFrozenRows(n: number) {
@@ -141,13 +195,12 @@ export class FakeSheet {
     };
     this.grid = shift(this.grid);
     this.formulas = shift(this.formulas);
-    this.maxRow = Math.max(0, ...[...this.grid.keys()].map((k) => Number(k.split(':')[0])));
+    this.maxRows -= numRows;
   }
 
   clear() {
     this.grid.clear();
     this.formulas.clear();
-    this.maxRow = 0;
     return this;
   }
 

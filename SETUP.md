@@ -49,6 +49,11 @@ In August 2026 the owner's previous tracking spreadsheets were imported into the
 - Some early-April dates have no Final Dough row: the real post-make final was never recorded back then, and inventing one would corrupt the PM-use math.
 - Days missing their final sales (no DOR report email ever arrived) or missing a 2 PM record were left out on purpose. When missing numbers turn up, a Claude session can rebuild the history file from the owner's uploads and re-run `scripts/import-history.ts` (dry → live → verify) — saves merge by date, so re-imports are safe.
 
+## Notes for whoever helps next
+
+- Both Apps Scripts accept a secret-guarded erase (`type: 'wipe'` with the confirm phrase `WIPE ALL DATA`) over their web-app URL. It is destructive and reachable by anyone holding the sheet's secret — kept because that same secret already allows overwriting every row, and because it is how a remote helper resets the sheets. `wipeAllData()` can also be called from the Apps Script editor if you would rather keep it off the network.
+- Column A of every tab is date-formatted, so Google stores real dates there and `getValues()` hands back Date objects, not the text that was written. Anything matching rows by date must go through `normalizeDate` (which handles all three shapes) — matching on the raw value silently appends duplicate rows instead of merging. The test harness models this quirk deliberately.
+
 ## If something ever looks wrong
 
 - App won't save ("will sync" forever): open SETTINGS and tap both **Test Connection** buttons. If one fails, re-copy that sheet's URL and secret (steps above).

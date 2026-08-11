@@ -152,6 +152,19 @@ describe('debounced background sync (§3b)', () => {
     expect(world.posts).toHaveLength(1);
   });
 
+  it('a keepalive flush leaves the debounce armed — the page may come back', async () => {
+    const world = makeWorld();
+    typeSales(world);
+    expect(world.pendingTimers()).toBe(1);
+    // Page backgrounded: fire-and-forget, nothing is marked synced…
+    await world.engine.flush({ keepalive: true });
+    expect(world.engine.status(D).state).toBe('saving');
+    // …so the pending debounce must survive to confirm the save on return.
+    expect(world.pendingTimers()).toBe(1);
+    await world.fireTimers();
+    expect(world.engine.status(D).state).toBe('synced');
+  });
+
   it('single-flight: a flush during a flush schedules exactly one rerun', async () => {
     const world = makeWorld();
     typeSales(world);

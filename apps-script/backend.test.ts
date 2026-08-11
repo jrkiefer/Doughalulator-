@@ -458,3 +458,58 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
     expect(Object.values(tabs).every((t) => t === null)).toBe(true);
   });
 });
+
+describe('writing past the sheet ceiling (a fresh Google sheet stops at 1000 rows)', () => {
+  it('dough: a save that lands past the last row grows the sheet instead of throwing', () => {
+    const script = freshDough();
+    const summary = script.world.ss.getSheetByName('Summary')!;
+    // Pretend the log already fills the sheet to its ceiling.
+    summary.setCell(summary.getMaxRows(), 1, '2026-01-01');
+    expect(summary.getLastRow()).toBe(1000);
+
+    const answer = post(script, dayPayload('2026-08-01'));
+    expect(answer.ok).toBe(true); // a throw here would park the record as "rejected"
+    expect(summary.getMaxRows()).toBeGreaterThan(1000);
+    expect(summary.getCell(1001, 3)).toBe(7200);
+  });
+
+  it('temps: the append-only Log grows past the ceiling rather than refusing saves', () => {
+    const script = freshTemps();
+    const log = script.world.ss.getSheetByName('Log')!;
+    log.setCell(log.getMaxRows(), 1, '2026-01-01');
+
+    const answer = post(script, {
+      secret: SECRET,
+      type: 'temps',
+      date: '2026-08-01',
+      items: [{ time: '07:02', slot: 'Morning', readings: [{ station: 'Pizza 1', temp: 38 }] }],
+    });
+    expect(answer).toMatchObject({ ok: true, saved: 1 });
+    expect(log.getMaxRows()).toBeGreaterThan(1000);
+    expect(log.rowByIndex(1001, 5)).toEqual(['2026-08-01', '07:02', 'Morning', 'Pizza 1', '38']);
+  });
+});
+
+describe('a wipe erases data without stripping the sheet formatting', () => {
+  it('keeps the header row, the row count, and the red-warning rules setup() installed', () => {
+    const script = freshDough();
+    const left = script.world.ss.getSheetByName('Left')!;
+    const rulesBefore = left.getConditionalFormatRules().length;
+    const maxRowsBefore = left.getMaxRows();
+    post(script, {
+      secret: SECRET,
+      type: 'day',
+      date: '2026-08-01',
+      tabs: [{ tab: 'Left', row: { Date: '2026-08-01', Small: -9, Shortages: 'Small -9' } }],
+    });
+    expect(left.getLastRow()).toBe(2);
+
+    expect(post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' }).ok).toBe(true);
+    expect(left.getLastRow()).toBe(1); // data gone
+    expect(left.headerRow(6)[0]).toBe('Date'); // header intact
+    // Deleting rows would have shrunk both of these, silently killing the red
+    // highlight the owner relies on to spot a miscount.
+    expect(left.getConditionalFormatRules().length).toBe(rulesBefore);
+    expect(left.getMaxRows()).toBe(maxRowsBefore);
+  });
+});

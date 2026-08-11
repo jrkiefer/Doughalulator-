@@ -1,18 +1,10 @@
+import { addDays } from '../../services/doughService';
 import { SectionHead } from './SectionHead';
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${names[m - 1]} ${d}, ${y}`;
-}
-
-/** Step an ISO date by whole days (the Date constructor rolls months/years). */
-function shiftDate(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(y, m - 1, d + days);
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return `${dt.getFullYear()}-${mm}-${dd}`;
 }
 
 export function ActiveDate(props: {
@@ -30,7 +22,7 @@ export function ActiveDate(props: {
           <button
             className="date-step"
             aria-label="Previous day"
-            onClick={() => props.onChange(shiftDate(props.date, -1))}
+            onClick={() => props.onChange(addDays(props.date, -1))}
           >
             ◀
           </button>
@@ -47,7 +39,7 @@ export function ActiveDate(props: {
           <button
             className="date-step"
             aria-label="Next day"
-            onClick={() => props.onChange(shiftDate(props.date, 1))}
+            onClick={() => props.onChange(addDays(props.date, 1))}
           >
             ▶
           </button>

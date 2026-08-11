@@ -384,6 +384,7 @@ function upsertRow(tabName, row) {
   }
   if (rowIndex === -1) {
     rowIndex = last + 1;
+    ensureRows(sheet, rowIndex);
     values = headers.map(function () { return ''; });
   }
   values[0] = date;
@@ -410,7 +411,10 @@ function wipeAllData() {
     if (!sheet) return;
     var last = sheet.getLastRow();
     if (last > 1) {
-      sheet.deleteRows(2, last - 1);
+      // clearContent, not deleteRows: deleting rows shrinks the conditional-format
+      // ranges and date formats setup() installed, so later negatives would stop
+      // showing red.
+      sheet.getRange(2, 1, last - 1, TABS[name].length).clearContent();
       wiped += last - 1;
     }
   });
@@ -422,11 +426,18 @@ function wipeAllData() {
 }
 
 /**
- * Normalize a date from the app OR a hand-typed sheet cell to YYYY-MM-DD.
- * Accepts ISO, M/D/YYYY, M/D/YY (2-digit years land in 2000–2099). '' if hopeless.
+ * Normalize a date from the app OR a sheet cell to YYYY-MM-DD. Accepts ISO,
+ * M/D/YYYY, M/D/YY (2-digit years land in 2000–2099), and the real Date
+ * objects getValues() hands back for date-formatted cells (column A is
+ * formatted by setup(), so a value written as text comes back as a Date).
+ * '' if hopeless.
  */
 function normalizeDate(value) {
   if (value === null || value === undefined) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    if (isNaN(value.getTime())) return '';
+    return value.getFullYear() + '-' + pad2(value.getMonth() + 1) + '-' + pad2(value.getDate());
+  }
   var s = String(value).trim();
   var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) return iso[1] + '-' + pad2(iso[2]) + '-' + pad2(iso[3]);
@@ -440,6 +451,16 @@ function normalizeDate(value) {
 
 function pad2(n) {
   return ('0' + n).slice(-2);
+}
+
+/**
+ * Grow a tab when a write would land past its last row. A new Google sheet
+ * stops at 1000 rows and a ranged write past that THROWS — which the app
+ * would read as a terminal refusal and stop saving for good.
+ */
+function ensureRows(sheet, lastRow) {
+  var max = sheet.getMaxRows();
+  if (lastRow > max) sheet.insertRowsAfter(max, lastRow - max);
 }
 
 /** Rewrite the two read-only bible tabs, but only when the content hash changed. */
