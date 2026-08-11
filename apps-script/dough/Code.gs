@@ -355,11 +355,18 @@ function ensureRows(sheet, lastRow) {
  */
 function writeBibles(payload) {
   var props = PropertiesService.getScriptProperties();
-  if (props.getProperty('bibleHash') === payload.hash) {
-    return { ok: true, bibles: 'unchanged' };
-  }
   var ss = SpreadsheetApp.getActive();
   var header = ['Threshold', 'Indi', 'Small', 'Large', 'Sicilian'];
+  // The remembered hash is only trustworthy while the mirrors still HOLD what
+  // it describes: after a wipe they are empty but the memory survives, which
+  // once left the bible tabs blank with the script insisting all was well.
+  var mirrored = Object.keys(BIBLE_TABS).every(function (key) {
+    var sheet = ss.getSheetByName(BIBLE_TABS[key]);
+    return sheet && sheet.getLastRow() > 1;
+  });
+  if (mirrored && props.getProperty('bibleHash') === payload.hash) {
+    return { ok: true, bibles: 'unchanged' };
+  }
   Object.keys(BIBLE_TABS).forEach(function (key) {
     var table = payload.bibles[key];
     var sheet = makeTab(ss, BIBLE_TABS[key]);

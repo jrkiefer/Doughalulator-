@@ -551,3 +551,21 @@ describe('the new bible builds itself as nights accumulate', () => {
     expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe('');
   });
 });
+
+describe('the bible mirror cannot go missing behind a stale memory', () => {
+  it('rewrites the mirrors when they are empty, even though the hash matches', () => {
+    const script = freshDough();
+    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+      .toMatchObject({ bibles: 'updated' });
+    // An unchanged resend is still a no-op while the mirrors hold their rows.
+    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+      .toMatchObject({ bibles: 'unchanged' });
+
+    // A wipe empties the sheet but not the script's memory of the last hash.
+    script.world.ss.getSheetByName('Dough Bible')!.clear();
+    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+      .toMatchObject({ bibles: 'updated' });
+    expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow())
+      .toBe(bibles.regular.rows.length + 1);
+  });
+});
