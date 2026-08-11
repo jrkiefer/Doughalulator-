@@ -32,7 +32,7 @@ export function HistoryCard(props: { onPick: (date: string) => void }) {
   return (
     <div className="band">
       <Collapsible id="history" title="History" note={`${rows.length} NIGHTS`}>
-        <div className="card history">
+        <div className="history">
           {rows.length === 0 && <p className="days-work-note">No saved nights yet.</p>}
           {rows.map((row) => (
             <button key={row.date} className="history-row" onClick={() => props.onPick(row.date)}>

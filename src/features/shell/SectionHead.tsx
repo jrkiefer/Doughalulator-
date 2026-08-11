@@ -1,11 +1,9 @@
-/** Numbered section heading: badge chip + serif title, with the note on its own quiet line. */
+/** Numbered section heading: step number, serif title, and the note quiet on the right. */
 export function SectionHead(props: { num: string; title: string; note?: string }) {
   return (
     <div className="section-head">
-      <div className="row">
-        <span className="badge">{props.num}</span>
-        <h2>{props.title}</h2>
-      </div>
+      <span className="badge">{props.num}</span>
+      <h2>{props.title}</h2>
       {props.note && <span className="micro note">{props.note}</span>}
     </div>
   );

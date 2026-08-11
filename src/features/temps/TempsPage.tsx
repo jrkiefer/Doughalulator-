@@ -31,7 +31,7 @@ export function TempsPage(props: {
     <div className="band">
       <SectionHead num="09" title="Station Temps" note="°F · 3× DAILY · SAVES BY ITSELF" />
       <Collapsible id="temps" title="Today's temps">
-        <div className="card">
+        <div className="temps-body">
           <div className="slot-chips">
             {SLOT_ORDER.map((slot) => (
               <button

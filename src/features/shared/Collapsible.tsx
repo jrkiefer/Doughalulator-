@@ -37,7 +37,7 @@ export function Collapsible(props: {
         <span className="name">{props.title}</span>
         <span className="micro">{props.note ? `${props.note} · ` : ''}{open ? 'TAP TO COLLAPSE ▲' : 'TAP TO EXPAND ▼'}</span>
       </button>
-      {open && props.children}
+      {open && <div className="body">{props.children}</div>}
     </section>
   );
 }
