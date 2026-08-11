@@ -1,16 +1,16 @@
-/** Connection settings for the two Apps Script web apps, kept on the phone. */
+/**
+ * Where the two notebooks live, kept on the phone. No password: the owner
+ * chose to drop it, so a web address is the whole connection. Any key left in
+ * a phone's stored settings from an older version is simply ignored.
+ */
 export interface SheetSettings {
   doughUrl: string;
-  doughSecret: string;
   tempsUrl: string;
-  tempsSecret: string;
 }
 
 export const emptySettings: SheetSettings = {
   doughUrl: '',
-  doughSecret: '',
   tempsUrl: '',
-  tempsSecret: '',
 };
 
 const KEY = 'doughalulator.settings';

@@ -21,7 +21,8 @@
 
 Each notebook has a small machine inside it (open the sheet → **Extensions → Apps Script** — the code came from this repo's `apps-script/` folder):
 
-- Near the top of each script is a line `var SECRET = '…';` — that's the **secret password** for that notebook. The same secret is typed into the app's Settings. **The secrets are only in those two places** — never written down in this repo.
+- **There are no passwords.** The owner chose simplicity over the lock, so each notebook is reached by its web address alone. Treat those /exec addresses as semi-public: anyone who has one can read or change that notebook.
+- Because of that, **nothing destructive is reachable over the web**. Erasing a log is the **Erase all data** item in the spreadsheet's own menu (Dough Tools / Temp Tools), which asks before it acts.
 - Each script was **deployed as a web app** (Deploy → Manage deployments): "Execute as: Me", "Access: Anyone". That produced the two long **/exec addresses** pasted into the app's Settings.
 - The `setup()` function inside each script builds any missing tabs. It's safe to run again anytime (for example after adding a new station to the temps script's STATIONS list).
 
@@ -29,9 +30,8 @@ Each notebook has a small machine inside it (open the sheet → **Extensions →
 
 Settings stores the two /exec addresses and the two secrets **on that phone only**. A new or wiped phone needs them re-entered:
 
-1. Open the sheet → Extensions → Apps Script → copy the secret from the `SECRET` line.
-2. Deploy → Manage deployments → copy the web app URL.
-3. In the app: SETTINGS → paste URL + secret → **Test Connection** should say "Connected ✓".
+1. Open the sheet → Extensions → Apps Script → Deploy → Manage deployments → copy the web app URL.
+2. In the app: SETTINGS → paste the URL → **Test Connection** should say "Connected ✓". There is no password to enter.
 
 ## Everyday things worth knowing
 
@@ -68,6 +68,6 @@ The app works out every number and writes it into the right tab. The notebook ke
 
 ## If something ever looks wrong
 
-- App won't save ("will sync" forever): open SETTINGS and tap both **Test Connection** buttons. If one fails, re-copy that sheet's URL and secret (steps above).
+- App won't save ("will sync" forever): open SETTINGS and tap both **Test Connection** buttons. If one fails, re-copy that sheet's URL (steps above).
 - A "This app isn't verified" Google warning during any re-setup is normal for personal scripts: Advanced → Go to… → Allow.
 - Anything bigger: a fresh Claude session should read **BUILD-PLAN.md + PROGRESS.md + CLAUDE.md** in this repo and will know the whole story.

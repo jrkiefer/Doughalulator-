@@ -1,10 +1,12 @@
 /**
  * Hot Tomato Temp Log — Google Apps Script.
  *
- * Setup: same dance as the dough script — paste into a blank sheet's Apps
- * Script editor, set SECRET, run setup() once, deploy as a web app
- * (execute as Me, access: Anyone), then give the app the URL + secret in
- * Settings.
+ * Setup: same dance as the dough script — paste into the sheet's Apps Script
+ * editor, run setup() once, deploy as a web app (execute as Me, access:
+ * Anyone), then give the app that URL in Settings. There is no password.
+ *
+ * THERE IS NO KEY, by the owner's choice. So nothing destructive is reachable
+ * over the web: erasing the log is a menu item inside the spreadsheet.
  *
  * Three kinds of tabs:
  *   Overview — one fixed row per station: the latest reading at a glance.
@@ -15,14 +17,12 @@
  *              keeps the original.
  *
  * Payloads carry a whole day at once:
- *   { secret, type: 'temps', date, items: [{ time, slot, readings: [{station, temp}] }] }
+ *   { type: 'temps', date, items: [{ time, slot, readings: [{station, temp}] }] }
  *
  * Writes run under a script lock; a busy lock answers retryable-shaped so
  * the app just tries again. Temps may be negative (the freezer) — but a
  * save with no readings, a bad date, or an unknown slot is rejected.
  */
-
-var SECRET = 'PASTE-YOUR-SECRET-HERE';
 
 var SHEET_NAME = 'Hot Tomato Temp Log';
 
@@ -65,6 +65,28 @@ function setup() {
   if (starter && starter.getLastRow() === 0) ss.deleteSheet(starter);
 }
 
+/** Custom menu so the owner can run maintenance without touching code. */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Temp Tools')
+    .addItem('Re-run setup', 'setup')
+    .addItem('Erase all data', 'eraseAllData')
+    .addToUi();
+}
+
+/** Erase every reading, after asking twice. Menu-only — never over the web. */
+function eraseAllData() {
+  var ui = SpreadsheetApp.getUi();
+  var answer = ui.alert(
+    'Erase all temperatures?',
+    'This clears every recorded reading from this notebook, including the ' +
+      'Log. The headings and station names stay. This cannot be undone.',
+    ui.ButtonSet.YES_NO,
+  );
+  if (answer !== ui.Button.YES) return;
+  ui.alert('Erased ' + wipeAllData() + ' rows.');
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) {
@@ -72,13 +94,7 @@ function doPost(e) {
   }
   try {
     var body = JSON.parse(e.postData.contents);
-    if (body.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
-    if (body.type === 'wipe') {
-      if (body.confirm !== 'WIPE ALL DATA') {
-        return jsonOut({ ok: false, error: "wipe needs confirm: 'WIPE ALL DATA'" });
-      }
-      return jsonOut({ ok: true, wiped: wipeAllData() });
-    }
+    // Erasing is deliberately NOT reachable here — see the note up top.
     if (body.type !== 'temps') return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
 
     var problem = validateTemps(body);
@@ -159,8 +175,7 @@ function doPost(e) {
 /**
  * Erase the audit Log, every station tab's data rows, and the Overview
  * readings (station names stay). Headers stay everywhere. Reached only via
- * doPost { type: 'wipe', confirm: 'WIPE ALL DATA' } — the app never sends
- * it; it exists for deliberate clean-slate moments.
+ * the menu only, never from the web.
  */
 function wipeAllData() {
   var ss = SpreadsheetApp.getActive();
@@ -206,7 +221,6 @@ function validateTemps(body) {
 function doGet(e) {
   try {
     var p = e.parameter || {};
-    if (p.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
 
     if (p.action === 'ping') {
       return jsonOut({ ok: true, sheet: 'temps', time: new Date().toISOString() });

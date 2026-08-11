@@ -13,8 +13,8 @@
  *
  * Run with vite-node (ships with vitest):
  *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode dry
- *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode live   --url <exec> --secret <s>
- *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode verify --url <exec> --secret <s>
+ *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode live   --url <exec>
+ *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode verify --url <exec>
  *
  * `dry` replays everything through the in-process Apps Script harness (the
  * real Code.gs) and diffs the resulting fake sheet against the history file —
@@ -71,8 +71,8 @@ function arg(name: string): string | undefined {
 
 const jsonPath = arg('json');
 const mode = arg('mode');
-if (!jsonPath || !mode || !['dry', 'live', 'verify', 'wipe'].includes(mode)) {
-  console.error('usage: --json <history.json> --mode dry|live|verify|wipe [--url <exec> --secret <s>]');
+if (!jsonPath || !mode || !['dry', 'live', 'verify'].includes(mode)) {
+  console.error('usage: --json <history.json> --mode dry|live|verify [--url <exec>]');
   process.exit(2);
 }
 const history = JSON.parse(readFileSync(jsonPath, 'utf8')) as Record<string, HistoryEntry>;
@@ -266,11 +266,10 @@ function report(problems: string[]): never {
 
 async function main() {
   if (mode === 'dry') {
-    const SECRET = 'IMPORT-DRY-RUN';
-    const script = loadScript('dough', SECRET);
+    const script = loadScript('dough');
     script.fns.setup();
     for (const p of payloads) {
-      const answer = post(script, { secret: SECRET, ...p });
+      const answer = post(script, p);
       if (answer.ok !== true) {
         console.error(`REJECTED ${p.type} ${p.date}: ${String(answer.error)}`);
         process.exit(1);
@@ -278,48 +277,16 @@ async function main() {
     }
     console.log(`dry run: all ${payloads.length} payloads accepted by the real backend code`);
     const problems = dates.flatMap((date) => {
-      const answer = get(script, { secret: SECRET, action: 'date', date });
+      const answer = get(script, { action: 'date', date });
       return diffDate(date, history[date], answer.ok === true ? (answer.tabs as SheetDate) : null);
     });
     report(problems);
   }
 
   const url = arg('url');
-  const secret = arg('secret');
-  if (!url || !secret) {
-    console.error(`mode ${mode} needs --url and --secret`);
+  if (!url) {
+    console.error(`mode ${mode} needs --url`);
     process.exit(2);
-  }
-
-  if (mode === 'wipe') {
-    // Owner-approved reset before a filtered re-import: erases every data row
-    // in the DOUGH sheet (bible mirrors and Dough Use formulas survive).
-    // Refuses to run without the same confirm phrase the backend demands.
-    if (arg('confirm') !== 'WIPE ALL DATA') {
-      console.error("wipe mode needs --confirm 'WIPE ALL DATA'");
-      process.exit(2);
-    }
-    const res = await fetch(url, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ secret, type: 'wipe', confirm: 'WIPE ALL DATA' }),
-    });
-    const body = await res.text();
-    let answer: { ok?: boolean; wiped?: number; error?: string } = {};
-    try {
-      answer = JSON.parse(body) as typeof answer;
-    } catch {
-      answer = {};
-    }
-    if (answer.ok !== true) {
-      // Silence here would be dangerous: the next step re-imports onto a sheet
-      // the operator believes is empty.
-      console.error(`wipe FAILED: ${answer.error ?? body}`);
-      process.exit(1);
-    }
-    console.log(`wiped ${answer.wiped} rows`);
-    return;
   }
 
   if (mode === 'live') {
@@ -333,7 +300,7 @@ async function main() {
             method: 'POST',
             redirect: 'follow',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ secret, ...p }),
+            body: JSON.stringify(p),
           });
           if (!res.ok) continue; // HTTP-level hiccup: retry
           const answer = (await res.json()) as { ok?: boolean; retryable?: boolean; error?: string };
@@ -360,8 +327,7 @@ async function main() {
 
   if (mode === 'verify') {
     const u = new URL(url);
-    u.searchParams.set('secret', secret);
-    u.searchParams.set('action', 'range');
+        u.searchParams.set('action', 'range');
     u.searchParams.set('from', dates[0]);
     u.searchParams.set('to', dates[dates.length - 1]);
     const res = await fetch(u, { redirect: 'follow' });

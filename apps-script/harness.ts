@@ -345,13 +345,14 @@ const EXPORTS = [
   'normalizeDate',
   'findDateRow',
   'writeBibles',
+  'wipeAllData',
+  'removeRetiredTabs',
 ];
 
 /** Evaluate a Code.gs file against a fresh fake world and hand back its functions. */
-export function loadScript(file: 'dough' | 'temps', secret = 'TEST-SECRET'): LoadedScript {
+export function loadScript(file: 'dough' | 'temps'): LoadedScript {
   const here = dirname(fileURLToPath(import.meta.url));
-  let code = readFileSync(join(here, file, 'Code.gs'), 'utf8');
-  code = code.replace("var SECRET = 'PASTE-YOUR-SECRET-HERE';", `var SECRET = '${secret}';`);
+  const code = readFileSync(join(here, file, 'Code.gs'), 'utf8');
 
   const world: FakeWorld = {
     ss: new FakeSpreadsheet(),

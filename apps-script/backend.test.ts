@@ -7,23 +7,21 @@ import { bibles } from '../src/core/testHelpers';
 import { biblesToPayload } from '../src/services/mapping';
 import { get, loadScript, post, type LoadedScript } from './harness';
 
-const SECRET = 'TEST-SECRET';
 
 function freshDough(): LoadedScript {
-  const script = loadScript('dough', SECRET);
+  const script = loadScript('dough');
   script.fns.setup();
   return script;
 }
 
 function freshTemps(): LoadedScript {
-  const script = loadScript('temps', SECRET);
+  const script = loadScript('temps');
   script.fns.setup();
   return script;
 }
 
 function dayPayload(date: string) {
   return {
-    secret: SECRET,
     type: 'day',
     date,
     tabs: [
@@ -64,11 +62,22 @@ describe('dough script — lock (§7)', () => {
 });
 
 describe('dough script — validation', () => {
-  it('rejects a bad secret', () => {
+  it('erasing is NOT reachable over the web — with no key it would be a public delete button', () => {
     const script = freshDough();
-    const answer = post(script, { ...dayPayload('2026-08-01'), secret: 'WRONG' });
-    expect(answer).toMatchObject({ ok: false, error: 'bad secret' });
-    expect(answer.retryable).toBeUndefined();
+    post(script, dayPayload('2026-08-01'));
+    ['wipe', 'retire'].forEach((type) => {
+      const answer = post(script, { type, confirm: 'WIPE ALL DATA' });
+      expect(answer.ok).toBe(false);
+      expect(String(answer.error)).toContain('unknown type');
+    });
+    // …and the day survived the attempts.
+    expect(script.world.ss.getSheetByName('2PM Dough Count')!.getLastRow()).toBe(2);
+  });
+
+  it('a save needs no password at all', () => {
+    const script = freshDough();
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: true, saved: 'day' });
+    expect(get(script, { action: 'ping' })).toMatchObject({ ok: true, sheet: 'dough' });
   });
 
   it('rejects a missing or mangled date', () => {
@@ -80,11 +89,11 @@ describe('dough script — validation', () => {
   it('accepts every tab the app fills, and refuses one it does not know', () => {
     const script = freshDough();
     expect(post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: 'Final Make Amount', row: { Date: '2026-08-01', 'Indi Trays': 3 } }],
     }).ok).toBe(true);
     expect(String(post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: 'Made Up Tab', row: { Date: '2026-08-01', Whatever: 3 } }],
     }).error)).toContain('unknown tab');
   });
@@ -92,17 +101,17 @@ describe('dough script — validation', () => {
   it('rejects an empty save and nonsensical negatives, but allows a negative sales-left', () => {
     const script = freshDough();
     expect(String(post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01' } }],
     }).error)).toContain('empty save');
 
     expect(String(post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', 'Indi Count': -2 } }],
     }).error)).toContain('negative value');
 
     expect(post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', 'Sales Left': -300 } }],
     }).ok).toBe(true);
   });
@@ -113,7 +122,7 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
     post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', "Today's Forecast": 8000 } }],
     });
     const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
@@ -144,7 +153,7 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
     post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       // A save always carries the whole row, so a cleared field travels
       // alongside the fields that still have numbers.
       tabs: [{
@@ -161,7 +170,7 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
     post(script, {
-      secret: SECRET, type: 'eon', date: '2026-08-01',
+      type: 'eon', date: '2026-08-01',
       tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-08-01', 'EON Sales': 9100, 'EON Indi Count': 20 } }],
     });
     expect(script.world.ss.getSheetByName('EON Dough Count')!.rowByIndex(2, 3))
@@ -202,7 +211,7 @@ describe('dough script — a plain record, no formulas to break', () => {
   it('a save lands each number in its own tab, all in one post', () => {
     const script = freshDough();
     post(script, {
-      secret: SECRET, type: 'day', date: '2026-08-01',
+      type: 'day', date: '2026-08-01',
       tabs: [
         ...dayPayload('2026-08-01').tabs,
         { tab: 'Dough Make (estimate)',
@@ -217,16 +226,12 @@ describe('dough script — a plain record, no formulas to break', () => {
       .getCell(2, 2)).toBe(64);
   });
 
-  it('the retired layout can be cleared away once the new one is trusted', () => {
+  it('the retired layout can be cleared away from the menu', () => {
     const script = freshDough();
     script.world.ss.insertSheet('Summary');
     script.world.ss.insertSheet('Dough Use');
-    expect(post(script, { secret: SECRET, type: 'retire', confirm: 'WIPE ALL DATA' }))
-      .toMatchObject({ ok: true, removed: 2 });
+    expect(script.fns.removeRetiredTabs()).toBe(2);
     expect(script.world.ss.getSheetByName('Summary')).toBeNull();
-    script.world.ss.insertSheet('Summary');
-    expect(post(script, { secret: SECRET, type: 'retire' }).ok).toBe(false);
-    expect(script.world.ss.getSheetByName('Summary')).not.toBeNull();
   });
 });
 
@@ -245,7 +250,7 @@ describe('dough script — fitted bibles (§8)', () => {
 describe('bible tripwire — app JSON vs the mirror the script writes', () => {
   it('the mirror tabs hold exactly the numbers in src/data', () => {
     const script = freshDough();
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+    expect(post(script, { ...biblesToPayload(bibles) }))
       .toMatchObject({ ok: true, bibles: 'updated' });
 
     const mirror = script.world.ss.getSheetByName('Dough Bible')!;
@@ -256,7 +261,7 @@ describe('bible tripwire — app JSON vs the mirror the script writes', () => {
       );
     });
 
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+    expect(post(script, { ...biblesToPayload(bibles) }))
       .toMatchObject({ bibles: 'unchanged' });
   });
 });
@@ -264,7 +269,6 @@ describe('bible tripwire — app JSON vs the mirror the script writes', () => {
 describe('temps script (§7)', () => {
   function tempsPayload(date = '2026-08-01') {
     return {
-      secret: SECRET,
       type: 'temps',
       date,
       items: [
@@ -322,61 +326,53 @@ describe('temps script (§7)', () => {
     const freezerRow = overview.rowByIndex(9, 4); // Freezer is station 8
     expect(freezerRow).toEqual(['Freezer', '-2', 'Morning', '2026-08-01 07:30']);
 
-    const day = get(script, { secret: SECRET, action: 'day', date: '8/1/26' });
+    const day = get(script, { action: 'day', date: '8/1/26' });
     expect((day.stations as Record<string, unknown>)['Freezer']).toEqual({
       Morning: '-2', '2 PM': '', Night: '',
     });
   });
 });
 
-describe('wipe — deliberate clean slate (secret + confirm phrase)', () => {
-  it('dough: erases every data row, keeps headers and bible mirrors, drops fitted tabs', () => {
+describe('erasing from the menu, the only way left', () => {
+  it('dough: clears every data row but keeps headings and the bible mirrors', () => {
     const script = freshDough();
-    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    post(script, biblesToPayload(bibles));
     post(script, dayPayload('2026-08-01'));
     post(script, dayPayload('2026-08-02'));
     const input = script.world.ss.getSheetByName('2PM Dough Count')!;
-
-    // Without the confirm phrase nothing happens.
-    expect(post(script, { secret: SECRET, type: 'wipe' }).ok).toBe(false);
     expect(input.getLastRow()).toBe(3);
 
-    expect(post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' }))
-      .toMatchObject({ ok: true });
+    expect(script.fns.wipeAllData()).toBe(2);
     expect(input.getLastRow()).toBe(1); // header only
     expect(input.headerRow(3)).toEqual(['Date', "Today's Forecast", 'Current Sales']);
-    expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow()).toBeGreaterThan(5);
+    expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow()).toBeGreaterThan(1);
+
     // Life goes on: the next save starts cleanly at row 2.
     post(script, dayPayload('2026-08-03'));
     expect(input.getLastRow()).toBe(2);
   });
 
-  it('temps: clears Log, station tabs, and Overview readings but keeps station names', () => {
+  it('temps: clears the Log and station tabs, keeping the station names', () => {
     const script = freshTemps();
     post(script, {
-      secret: SECRET,
-      type: 'temps',
-      date: '2026-08-01',
-      items: [
-        {
-          time: '07:02',
-          slot: 'Morning',
-          readings: [
-            { station: 'Pizza 1', temp: 38.5 },
-            { station: 'Freezer', temp: -4 },
-          ],
-        },
-      ],
+      type: 'temps', date: '2026-08-01',
+      items: [{ time: '07:02', slot: 'Morning', readings: [
+        { station: 'Pizza 1', temp: 38.5 }, { station: 'Freezer', temp: -4 }] }],
     });
     expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(3);
 
-    const answer = post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' });
-    expect(answer).toMatchObject({ ok: true });
+    script.fns.wipeAllData();
     expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(1);
     expect(script.world.ss.getSheetByName('Pizza 1')!.getLastRow()).toBe(1);
     const overview = script.world.ss.getSheetByName('Overview')!;
     expect(overview.rowByIndex(2, 4)).toEqual(['Pizza 1', '', '', '']);
-    expect(overview.rowByIndex(9, 4)).toEqual(['Freezer', '', '', '']);
+  });
+
+  it('temps: erasing is not reachable over the web either', () => {
+    const script = freshTemps();
+    const answer = post(script, { type: 'wipe', confirm: 'WIPE ALL DATA' });
+    expect(answer.ok).toBe(false);
+    expect(String(answer.error)).toContain('unknown type');
   });
 });
 
@@ -386,13 +382,12 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
     post(script, dayPayload('2026-08-01'));
     post(script, dayPayload('2026-08-02'));
     post(script, {
-      secret: SECRET,
       type: 'eon',
       date: '2026-08-02',
       tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-08-02', 'EON Sales': 9100 } }],
     });
 
-    const one = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    const one = get(script, { action: 'date', date: '2026-08-01' });
     const tabs = one.tabs as Record<string, Record<string, string> | null>;
     expect(one.ok).toBe(true);
     expect(tabs['2PM Dough Count']!["Today's Forecast"]).toBe('7200');
@@ -401,19 +396,19 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
     expect(tabs['EON Dough Count']).toBeNull();
 
     // recent returns the same rows, newest dates last, one entry per date.
-    const recent = get(script, { secret: SECRET, action: 'recent', n: '30' });
+    const recent = get(script, { action: 'recent', n: '30' });
     const recentDates = recent.dates as Record<string, Record<string, Record<string, string> | null>>;
     expect(Object.keys(recentDates).sort()).toEqual(['2026-08-01', '2026-08-02']);
     expect(recentDates['2026-08-01']['2PM Dough Count']).toEqual(tabs['2PM Dough Count']);
     expect(recentDates['2026-08-02']['EON Dough Count']!['EON Sales']).toBe('9100');
 
     // range narrows by date without changing row content.
-    const range = get(script, { secret: SECRET, action: 'range', from: '2026-08-02', to: '2026-08-31' });
+    const range = get(script, { action: 'range', from: '2026-08-02', to: '2026-08-31' });
     const rangeDates = range.dates as Record<string, unknown>;
     expect(Object.keys(rangeDates)).toEqual(['2026-08-02']);
 
     // n caps the list to the most recent dates.
-    const justOne = get(script, { secret: SECRET, action: 'recent', n: '1' });
+    const justOne = get(script, { action: 'recent', n: '1' });
     expect(Object.keys(justOne.dates as object)).toEqual(['2026-08-02']);
   });
 
@@ -425,12 +420,11 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
     input.setCell(3, 1, '8/1/26');
     input.setCell(3, 2, 9999);
 
-    const answer = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    const answer = get(script, { action: 'date', date: '2026-08-01' });
     const tabs = answer.tabs as Record<string, Record<string, string> | null>;
     expect(tabs['2PM Dough Count']!["Today's Forecast"]).toBe('7200'); // the first row wins
     // …and a save still merges into that same first row rather than the duplicate.
     post(script, {
-      secret: SECRET,
       type: 'day',
       date: '8/1/26',
       tabs: [{ tab: '2PM Dough Count', row: { Date: '8/1/26', "Today's Forecast": 8100 } }],
@@ -441,8 +435,8 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
 
   it('reads work on an empty log and on a date nobody saved', () => {
     const script = freshDough();
-    expect(get(script, { secret: SECRET, action: 'recent', n: '30' }).dates).toEqual({});
-    const answer = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    expect(get(script, { action: 'recent', n: '30' }).dates).toEqual({});
+    const answer = get(script, { action: 'date', date: '2026-08-01' });
     const tabs = answer.tabs as Record<string, unknown>;
     expect(answer.ok).toBe(true);
     expect(Object.values(tabs).every((t) => t === null)).toBe(true);
@@ -469,7 +463,6 @@ describe('writing past the sheet ceiling (a fresh Google sheet stops at 1000 row
     log.setCell(log.getMaxRows(), 1, '2026-01-01');
 
     const answer = post(script, {
-      secret: SECRET,
       type: 'temps',
       date: '2026-08-01',
       items: [{ time: '07:02', slot: 'Morning', readings: [{ station: 'Pizza 1', temp: 38 }] }],
@@ -488,7 +481,7 @@ describe('a wipe erases data without stripping the sheet formatting', () => {
     post(script, dayPayload('2026-08-01'));
     expect(input.getLastRow()).toBe(2);
 
-    expect(post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' }).ok).toBe(true);
+    script.fns.wipeAllData();
     expect(input.getLastRow()).toBe(1); // data gone
     expect(input.headerRow(2)[0]).toBe('Date'); // header intact
     // Deleting rows would have shrunk the sheet and its formats along with it.
@@ -500,7 +493,6 @@ describe('the new bible builds itself as nights accumulate', () => {
   /** One finished night: its sales and what it got through, per size. */
   function night(script: LoadedScript, date: string, sales: number, use: number) {
     post(script, {
-      secret: SECRET,
       type: 'eon',
       date,
       tabs: [
@@ -513,7 +505,7 @@ describe('the new bible builds itself as nights accumulate', () => {
 
   it('fills the suggested column from the recorded nights, beside the current bible', () => {
     const script = freshDough();
-    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    post(script, { ...biblesToPayload(bibles) });
     const build = script.world.ss.getSheetByName('New Bieblerb')!;
 
     // Under three nights a line is noise, so nothing is suggested yet.
@@ -539,10 +531,10 @@ describe('the new bible builds itself as nights accumulate', () => {
 
   it('peach nights build the peach suggestion, leaving the regular one alone', () => {
     const script = freshDough();
-    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    post(script, { ...biblesToPayload(bibles) });
     ['2026-07-01', '2026-07-02', '2026-07-03'].forEach((date, i) => {
       post(script, {
-        secret: SECRET, type: 'eon', date,
+        type: 'eon', date,
         tabs: [{ tab: 'New Peach Bieblerb',
           row: { Date: date, 'Total Sales': 4000 + i * 2000, Indi: 40 + i * 20 } }],
       });
@@ -555,15 +547,15 @@ describe('the new bible builds itself as nights accumulate', () => {
 describe('the bible mirror cannot go missing behind a stale memory', () => {
   it('rewrites the mirrors when they are empty, even though the hash matches', () => {
     const script = freshDough();
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+    expect(post(script, { ...biblesToPayload(bibles) }))
       .toMatchObject({ bibles: 'updated' });
     // An unchanged resend is still a no-op while the mirrors hold their rows.
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+    expect(post(script, { ...biblesToPayload(bibles) }))
       .toMatchObject({ bibles: 'unchanged' });
 
     // A wipe empties the sheet but not the script's memory of the last hash.
     script.world.ss.getSheetByName('Dough Bible')!.clear();
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+    expect(post(script, { ...biblesToPayload(bibles) }))
       .toMatchObject({ bibles: 'updated' });
     expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow())
       .toBe(bibles.regular.rows.length + 1);

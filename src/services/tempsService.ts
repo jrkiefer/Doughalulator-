@@ -35,7 +35,6 @@ export function tempsEntryToPayload(
 export async function fetchLatestTemps(settings: SheetSettings): Promise<LatestTemps | null> {
   if (settings.tempsUrl.trim()) {
     const outcome = await getJson(settings.tempsUrl, {
-      secret: settings.tempsSecret,
       action: 'latest',
     });
     if (outcome.kind === 'ok') {
@@ -59,7 +58,6 @@ export async function fetchLatestTemps(settings: SheetSettings): Promise<LatestT
 /** Test Connection for the temps sheet. Returns an error message or null when fine. */
 export async function pingTemps(settings: SheetSettings): Promise<string | null> {
   const outcome = await getJson(settings.tempsUrl, {
-    secret: settings.tempsSecret,
     action: 'ping',
   });
   if (outcome.kind === 'ok') return null;

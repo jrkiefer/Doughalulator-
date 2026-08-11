@@ -51,7 +51,6 @@ export async function fetchDate(
 ): Promise<FetchDayResult> {
   if (!settings.doughUrl.trim()) return { kind: 'unreachable' };
   const outcome = await getJson(settings.doughUrl, {
-    secret: settings.doughSecret,
     action: 'date',
     date,
   });
@@ -82,7 +81,6 @@ export async function fetchHistory(
 ): Promise<{ summaries: HistorySummary[]; source: 'sheet' | 'phone' }> {
   if (settings.doughUrl.trim()) {
     const outcome = await getJson(settings.doughUrl, {
-      secret: settings.doughSecret,
       action: 'recent',
       n: String(days),
     });
@@ -102,7 +100,6 @@ export async function fetchHistory(
 export async function syncBibles(bibles: Bibles, settings: SheetSettings): Promise<void> {
   if (!settings.doughUrl.trim()) return;
   await postJson(settings.doughUrl, {
-    secret: settings.doughSecret,
     ...biblesToPayload(bibles),
   });
 }
@@ -110,7 +107,6 @@ export async function syncBibles(bibles: Bibles, settings: SheetSettings): Promi
 /** Test Connection for the dough sheet. Returns an error message or null when fine. */
 export async function pingDough(settings: SheetSettings): Promise<string | null> {
   const outcome = await getJson(settings.doughUrl, {
-    secret: settings.doughSecret,
     action: 'ping',
   });
   if (outcome.kind === 'ok') return null;

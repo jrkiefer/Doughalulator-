@@ -69,11 +69,6 @@ export function SettingsPage(props: {
           onChange={(v) => update({ doughUrl: v })}
           placeholder="https://script.google.com/…"
         />
-        <Field
-          label="SECRET"
-          value={settings.doughSecret}
-          onChange={(v) => update({ doughSecret: v })}
-        />
         <button className="pill pill-sm" onClick={testDough} disabled={!settings.doughUrl.trim()}>
           Test Connection
         </button>
@@ -87,11 +82,6 @@ export function SettingsPage(props: {
           value={settings.tempsUrl}
           onChange={(v) => update({ tempsUrl: v })}
           placeholder="https://script.google.com/…"
-        />
-        <Field
-          label="SECRET"
-          value={settings.tempsSecret}
-          onChange={(v) => update({ tempsSecret: v })}
         />
         <button className="pill pill-sm" onClick={testTemps} disabled={!settings.tempsUrl.trim()}>
           Test Connection

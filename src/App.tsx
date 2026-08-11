@@ -125,11 +125,10 @@ const engine = createSyncEngine({
   post: (target, payload, opts) => {
     const s = loadSettings();
     const url = target === 'dough' ? s.doughUrl : s.tempsUrl;
-    const secret = target === 'dough' ? s.doughSecret : s.tempsSecret;
     if (!url.trim()) {
       return Promise.resolve({ kind: 'retryable' as const, error: 'no sheet connected yet' });
     }
-    return postJson(url, { secret, ...payload }, opts);
+    return postJson(url, payload, opts);
   },
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (id) => clearTimeout(id),

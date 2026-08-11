@@ -1,9 +1,14 @@
 /**
  * Hot Tomato Dough Log — Google Apps Script.
  *
- * Setup: paste into the sheet's Apps Script editor, set SECRET, run setup()
- * once, deploy as a web app (execute as Me, access: Anyone), then give the
- * app the URL + secret in Settings.
+ * Setup: paste into the sheet's Apps Script editor, run setup() once, deploy
+ * as a web app (execute as Me, access: Anyone), then give the app that URL in
+ * Settings. There is no password to set.
+ *
+ * THERE IS NO KEY. Anyone holding the /exec address can read this notebook or
+ * write to it, which is the owner's deliberate choice for simplicity. Because
+ * of that, nothing destructive is reachable over the web: erasing the log is a
+ * menu item inside the spreadsheet, where being signed in is the protection.
  *
  * THE SHAPE OF THIS SHEET
  * The app is the only calculator. It works out every number from the counts
@@ -27,8 +32,6 @@
  * Saves are merge-upserts by Date and run under a script lock, so two phones
  * saving in the same second can never race into duplicate rows.
  */
-
-var SECRET = 'PASTE-YOUR-SECRET-HERE';
 
 var SHEET_NAME = 'Hot Tomato Dough Log';
 
@@ -155,7 +158,22 @@ function onOpen() {
     .addItem('Re-run setup', 'setup')
     .addItem('Refresh new-bible suggestions', 'refreshBibleBuilds')
     .addItem('Remove retired tabs', 'removeRetiredTabs')
+    .addItem('Erase all data', 'eraseAllData')
     .addToUi();
+}
+
+/** Erase every data row, after asking twice. Menu-only — never over the web. */
+function eraseAllData() {
+  var ui = SpreadsheetApp.getUi();
+  var answer = ui.alert(
+    'Erase all data?',
+    'This clears every recorded day from this notebook. The headings and the ' +
+      'bible pages stay. This cannot be undone.',
+    ui.ButtonSet.YES_NO,
+  );
+  if (answer !== ui.Button.YES) return;
+  var wiped = wipeAllData();
+  ui.alert('Erased ' + wiped + ' rows.');
 }
 
 /** Delete the tabs the old layout used, once the new one is trusted. */
@@ -181,7 +199,6 @@ function doPost(e) {
   }
   try {
     var body = JSON.parse(e.postData.contents);
-    if (body.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
 
     if (body.type === 'day' || body.type === 'eon') {
       var problem = validateSave(body);
@@ -196,14 +213,8 @@ function doPost(e) {
     if (body.type === 'bibles') {
       return jsonOut(writeBibles(body));
     }
-    if (body.type === 'wipe' || body.type === 'retire') {
-      if (body.confirm !== 'WIPE ALL DATA') {
-        return jsonOut({ ok: false, error: "needs confirm: 'WIPE ALL DATA'" });
-      }
-      return body.type === 'wipe'
-        ? jsonOut({ ok: true, wiped: wipeAllData() })
-        : jsonOut({ ok: true, removed: removeRetiredTabs() });
-    }
+    // Erasing is deliberately NOT reachable here: with no key it would be a
+    // delete-everything button on the open internet. It lives in the menu.
     return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
@@ -290,9 +301,8 @@ function upsertRow(tabName, row) {
 }
 
 /**
- * Erase the data rows of both input tabs. Headers, formulas, and the bible
- * mirrors survive - every calculated tab empties itself once its inputs are
- * gone. Reached only via doPost with the confirm phrase; the app never sends it.
+ * Erase every data row. Headings and the bible mirrors survive. Reached from
+ * the menu only, never from the web.
  */
 function wipeAllData() {
   var ss = SpreadsheetApp.getActive();
@@ -461,7 +471,6 @@ function median(values) {
 function doGet(e) {
   try {
     var p = e.parameter || {};
-    if (p.secret !== SECRET) return jsonOut({ ok: false, error: 'bad secret' });
 
     if (p.action === 'ping') {
       return jsonOut({ ok: true, sheet: 'dough', time: new Date().toISOString() });
