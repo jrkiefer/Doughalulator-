@@ -236,7 +236,19 @@ export default function App() {
     const seqBefore = engine.editSeq(date);
     const timer = setTimeout(() => {
       fetchDate(date, loadSettings()).then((result) => {
-        if (!alive || result.kind !== 'loaded') return;
+        if (!alive) return;
+        if (result.kind !== 'loaded') {
+          setSheetTabs(null);
+          setCheckNote(
+            result.kind === 'empty'
+              ? 'Nothing saved for this day yet'
+              : "Can't reach the sheet to cross-check",
+          );
+          return;
+        }
+        // What the sheet's formulas made of this date, for the bottom check.
+        setSheetTabs(result.day.tabs);
+        setCheckNote('');
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
         const applied = engine.applyFetched(date, (entry) => applyFetchedToEntry(entry, result.day, date));
