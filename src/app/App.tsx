@@ -1,40 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { defaultConfig, type BibleId } from './config';
-import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation, selectBibleId, slotForTime, type TempSlot } from './core';
-import type { DoughDayRecord } from './core/types';
-import { bibles } from './features/bibleData';
-import { BibleViewer } from './features/bibleViewer/BibleViewer';
-import { EonPage } from './features/eon/EonPage';
-import { emptyEonForm, type EonForm } from './features/eon/formState';
-import { HistoryCard } from './features/history/HistoryCard';
-import { SettingsPage } from './features/settings/SettingsPage';
-import { ActiveDate } from './features/shell/ActiveDate';
-import { BibleToggle } from './features/shell/BibleToggle';
-import { Footer } from './features/shell/Footer';
-import { Header } from './features/shell/Header';
-import { ModeNav, type Mode } from './features/shell/ModeNav';
-import { emptyTempReadings, TempsPage, type TempReadings } from './features/temps/TempsPage';
-import { parseCounts, toNumOrNull } from './features/shared/counts';
-import { emptyTwoPmForm, type TwoPmForm } from './features/twoPm/formState';
-import { TwoPmPage } from './features/twoPm/TwoPmPage';
-import type { Rounding } from './features/twoPm/DaysWork';
-import { postJson } from './services/client';
-import { addDays, fetchDate, type FetchedDay } from './services/doughService';
-import {
-  cachedLatestTemps,
-  cacheLatestTemps,
-  clearEntry,
-  freshMeta,
-  listCachedDates,
-  loadEntry,
-  saveEntry,
-  sweepStaleKeys,
-  type DateEntry,
-} from './services/local';
-import { dayRecordToTabWrites, eonRecordToTabWrites } from './services/mapping';
-import { loadSettings, type SheetSettings } from './services/settings';
-import { createSyncEngine } from './services/sync';
-import { fetchLatestTemps, tempsEntryToPayload } from './services/tempsService';
+import { defaultConfig, type BibleId } from '../config';
+import { selectBibleId, slotForTime, type TempSlot } from '../core';
+import { bibles } from '../data/bibles';
+import { BibleViewer } from '../features/bibleViewer/BibleViewer';
+import { EonPage } from '../features/eon/EonPage';
+import { emptyEonForm, type EonForm } from '../features/eon/formState';
+import { HistoryCard } from '../features/history/HistoryCard';
+import { SettingsPage } from '../features/settings/SettingsPage';
+import { ActiveDate } from '../features/shell/ActiveDate';
+import { BibleToggle } from '../features/shell/BibleToggle';
+import { Footer } from '../features/shell/Footer';
+import { Header } from '../features/shell/Header';
+import { ModeNav, type Mode } from '../features/shell/ModeNav';
+import { emptyTempReadings, TempsPage, type TempReadings } from '../features/temps/TempsPage';
+import type { Rounding } from '../features/twoPm/DaysWork';
+import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
+import { TwoPmPage } from '../features/twoPm/TwoPmPage';
+import { fetchDate } from '../services/doughService';
+import { cachedLatestTemps, cacheLatestTemps, sweepStaleKeys, type DateEntry } from '../services/local';
+import { loadSettings, type SheetSettings } from '../services/settings';
+import { fetchLatestTemps } from '../services/tempsService';
+import { applyFetchedToEntry, buildDayRecord, engine } from './engine';
 
 const cfg = defaultConfig;
 
@@ -53,119 +39,6 @@ function nowHhMm(): string {
 function inPeachWindow(date: string): boolean {
   const md = date.slice(5);
   return md >= cfg.peachSeason.start && md <= cfg.peachSeason.end;
-}
-
-function formHasContent(form: Record<string, string>): boolean {
-  return Object.values(form).some((v) => v.trim() !== '');
-}
-
-/** The day record for a date, straight from form state (pure, blank-aware). */
-function buildDayRecord(
-  date: string,
-  form: TwoPmForm,
-  rounding: Rounding,
-  bibleOverride: BibleId | undefined,
-): DoughDayRecord {
-  const record = runDoughCalculation(
-    {
-      date,
-      counts: parseCounts(form),
-      todayForecastRaw: toNumOrNull(form.todayForecast),
-      currentSalesRaw: toNumOrNull(form.currentSales),
-      tomorrowForecastRaw: toNumOrNull(form.tomorrowForecast),
-      bibleOverride,
-    },
-    bibles,
-    cfg,
-  );
-  return { ...record, chosenBatchOption: rounding };
-}
-
-// ————— the sync engine, wired to real storage / network / clock —————
-
-const engine = createSyncEngine({
-  now: () => Date.now(),
-  loadEntry,
-  saveEntry,
-  clearEntry,
-  listDates: listCachedDates,
-  buildPayload: (type, date, entry) => {
-    if (type === 'day') {
-      const day = entry.day;
-      if (!day || (!formHasContent(day.form) && day.rounding === null)) return null;
-      const form = { ...emptyTwoPmForm, ...day.form };
-      const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined);
-      return { type: 'day', date, tabs: dayRecordToTabWrites(record, amUseFor(date, record)) };
-    }
-    if (type === 'eon') {
-      const eon = entry.eon;
-      if (!eon || !formHasContent(eon.form)) return null;
-      const eonForm = { ...emptyEonForm, ...eon.form };
-      const day = entry.day;
-      const dayRecord =
-        day && (formHasContent(day.form) || day.rounding !== null)
-          ? buildDayRecord(date, { ...emptyTwoPmForm, ...day.form }, day.rounding, day.bibleOverride ?? undefined)
-          : null;
-      const record = runEonCalculation(
-        {
-          date,
-          counts: parseCounts(eonForm),
-          finalSalesRaw: toNumOrNull(eonForm.finalSales),
-          manualTomorrowForecastRaw: toNumOrNull(eonForm.manualTomorrowForecast),
-          bibleOverride: day?.bibleOverride ?? undefined,
-        },
-        dayRecord,
-        bibles,
-        cfg,
-      );
-      return { type: 'eon', date, tabs: eonRecordToTabWrites(record, dayRecord?.bibleUsed, dayRecord ? amUseFor(date, dayRecord) : null) };
-    }
-    return entry.temps ? tempsEntryToPayload(date, entry.temps, cfg) : null;
-  },
-  post: (target, payload, opts) => {
-    const s = loadSettings();
-    const url = target === 'dough' ? s.doughUrl : s.tempsUrl;
-    if (!url.trim()) {
-      return Promise.resolve({ kind: 'retryable' as const, error: 'no sheet connected yet' });
-    }
-    return postJson(url, payload, opts);
-  },
-  setTimer: (fn, ms) => setTimeout(fn, ms),
-  clearTimer: (id) => clearTimeout(id),
-});
-
-/**
- * Dough used before 2 PM: last night's close against this afternoon's count.
- * Yesterday's EON lives in the phone's own store; without it the morning's
- * use is simply unknown (a closed day), which is what blank means here.
- */
-function amUseFor(date: string, record: DoughDayRecord) {
-  const yesterday = loadEntry(addDays(date, -1));
-  const eonForm = yesterday?.eon?.form;
-  if (!eonForm || !formHasContent(eonForm)) return null;
-  const eonHave = computeHave(parseCounts({ ...emptyEonForm, ...eonForm }), cfg);
-  return computeAmUse(eonHave, record.have, record.currentSales);
-}
-
-/** Write a sheet fetch into a date's entry (form-shaped; blanks stay blank). */
-function applyFetchedToEntry(entry: DateEntry, fetched: FetchedDay, date: string): void {
-  const now = Date.now();
-  const overrideFrom = (bible: FetchedDay['bible']) =>
-    bible && bible !== selectBibleId(date, cfg) ? bible : null;
-  if (fetched.sales || fetched.counts || fetched.rounding) {
-    entry.day = {
-      form: { ...emptyTwoPmForm, ...(fetched.counts ?? {}), ...(fetched.sales ?? {}) },
-      rounding: fetched.rounding,
-      bibleOverride: overrideFrom(fetched.bible),
-      ...freshMeta(now),
-    };
-  }
-  if (fetched.eonCounts || (fetched.finalSales !== null && fetched.finalSales !== '')) {
-    entry.eon = {
-      form: { ...emptyEonForm, ...(fetched.eonCounts ?? {}), finalSales: fetched.finalSales ?? '' },
-      ...freshMeta(now),
-    };
-  }
 }
 
 export default function App() {
@@ -232,7 +105,7 @@ export default function App() {
     };
   }, [rehydrate]);
 
-  // Behind the instant paint, fetch the date from the sheet and merge (§4).
+  // Behind the instant paint, fetch the date from the sheet and merge.
   // Short delay first: stepping through days with ◀ ▶ should fetch the day the
   // owner lands on, not every day they pass through.
   useEffect(() => {
@@ -303,15 +176,14 @@ export default function App() {
     });
     const temp = Number(value);
     if (value.trim() !== '' && Number.isFinite(temp)) {
-      const slotName = { morning: cfg.tempSlots.names.morning, midday: cfg.tempSlots.names.midday, night: cfg.tempSlots.names.night }[slot];
       cacheLatestTemps({
         ...(cachedLatestTemps() ?? {}),
-        [station]: { temp, slot: slotName, when: `${date} ${time}` },
+        [station]: { temp, slot: cfg.tempSlots.names[slot], when: `${date} ${time}` },
       });
     }
   }
 
-  // ————— load / reset (§4) —————
+  // ————— load / reset —————
 
   async function handleLoad() {
     if (engine.isDirty(date) && !loadArmed) {

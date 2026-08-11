@@ -351,8 +351,9 @@ const EXPORTS = [
 
 /** Evaluate a Code.gs file against a fresh fake world and hand back its functions. */
 export function loadScript(file: 'dough' | 'temps'): LoadedScript {
+  // The real scripts sit beside this test folder, in apps-script/<file>/Code.gs.
   const here = dirname(fileURLToPath(import.meta.url));
-  const code = readFileSync(join(here, file, 'Code.gs'), 'utf8');
+  const code = readFileSync(join(here, '..', file, 'Code.gs'), 'utf8');
 
   const world: FakeWorld = {
     ss: new FakeSpreadsheet(),

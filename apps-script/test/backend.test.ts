@@ -3,8 +3,8 @@
  * SpreadsheetApp/LockService world from harness.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { bibles } from '../src/core/testHelpers';
-import { biblesToPayload } from '../src/services/mapping';
+import { bibles } from '../../src/core/testHelpers';
+import { biblesToPayload } from '../../src/services/mapping';
 import { get, loadScript, post, type LoadedScript } from './harness';
 
 

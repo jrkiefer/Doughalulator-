@@ -11,8 +11,8 @@ function Field(props: {
   placeholder?: string;
 }) {
   return (
-    <div style={{ padding: '8px 0' }}>
-      <span className="micro" style={{ display: 'block', marginBottom: 6 }}>
+    <div className="settings-field">
+      <span className="micro">
         {props.label}
       </span>
       <input
@@ -95,7 +95,6 @@ export function SettingsPage(props: {
         </button>
         <div className="coming-note">Settings save on the phone as you type.</div>
       </div>
-      <div style={{ height: 20 }} />
     </div>
   );
 }

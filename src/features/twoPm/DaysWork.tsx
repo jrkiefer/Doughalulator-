@@ -67,7 +67,7 @@ export function DaysWork(props: {
 
         {!closed && ready && record.totalTrays! > 0 && !chosen && (
           <p className="days-work-note">
-            <strong style={{ color: 'var(--ink)', fontSize: 15 }}>
+            <strong className="lede">
               {batchesText(record.exactBatches!)} batches · {record.totalTrays} trays
             </strong>
             <br />

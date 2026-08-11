@@ -1,10 +1,6 @@
-import doughBibleJson from '../data/doughBible.json';
-import peachBibleJson from '../data/peachBible.json';
-import type { Bible, Bibles, CountedInventory } from './types';
+import type { CountedInventory } from './types';
 
-export const regularBible = doughBibleJson as Bible;
-export const peachBible = peachBibleJson as Bible;
-export const bibles: Bibles = { regular: regularBible, peach: peachBible };
+export { bibles, peachBible, regularBible } from '../data/bibles';
 
 /**
  * Build an inventory count from just the entered parts. Anything not listed

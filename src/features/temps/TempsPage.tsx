@@ -31,47 +31,44 @@ export function TempsPage(props: {
     <div className="band">
       <SectionHead num="09" title="Station Temps" note="°F · 3× DAILY · SAVES BY ITSELF" />
       <Collapsible id="temps" title="Today's temps">
-        <div className="temps-body">
-          <div className="slot-chips">
-            {SLOT_ORDER.map((slot) => (
-              <button
-                key={slot}
-                className={`pill pill-sm${props.slot === slot ? ' active' : ''}`}
-                onClick={() => props.onSlot(slot)}
-              >
-                {slotLabel[slot]}
-              </button>
-            ))}
-          </div>
-
-          {cfg.stations.map((station) => {
-            const value = current[station] ?? '';
-            return (
-              <div className="temp-row" key={station}>
-                <span className="label">{station}</span>
-                <div className="temp-input">
-                  <input
-                    className="input"
-                    type="number"
-                    step="any"
-                    aria-label={`${station} temperature`}
-                    value={value}
-                    onChange={(e) => props.onReading(props.slot, station, e.target.value)}
-                  />
-                  <span className="suffix">°F</span>
-                  {props.synced && value.trim() !== '' && <span className="chip chip-temp">saved</span>}
-                </div>
-              </div>
-            );
-          })}
-
-          <button className="pill pill-sm pill-block" onClick={props.onLoadLast}>
-            LOAD LAST TEMPS
-          </button>
-          {props.loadNote && <div className="coming-note">{props.loadNote}</div>}
+        <div className="slot-chips">
+          {SLOT_ORDER.map((slot) => (
+            <button
+              key={slot}
+              className={`pill pill-sm${props.slot === slot ? ' active' : ''}`}
+              onClick={() => props.onSlot(slot)}
+            >
+              {slotLabel[slot]}
+            </button>
+          ))}
         </div>
+
+        {cfg.stations.map((station) => {
+          const value = current[station] ?? '';
+          return (
+            <div className="temp-row" key={station}>
+              <span className="label">{station}</span>
+              <div className="temp-input">
+                <input
+                  className="input"
+                  type="number"
+                  step="any"
+                  aria-label={`${station} temperature`}
+                  value={value}
+                  onChange={(e) => props.onReading(props.slot, station, e.target.value)}
+                />
+                <span className="suffix">°F</span>
+                {props.synced && value.trim() !== '' && <span className="chip">saved</span>}
+              </div>
+            </div>
+          );
+        })}
+
+        <button className="pill pill-sm pill-block" onClick={props.onLoadLast}>
+          LOAD LAST TEMPS
+        </button>
+        {props.loadNote && <div className="coming-note">{props.loadNote}</div>}
       </Collapsible>
-      <div style={{ height: 20 }} />
     </div>
   );
 }

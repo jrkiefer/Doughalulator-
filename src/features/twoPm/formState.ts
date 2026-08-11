@@ -1,7 +1,5 @@
 import { emptyCountsFields, type CountsFields } from '../shared/counts';
 
-export { fmt, fmtMaybe, parseCounts, toNumOrNull } from '../shared/counts';
-
 /** Everything the owner types on the 2 PM page. Blank ≠ zero throughout. */
 export interface TwoPmForm extends CountsFields {
   todayForecast: string;

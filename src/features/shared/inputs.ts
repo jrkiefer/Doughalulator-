@@ -10,7 +10,7 @@ export interface NumericOpts {
   minus?: boolean;
 }
 
-export function sanitizeNumeric(raw: string, opts: NumericOpts = {}): string {
+function sanitizeNumeric(raw: string, opts: NumericOpts = {}): string {
   let out = '';
   for (const ch of raw) {
     if (ch >= '0' && ch <= '9') out += ch;

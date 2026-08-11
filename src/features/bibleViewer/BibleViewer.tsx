@@ -13,13 +13,13 @@ export function BibleViewer(props: { bible: Bible }) {
           </span>
         }
       >
-        <div className="micro" style={{ padding: '0 2px 10px' }}>
+        <div className="micro bible-name">
           {props.bible.name}
         </div>
         <table>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left' }}>SALES</th>
+              <th className="left">SALES</th>
               <th>INDI</th>
               <th>SM</th>
               <th>LG</th>
@@ -29,7 +29,7 @@ export function BibleViewer(props: { bible: Bible }) {
           <tbody>
             {props.bible.rows.map((row) => (
               <tr key={row.sales}>
-                <td style={{ textAlign: 'left' }}>{row.sales.toLocaleString('en-US')}</td>
+                <td className="left">{row.sales.toLocaleString('en-US')}</td>
                 <td>{row.indi}</td>
                 <td>{row.small}</td>
                 <td>{row.large}</td>

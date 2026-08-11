@@ -21,11 +21,11 @@
  * run it before every `live`. The history file itself stays out of the repo.
  */
 import { readFileSync } from 'node:fs';
-import { get, loadScript, post } from '../apps-script/harness';
+import { get, loadScript, post } from '../apps-script/test/harness';
 import { defaultConfig } from '../src/config';
 import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation } from '../src/core';
 import type { AmUse, BibleId, DoughDayRecord } from '../src/core/types';
-import { bibles } from '../src/features/bibleData';
+import { bibles } from '../src/data/bibles';
 import { emptyEonForm, type EonForm } from '../src/features/eon/formState';
 import { parseCounts, toNumOrNull } from '../src/features/shared/counts';
 import { emptyTwoPmForm, type TwoPmForm } from '../src/features/twoPm/formState';

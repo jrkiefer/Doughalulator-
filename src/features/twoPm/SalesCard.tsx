@@ -1,9 +1,10 @@
 import { defaultConfig } from '../../config';
 import { normalizeSales } from '../../core';
 import type { Maybe } from '../../core/types';
+import { fmt, toNumOrNull } from '../shared/counts';
 import { numericChangeHandler } from '../shared/inputs';
 import { SectionHead } from '../shell/SectionHead';
-import { fmt, toNumOrNull, type TwoPmForm } from './formState';
+import type { TwoPmForm } from './formState';
 
 /** Live "10 → $10,000" echo under a sales field. */
 export function DollarEcho(props: { raw: string }) {

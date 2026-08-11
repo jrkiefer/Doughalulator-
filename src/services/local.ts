@@ -9,7 +9,7 @@ import type { TempSlot } from '../core';
 import type { BibleId } from '../core/types';
 import type { HistorySummary } from './mapping';
 
-export const STORE_VERSION = 2;
+const STORE_VERSION = 2;
 const PREFIX = `doughalulator.v${STORE_VERSION}.`;
 const DATE_PREFIX = `${PREFIX}date.`;
 const HISTORY_KEY = `${PREFIX}history`;

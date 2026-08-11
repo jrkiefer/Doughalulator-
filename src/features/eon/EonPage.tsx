@@ -1,7 +1,7 @@
 import { defaultConfig, type BibleId } from '../../config';
 import { runEonCalculation } from '../../core';
 import type { BibleSizeKey, DoughDayRecord } from '../../core/types';
-import { bibles } from '../bibleData';
+import { bibles } from '../../data/bibles';
 import { CountCards } from '../shared/CountCards';
 import { fmt, parseCounts, toNumOrNull } from '../shared/counts';
 import { numericChangeHandler } from '../shared/inputs';
@@ -89,7 +89,7 @@ export function EonPage(props: {
               <div className="field-row">
                 <span className="label">
                   TOMORROW'S FORECAST
-                  <span className="micro" style={{ display: 'block', marginTop: 4, textTransform: 'none' }}>
+                  <span className="micro sublabel">
                     No 2 PM forecast — enter manually (0 = closed)
                   </span>
                 </span>
@@ -146,7 +146,7 @@ export function EonPage(props: {
             <span className="label">PM SALES</span>
             <strong>{record.pmSales === null ? '—' : fmt(record.pmSales)}</strong>
           </div>
-          <p className="days-work-note" style={{ marginTop: 10 }}>
+          <p className="days-work-note spaced">
             Morning and evening dough use now live in the Google Sheet's “Dough Use” tab — it
             recomputes itself even when numbers are corrected by hand.
           </p>
