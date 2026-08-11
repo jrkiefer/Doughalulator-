@@ -66,7 +66,7 @@ export function EonPage(props: {
                   props.onFormChange({ finalSales: v }),
                 )}
               />
-              {props.synced && form.finalSales.trim() !== '' && <span className="chip">✓</span>}
+              {props.synced && form.finalSales.trim() !== '' && <span className="chip">saved</span>}
               <DollarEcho raw={form.finalSales} />
             </div>
           </div>

@@ -7,7 +7,10 @@
  * choice stay blank until a choice exists.
  */
 import type { AppConfig } from '../config';
-import type { Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
+import { defaultConfig } from '../config';
+import type { AmUse, Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
+
+const ROUND_UP_AT = defaultConfig.bibleRounding.threshold;
 
 /** One tab's worth of a save: the row is merged into the tab by Date. */
 export interface TabWrite {
@@ -20,28 +23,40 @@ function cellOf(value: Maybe): string | number {
   return value === null ? '' : value;
 }
 
-/** The 2 PM tab name — the only tab a day save writes. */
+/** The tabs the app writes. It works out every number in them. */
 export const DAY_TAB = '2PM Dough Count';
-/** The EON tab name — the only tab an end-of-night save writes. */
 export const EON_TAB = 'EON Dough Count';
-/** Calculated tabs the app reads back to check the sheet against its own math. */
+export const PM_LOOKUP_TAB = 'Calculation Step Look up Dough Use for PM';
+export const TOMORROW_LOOKUP_TAB = 'Calculation Step Look up Dough Use for Tomorrow';
 export const MAKE_TAB = 'Calculation Step Dough Make (estimate)';
+export const FINAL_MAKE_TAB = 'Final Make Amount';
+export const AFTER_TAB = 'Estimated Dough Amount after Dough Gang';
+export const AM_USE_TAB = 'AM Dough Use';
+export const PM_USE_TAB = 'PM Dough Use';
 
 /**
- * The 2 PM save: ONE row of what the owner counted and typed. The sheet's
- * formulas take it from there — nothing derived is written, so a hand-edit
- * in the sheet recalculates instead of being overwritten by the next save.
+ * Everything the 2 PM save writes: the counts as typed, then each step of the
+ * afternoon's maths in its own tab, ending with the dough that will be
+ * standing after the dough gang has made it.
  *
- * Counts go as ball totals, which is what the count columns mean. Forecast
- * Rounding is left blank so the sheet applies the same threshold rule the
- * engine did, and stays free for the owner to override by typing up/down.
+ * `amUse` is yesterday's close against this afternoon's count — it belongs to
+ * the 2 PM save because both of its inputs are known by then, so a night that
+ * never got an EON entry doesn't strand it.
  */
-export function dayRecordToTabWrites(record: DoughDayRecord): TabWrite[] {
-  return [
+export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | null): TabWrite[] {
+  const d = record.date;
+  const chosen =
+    record.chosenBatchOption === 'down'
+      ? record.batchDown
+      : record.chosenBatchOption === 'up'
+        ? record.batchUp
+        : null;
+
+  const writes: TabWrite[] = [
     {
       tab: DAY_TAB,
       row: {
-        Date: record.date,
+        Date: d,
         "Today's Forecast": cellOf(record.todayForecast),
         'Current Sales': cellOf(record.currentSales),
         'Sales Left': cellOf(record.salesLeft),
@@ -52,20 +67,107 @@ export function dayRecordToTabWrites(record: DoughDayRecord): TabWrite[] {
         'Sic Count': cellOf(record.have.sic),
         'Boli Count': cellOf(record.have.boli),
         Bible: record.bibleUsed,
-        'Forecast Rounding': '',
+        'Forecast Rounding': roundingFor(record.salesLeft),
         'Batch Rounding': record.chosenBatchOption ?? '',
       },
     },
+    {
+      tab: PM_LOOKUP_TAB,
+      row: {
+        Date: d,
+        Bible: record.bibleUsed,
+        'Forecast Rounding': roundingFor(record.salesLeft),
+        'Sales Left': cellOf(record.salesLeft),
+        Indi: cellOf(record.use.indi),
+        Small: cellOf(record.use.small),
+        Large: cellOf(record.use.large),
+        Sic: cellOf(record.use.sic),
+      },
+    },
+    {
+      tab: TOMORROW_LOOKUP_TAB,
+      row: {
+        Date: d,
+        Bible: record.bibleUsed,
+        'Forecast Rounding': roundingFor(record.tomorrowForecast),
+        "Tomorrow's Forecast": cellOf(record.tomorrowForecast),
+        Indi: cellOf(record.need.indi),
+        Small: cellOf(record.need.small),
+        Large: cellOf(record.need.large),
+        Sic: cellOf(record.need.sic),
+      },
+    },
+    {
+      tab: MAKE_TAB,
+      row: {
+        Date: d,
+        'Indi Trays': cellOf(record.trays.indi),
+        'Small Trays': cellOf(record.trays.small),
+        'Large Trays': cellOf(record.trays.large),
+        'Sic Balls': cellOf(record.sicBalls),
+        'Sic Trays': cellOf(record.trays.sic),
+        'Boli Trays': cellOf(record.boliTrays),
+        'Batch Rounding': record.chosenBatchOption ?? '',
+        'Trays Total': cellOf(record.totalTrays),
+        Batches: chosen === null ? '' : chosen.batches,
+      },
+    },
   ];
+
+  // The make and the resulting dough only exist once a choice has been tapped.
+  if (chosen) {
+    writes.push(
+      {
+        tab: FINAL_MAKE_TAB,
+        row: {
+          Date: d,
+          'Indi Trays': cellOf(chosen.finalTraysToMake.indi),
+          'Small Trays': cellOf(chosen.finalTraysToMake.small),
+          'Large Trays': cellOf(chosen.finalTraysToMake.large),
+          'Sic Balls': cellOf(record.sicBalls),
+          'Boli Trays': cellOf(chosen.finalTraysToMake.boli),
+        },
+      },
+      {
+        tab: AFTER_TAB,
+        row: {
+          Date: d,
+          Indi: cellOf(chosen.finalDough.indiTotal),
+          Small: cellOf(chosen.finalDough.smallTotal),
+          Large: cellOf(chosen.finalDough.largeTotal),
+          Sic: cellOf(chosen.finalDough.sicTotal),
+          Boli: cellOf(chosen.finalDough.boliTotal),
+        },
+      },
+    );
+  }
+
+  if (amUse) {
+    writes.push({
+      tab: AM_USE_TAB,
+      row: {
+        Date: d,
+        'AM Sales $': cellOf(amUse.sales),
+        'AM Indi Use': cellOf(amUse.use.indi),
+        'AM Small Use': cellOf(amUse.use.small),
+        'AM Large Use': cellOf(amUse.use.large),
+        'AM Sic Use': cellOf(amUse.use.sic),
+        'Bible Used': record.bibleUsed,
+      },
+    });
+  }
+
+  return writes;
 }
 
-/** The EON save: ONE row of the final count and the night's sales. */
-export function eonRecordToTabWrites(record: EonRecord): TabWrite[] {
-  return [
+/** Everything the EON save writes: the final count, and what the night used. */
+export function eonRecordToTabWrites(record: EonRecord, bible?: string): TabWrite[] {
+  const d = record.date;
+  const writes: TabWrite[] = [
     {
       tab: EON_TAB,
       row: {
-        Date: record.date,
+        Date: d,
         'EON Sales': cellOf(record.finalSales),
         'EON Indi Count': cellOf(record.eonHave.indi),
         'EON Small Count': cellOf(record.eonHave.small),
@@ -75,6 +177,29 @@ export function eonRecordToTabWrites(record: EonRecord): TabWrite[] {
       },
     },
   ];
+
+  if (record.pmUse) {
+    writes.push({
+      tab: PM_USE_TAB,
+      row: {
+        Date: d,
+        'PM Sales $': cellOf(record.pmSales),
+        'PM Indi Use': cellOf(record.pmUse.indi),
+        'PM Small Use': cellOf(record.pmUse.small),
+        'PM Large Use': cellOf(record.pmUse.large),
+        'PM Sic Use': cellOf(record.pmUse.sic),
+        'Bible Used': bible ?? record.bibleUsed ?? '',
+      },
+    });
+  }
+
+  return writes;
+}
+
+/** Which way a bible lookup rounded — the same threshold rule the engine used. */
+function roundingFor(sales: Maybe): string {
+  if (sales === null || sales <= 0) return '';
+  return sales >= ROUND_UP_AT ? 'up' : 'down';
 }
 
 export function hashString(text: string): string {

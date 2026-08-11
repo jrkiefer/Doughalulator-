@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { defaultConfig, type BibleId } from './config';
-import { runDoughCalculation, runEonCalculation, selectBibleId, slotForTime, type TempSlot } from './core';
+import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation, selectBibleId, slotForTime, type TempSlot } from './core';
 import type { DoughDayRecord } from './core/types';
 import { bibles } from './features/bibleData';
 import { BibleViewer } from './features/bibleViewer/BibleViewer';
 import { EonPage } from './features/eon/EonPage';
 import { emptyEonForm, type EonForm } from './features/eon/formState';
 import { HistoryCard } from './features/history/HistoryCard';
-import { AgreementCheck } from './features/shell/AgreementCheck';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { ActiveDate } from './features/shell/ActiveDate';
 import { BibleToggle } from './features/shell/BibleToggle';
@@ -19,9 +18,8 @@ import { parseCounts, toNumOrNull } from './features/shared/counts';
 import { emptyTwoPmForm, type TwoPmForm } from './features/twoPm/formState';
 import { TwoPmPage } from './features/twoPm/TwoPmPage';
 import type { Rounding } from './features/twoPm/DaysWork';
-import { checkAgreement, type SheetTabs } from './services/agreement';
 import { postJson } from './services/client';
-import { fetchDate, type FetchedDay } from './services/doughService';
+import { addDays, fetchDate, type FetchedDay } from './services/doughService';
 import {
   cachedLatestTemps,
   cacheLatestTemps,
@@ -97,7 +95,7 @@ const engine = createSyncEngine({
       if (!day || (!formHasContent(day.form) && day.rounding === null)) return null;
       const form = { ...emptyTwoPmForm, ...day.form };
       const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined);
-      return { type: 'day', date, tabs: dayRecordToTabWrites(record) };
+      return { type: 'day', date, tabs: dayRecordToTabWrites(record, amUseFor(date, record)) };
     }
     if (type === 'eon') {
       const eon = entry.eon;
@@ -120,7 +118,7 @@ const engine = createSyncEngine({
         bibles,
         cfg,
       );
-      return { type: 'eon', date, tabs: eonRecordToTabWrites(record) };
+      return { type: 'eon', date, tabs: eonRecordToTabWrites(record, dayRecord?.bibleUsed) };
     }
     return entry.temps ? tempsEntryToPayload(date, entry.temps, cfg) : null;
   },
@@ -136,6 +134,19 @@ const engine = createSyncEngine({
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (id) => clearTimeout(id),
 });
+
+/**
+ * Dough used before 2 PM: last night's close against this afternoon's count.
+ * Yesterday's EON lives in the phone's own store; without it the morning's
+ * use is simply unknown (a closed day), which is what blank means here.
+ */
+function amUseFor(date: string, record: DoughDayRecord) {
+  const yesterday = loadEntry(addDays(date, -1));
+  const eonForm = yesterday?.eon?.form;
+  if (!eonForm || !formHasContent(eonForm)) return null;
+  const eonHave = computeHave(parseCounts({ ...emptyEonForm, ...eonForm }), cfg);
+  return computeAmUse(eonHave, record.have, record.currentSales);
+}
 
 /** Write a sheet fetch into a date's entry (form-shaped; blanks stay blank). */
 function applyFetchedToEntry(entry: DateEntry, fetched: FetchedDay, date: string): void {
@@ -174,10 +185,6 @@ export default function App() {
   const [resetArmed, setResetArmed] = useState(false);
   const [lastTempsNote, setLastTempsNote] = useState('');
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-  // What the sheet's own formulas worked out for this date, for the bottom check.
-  const [sheetTabs, setSheetTabs] = useState<SheetTabs | null>(null);
-  const [checkNote, setCheckNote] = useState('');
-  const [checkSeq, setCheckSeq] = useState(0);
   const [, setTick] = useState(0);
 
   const rehydrate = useCallback((forDate: string) => {
@@ -196,8 +203,6 @@ export default function App() {
     rehydrate(date);
     setLoadMsg('');
     setLoadArmed(false);
-    setSheetTabs(null);
-    setCheckNote('');
   }
 
   // Boot: sweep pre-rename caches, resend anything dirty, wire the retry triggers.
@@ -236,19 +241,7 @@ export default function App() {
     const seqBefore = engine.editSeq(date);
     const timer = setTimeout(() => {
       fetchDate(date, loadSettings()).then((result) => {
-        if (!alive) return;
-        if (result.kind !== 'loaded') {
-          setSheetTabs(null);
-          setCheckNote(
-            result.kind === 'empty'
-              ? 'Nothing saved for this day yet'
-              : "Can't reach the sheet to cross-check",
-          );
-          return;
-        }
-        // What the sheet's formulas made of this date, for the bottom check.
-        setSheetTabs(result.day.tabs);
-        setCheckNote('');
+        if (!alive || result.kind !== 'loaded') return;
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
         const applied = engine.applyFetched(date, (entry) => applyFetchedToEntry(entry, result.day, date));
@@ -260,7 +253,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [date, rehydrate, checkSeq]);
+  }, [date, rehydrate]);
 
   const record = useMemo(
     () => buildDayRecord(date, form, rounding, bibleOverride),
@@ -268,15 +261,6 @@ export default function App() {
   );
   const status = engine.status(date);
   const synced = status.state === 'synced';
-  const agreement = useMemo(() => checkAgreement(record, sheetTabs), [record, sheetTabs]);
-
-  // Each time a save completes the sheet has recalculated — pull it back and
-  // re-run the comparison so the bottom line reflects what is actually stored.
-  const wasSynced = useRef(false);
-  useEffect(() => {
-    if (synced && !wasSynced.current) setCheckSeq((n) => n + 1);
-    wasSynced.current = synced;
-  }, [synced]);
   const activeBible = bibleOverride ?? selectBibleId(date, cfg);
 
   // ————— edits: React state + engine, in lockstep —————
@@ -460,7 +444,6 @@ export default function App() {
 
       <HistoryCard onPick={(d) => setDate(d)} />
       {mode !== 'temps' && <BibleViewer bible={bibles[activeBible]} />}
-      <AgreementCheck agreement={agreement} note={checkNote} />
       <Footer onSettings={() => setShowSettings(true)} />
     </div>
   );

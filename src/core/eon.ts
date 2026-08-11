@@ -3,12 +3,14 @@ import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
 import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
+  AmUse,
   Bibles,
   DoughDayRecord,
   EonInputs,
   EonRecord,
   Maybe,
   PerBibleSizeMaybe,
+  PerSizeMaybe,
 } from './types';
 
 /** Trays short, rounded up, for one size's shortfall (a non-negative number of balls). */
@@ -40,6 +42,24 @@ export function runEonCalculation(
     finalSales !== null && dayRecord !== null && dayRecord.currentSales !== null
       ? finalSales - dayRecord.currentSales
       : null;
+
+  // What the night got through: the dough standing after the make, less what
+  // was counted at close. Only knowable once a batch choice has been tapped.
+  const chosen =
+    dayRecord === null || dayRecord.chosenBatchOption === null
+      ? null
+      : dayRecord.chosenBatchOption === 'down'
+        ? dayRecord.batchDown
+        : dayRecord.batchUp;
+  const pmUse: PerSizeMaybe | null = chosen
+    ? {
+        indi: usedSince(chosen.finalDough.indiTotal, eonHave.indi),
+        small: usedSince(chosen.finalDough.smallTotal, eonHave.small),
+        large: usedSince(chosen.finalDough.largeTotal, eonHave.large),
+        sic: usedSince(chosen.finalDough.sicTotal, eonHave.sic),
+        boli: usedSince(chosen.finalDough.boliTotal, eonHave.boli),
+      }
+    : null;
 
   // Where tomorrow's need comes from: the day record, or a manual forecast lookup.
   let needSource: EonRecord['needSource'] = null;
@@ -112,6 +132,7 @@ export function runEonCalculation(
     finalSalesRaw: eonInputs.finalSalesRaw,
     finalSales,
     pmSales,
+    pmUse,
     needSource,
     manualTomorrowForecastRaw: manualRaw,
     manualTomorrowForecast,
@@ -130,4 +151,36 @@ export function runEonCalculation(
       closedTomorrow,
     },
   };
+}
+
+/**
+ * Dough that went out before 2 PM: what last night closed with, less what
+ * this afternoon counted. Blank for any size either side did not record, and
+ * blank altogether on a day whose yesterday has no EON record (a closed day)
+ * — a count that rose overnight means a miscount, not negative use.
+ */
+export function computeAmUse(
+  yesterdayEonHave: PerSizeMaybe | null,
+  todayHave: PerSizeMaybe,
+  amSales: Maybe,
+): AmUse {
+  const blank: PerSizeMaybe = { indi: null, small: null, large: null, sic: null, boli: null };
+  if (!yesterdayEonHave) return { sales: amSales, use: blank };
+  return {
+    sales: amSales,
+    use: {
+      indi: usedSince(yesterdayEonHave.indi, todayHave.indi),
+      small: usedSince(yesterdayEonHave.small, todayHave.small),
+      large: usedSince(yesterdayEonHave.large, todayHave.large),
+      sic: usedSince(yesterdayEonHave.sic, todayHave.sic),
+      boli: usedSince(yesterdayEonHave.boli, todayHave.boli),
+    },
+  };
+}
+
+/** Dough consumed between two counts. Null when unknown or when it went UP. */
+function usedSince(before: Maybe, after: Maybe): Maybe {
+  if (before === null || after === null) return null;
+  const used = before - after;
+  return used < 0 ? null : used;
 }

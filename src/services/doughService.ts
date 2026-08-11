@@ -16,7 +16,6 @@ import {
   summaryRowToRounding,
   type HistorySummary,
 } from './mapping';
-import type { SheetTabs } from './agreement';
 import { cacheHistory, cachedHistory } from './local';
 import type { SheetSettings } from './settings';
 
@@ -37,8 +36,6 @@ export interface FetchedDay {
   bible: 'regular' | 'peach' | null;
   eonCounts: Record<string, string> | null;
   finalSales: string | null;
-  /** Every tab the sheet answered with — what the agreement check reads. */
-  tabs: SheetTabs;
 }
 
 export type FetchDayResult =
@@ -74,7 +71,6 @@ export async function fetchDate(
       bible: day ? salesRowToBible(day) : null,
       eonCounts: eon ? countsRowToFields(eon, 'EON ') : null,
       finalSales: eon ? eonCountRowToFinalSales(eon) : null,
-      tabs: t,
     },
   };
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from '../config';
 import { runDoughCalculation } from './dough';
-import { runEonCalculation } from './eon';
+import { computeAmUse, runEonCalculation } from './eon';
 import { bibles, counts } from './testHelpers';
-import type { EonInputs } from './types';
+import type { EonInputs, PerSizeMaybe } from './types';
 
 function runEon(partial: Partial<EonInputs>, dayRecord: Parameters<typeof runEonCalculation>[1] = null) {
   return runEonCalculation(
@@ -155,3 +155,99 @@ describe('runEonCalculation without a day record', () => {
     expect(record.traysShort).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
   });
 });
+
+describe('dough used before 2 PM (computeAmUse)', () => {
+  const have = (over: Partial<PerSizeMaybe> = {}): PerSizeMaybe => ({
+    indi: 40, small: 200, large: 150, sic: 6, boli: 30, ...over,
+  });
+
+  it('is last night’s close less this afternoon’s count, per size', () => {
+    const am = computeAmUse(have(), have({ indi: 25, small: 160, large: 120, sic: 4, boli: 24 }), 3000);
+    expect(am.sales).toBe(3000);
+    expect(am.use).toEqual({ indi: 15, small: 40, large: 30, sic: 2, boli: 6 });
+  });
+
+  it('a day whose yesterday never closed out has no morning use at all', () => {
+    const am = computeAmUse(null, have(), 3000);
+    expect(am.use).toEqual({ indi: null, small: null, large: null, sic: null, boli: null });
+    expect(am.sales).toBe(3000); // the sales figure is still known
+  });
+
+  it('a count that went UP overnight is a miscount, not negative use', () => {
+    const am = computeAmUse(have({ small: 100 }), have({ small: 160 }), 3000);
+    expect(am.use.small).toBeNull();
+    expect(am.use.indi).toBe(0); // the sizes that did not move still read zero
+  });
+
+  it('a size either side never counted stays blank', () => {
+    const am = computeAmUse(have({ sic: null }), have({ boli: null }), 3000);
+    expect(am.use.sic).toBeNull();
+    expect(am.use.boli).toBeNull();
+    expect(am.use.indi).toBe(0);
+  });
+});
+
+describe('dough used after 2 PM (pmUse on the EON record)', () => {
+  it('is the night’s final dough less the closing count', () => {
+    const day = { ...dayRecordFor(), chosenBatchOption: 'up' as const };
+    const final = day.batchUp!.finalDough;
+    const record = runEonCalculation(
+      {
+        date: '2026-01-15',
+        counts: counts({
+          indiSingles: (final.indiTotal ?? 0) - 10,
+          smallSingles: (final.smallTotal ?? 0) - 30,
+          largeSingles: (final.largeTotal ?? 0) - 20,
+          sicSingles: (final.sicTotal ?? 0) - 1,
+          boliSingles: (final.boliTotal ?? 0) - 6,
+        }),
+        finalSalesRaw: 9000,
+      },
+      day,
+      bibles,
+      defaultConfig,
+    );
+    expect(record.pmUse).toEqual({ indi: 10, small: 30, large: 20, sic: 1, boli: 6 });
+  });
+
+  it('without a tapped batch choice there is no final dough to measure against', () => {
+    const record = runEonCalculation(
+      { date: '2026-01-15', counts: counts({ indiSingles: 10 }), finalSalesRaw: 9000 },
+      { ...dayRecordFor(), chosenBatchOption: null },
+      bibles,
+      defaultConfig,
+    );
+    expect(record.pmUse).toBeNull();
+  });
+
+  it('a closing count above the final dough is a miscount, left blank', () => {
+    const day = { ...dayRecordFor(), chosenBatchOption: 'up' as const };
+    const record = runEonCalculation(
+      {
+        date: '2026-01-15',
+        counts: counts({ indiSingles: (day.batchUp!.finalDough.indiTotal ?? 0) + 5 }),
+        finalSalesRaw: 9000,
+      },
+      day,
+      bibles,
+      defaultConfig,
+    );
+    expect(record.pmUse!.indi).toBeNull();
+  });
+});
+
+function dayRecordFor() {
+  return runDoughCalculation(
+    {
+      date: '2026-01-15',
+      counts: counts({
+        indiSingles: 15, smallSingles: 43, largeSingles: 26, sicSingles: 1, boliSingles: 13,
+      }),
+      todayForecastRaw: 7200,
+      currentSalesRaw: 4500,
+      tomorrowForecastRaw: 9100,
+    },
+    bibles,
+    defaultConfig,
+  );
+}

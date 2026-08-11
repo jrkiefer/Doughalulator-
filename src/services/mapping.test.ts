@@ -51,11 +51,20 @@ const eonRecord = runEonCalculation(
 );
 
 
-describe('dayRecordToTabWrites — one row, counts only', () => {
-  it('writes a single 2 PM row: what was counted and typed, nothing derived', () => {
+describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
+  it('writes the count, both bible lookups, the make and the batching', () => {
     const writes = dayRecordToTabWrites(dayRecord);
-    expect(writes.map((w) => w.tab)).toEqual(['2PM Dough Count']);
-    expect(writes[0].row).toEqual({
+    expect(writes.map((w) => w.tab)).toEqual([
+      '2PM Dough Count',
+      'Calculation Step Look up Dough Use for PM',
+      'Calculation Step Look up Dough Use for Tomorrow',
+      'Calculation Step Dough Make (estimate)',
+      'Final Make Amount',
+      'Estimated Dough Amount after Dough Gang',
+    ]);
+
+    const row = (tab: string) => writes.find((w) => w.tab === tab)!.row;
+    expect(row('2PM Dough Count')).toEqual({
       Date: '2026-01-15',
       "Today's Forecast": 7200,
       'Current Sales': 4500,
@@ -67,10 +76,30 @@ describe('dayRecordToTabWrites — one row, counts only', () => {
       'Sic Count': 1,
       'Boli Count': 13,
       Bible: 'regular',
-      // Blank on purpose: the sheet applies the same threshold rule the engine
-      // did, and the owner stays free to override it by hand.
-      'Forecast Rounding': '',
+      'Forecast Rounding': 'down', // 2,700 is below the 10,000 threshold
       'Batch Rounding': 'up',
+    });
+
+    // Tonight's use and tomorrow's need are the engine's, not re-derived.
+    expect(row('Calculation Step Look up Dough Use for PM')).toMatchObject({
+      Indi: dayRecord.use.indi, Small: dayRecord.use.small, 'Sales Left': 2700,
+    });
+    expect(row('Calculation Step Look up Dough Use for Tomorrow')).toMatchObject({
+      Indi: dayRecord.need.indi, "Tomorrow's Forecast": 9100,
+    });
+    expect(row('Calculation Step Dough Make (estimate)')).toMatchObject({
+      'Indi Trays': dayRecord.trays.indi,
+      'Sic Balls': dayRecord.sicBalls,
+      'Boli Trays': dayRecord.boliTrays,
+      'Trays Total': dayRecord.totalTrays,
+      Batches: dayRecord.batchUp!.batches,
+    });
+    expect(row('Final Make Amount')).toMatchObject({
+      'Small Trays': dayRecord.batchUp!.finalTraysToMake.small,
+    });
+    expect(row('Estimated Dough Amount after Dough Gang')).toMatchObject({
+      Indi: dayRecord.batchUp!.finalDough.indiTotal,
+      Boli: dayRecord.batchUp!.finalDough.boliTotal,
     });
   });
 
@@ -92,17 +121,41 @@ describe('dayRecordToTabWrites — one row, counts only', () => {
     expect(row['Indi Count']).toBe(''); // never counted → blank
   });
 
-  it('no batch choice tapped yet leaves Batch Rounding blank', () => {
-    expect(dayRecordToTabWrites({ ...dayRecord, chosenBatchOption: null })[0].row['Batch Rounding'])
-      .toBe('');
+  it('the batch-dependent tabs wait until a choice is tapped', () => {
+    const writes = dayRecordToTabWrites({ ...dayRecord, chosenBatchOption: null });
+    expect(writes.map((w) => w.tab)).not.toContain('Final Make Amount');
+    expect(writes.map((w) => w.tab)).not.toContain('Estimated Dough Amount after Dough Gang');
+    const make = writes.find((w) => w.tab === 'Calculation Step Dough Make (estimate)')!.row;
+    expect(make.Batches).toBe(''); // trays are known; the batch count is not
+    expect(make['Trays Total']).toBe(dayRecord.totalTrays);
+  });
+
+  it('the morning use rides with the 2 PM save when yesterday closed out', () => {
+    const amUse = {
+      sales: 4500,
+      use: { indi: 5, small: 12, large: 9, sic: 1, boli: null },
+    };
+    const row = dayRecordToTabWrites(dayRecord, amUse).find((w) => w.tab === 'AM Dough Use')!.row;
+    expect(row).toEqual({
+      Date: '2026-01-15',
+      'AM Sales $': 4500,
+      'AM Indi Use': 5,
+      'AM Small Use': 12,
+      'AM Large Use': 9,
+      'AM Sic Use': 1,
+      'Bible Used': 'regular',
+    });
+    // No yesterday → no row at all, rather than a row of zeros.
+    expect(dayRecordToTabWrites(dayRecord).map((w) => w.tab)).not.toContain('AM Dough Use');
   });
 });
 
-describe('eonRecordToTabWrites — one row', () => {
-  it('writes a single EON row of the final count and the sales', () => {
-    const writes = eonRecordToTabWrites(eonRecord);
-    expect(writes.map((w) => w.tab)).toEqual(['EON Dough Count']);
-    expect(writes[0].row).toEqual({
+describe('eonRecordToTabWrites — the close, and what the night used', () => {
+  it('writes the final count and the PM use', () => {
+    const writes = eonRecordToTabWrites(eonRecord, 'regular');
+    expect(writes.map((w) => w.tab)).toContain('EON Dough Count');
+    const eon = writes.find((w) => w.tab === 'EON Dough Count')!.row;
+    expect(eon).toEqual({
       Date: '2026-01-15',
       'EON Sales': 7900,
       'EON Indi Count': 34,

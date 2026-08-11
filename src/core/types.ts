@@ -216,6 +216,12 @@ export interface EonRecord {
   finalSales: Maybe;
   /** finalSales − 2 PM current sales; null without both. */
   pmSales: Maybe;
+  /**
+   * Dough used after 2 PM: the night's final dough − the EON count, per size.
+   * Needs a day record with a tapped batch choice; a negative means a
+   * miscount rather than a real figure, so it is left null.
+   */
+  pmUse: PerSizeMaybe | null;
   // Tomorrow check — all five sizes; Boli checks against its 36-ball target.
   needSource: 'dayRecord' | 'manualForecast' | null;
   manualTomorrowForecastRaw: Maybe;
@@ -238,4 +244,10 @@ export interface EonRecord {
     tomorrowCheckAvailable: boolean;
     closedTomorrow: boolean;
   };
+}
+
+/** Dough used before 2 PM: yesterday's close − this afternoon's count. */
+export interface AmUse {
+  sales: Maybe;
+  use: PerSizeMaybe;
 }

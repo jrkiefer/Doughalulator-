@@ -63,7 +63,7 @@ describe('dough script — lock (§7)', () => {
   });
 });
 
-describe('dough script — the app may only write the two count tabs', () => {
+describe('dough script — validation', () => {
   it('rejects a bad secret', () => {
     const script = freshDough();
     const answer = post(script, { ...dayPayload('2026-08-01'), secret: 'WRONG' });
@@ -77,13 +77,16 @@ describe('dough script — the app may only write the two count tabs', () => {
     expect(String(post(script, dayPayload('')).error)).toContain('invalid date');
   });
 
-  it('refuses to write a calculated tab — those belong to the formulas', () => {
+  it('accepts every tab the app fills, and refuses one it does not know', () => {
     const script = freshDough();
-    const answer = post(script, {
+    expect(post(script, {
       secret: SECRET, type: 'day', date: '2026-08-01',
       tabs: [{ tab: 'Final Make Amount', row: { Date: '2026-08-01', 'Indi Trays': 3 } }],
-    });
-    expect(String(answer.error)).toContain('not a tab the app may write');
+    }).ok).toBe(true);
+    expect(String(post(script, {
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: 'Made Up Tab', row: { Date: '2026-08-01', Whatever: 3 } }],
+    }).error)).toContain('unknown tab');
   });
 
   it('rejects an empty save and nonsensical negatives, but allows a negative sales-left', () => {
@@ -167,8 +170,8 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
   });
 });
 
-describe('dough script — the sheet does the maths itself', () => {
-  it('setup builds the two input tabs and one auto-filling formula per calculated column', () => {
+describe('dough script — a plain record, no formulas to break', () => {
+  it('setup builds every tab of the layout with headers only', () => {
     const script = freshDough();
     const ss = script.world.ss;
 
@@ -181,43 +184,39 @@ describe('dough script — the sheet does the maths itself', () => {
       'Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count',
       'EON Sic Count', 'EON Boli Count',
     ]);
+    expect(ss.getSheetByName('Calculation Step Dough Make (estimate)')!.headerRow(10)).toEqual([
+      'Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic Balls', 'Sic Trays',
+      'Boli Trays', 'Batch Rounding', 'Trays Total', 'Batches',
+    ]);
+    expect(ss.getSheetByName('AM Dough Use')!.headerRow(7)[2]).toBe('AM Indi Use');
+    expect(ss.getSheetByName('PM Dough Use')!.headerRow(7)[2]).toBe('PM Indi Use');
+    expect(ss.getSheetByName('Estimated Dough Amount after Dough Gang')!.headerRow(6)).toEqual([
+      'Date', 'Indi', 'Small', 'Large', 'Sic', 'Boli',
+    ]);
 
-    // Every calculated column is a single ARRAYFORMULA in row 2 — that is what
-    // makes a brand-new date calculate itself with nothing to fill down.
-    const make = ss.getSheetByName('Calculation Step Dough Make (estimate)')!;
-    expect(make.headerRow(10)[9]).toBe('Batches');
-    for (let c = 1; c <= 10; c++) {
-      expect(make.formulas.get(`2:${c}`)).toContain('ARRAYFORMULA');
+    // The app is the only calculator: nothing in this sheet computes anything.
+    for (const sheet of ss.sheets.values()) {
+      expect(sheet.formulas.size).toBe(0);
     }
-    // …and no calculated tab holds a second row of formulas to maintain.
-    expect([...make.formulas.keys()].every((k) => k.startsWith('2:'))).toBe(true);
-
-    const pm = ss.getSheetByName('Calculation Step Look up Dough Use for PM')!;
-    expect(pm.formulas.get('2:5')).toContain('VLOOKUP');
-    expect(pm.formulas.get('2:5')).toContain('Bible Lookup (auto)');
-    expect(pm.formulas.get('2:5')).toContain('<=0'); // nothing left to sell → nothing used
-
-    expect(ss.getSheetByName('Bible Lookup (auto)')!.hidden).toBe(true);
+    expect(ss.getSheetByName('Bible Lookup (auto)')).toBeNull();
   });
 
-  it('the make formulas follow the app rules: floored trays, Boli top-up, batches never below one', () => {
+  it('a save lands each number in its own tab, all in one post', () => {
     const script = freshDough();
-    const make = script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!;
-    const indiTrays = make.formulas.get('2:2')!;
-    expect(indiTrays).toContain('CEILING'); // part-trays round up
-    expect(indiTrays).toContain('<0,0,'); // never a negative make
-    expect(indiTrays).toContain('/11'); // eleven Indi to a tray
-    expect(make.formulas.get('2:7')).toContain('36'); // Boli tops back up to 36 balls
-    expect(make.formulas.get('2:10')).toContain('<1,1,'); // round-down floored at one batch
-  });
-
-  it('AM use keys on YESTERDAY rather than the row above, so a missing night blanks instead of lying', () => {
-    const script = freshDough();
-    const indi = script.world.ss.getSheetByName('AM Dough Use')!.formulas.get('2:3')!;
-    expect(indi).toContain('-1'); // yesterday's date
-    expect(indi).toContain("'EON Dough Count'");
-    expect(indi).toContain('VLOOKUP');
-    expect(indi).toContain('check count?'); // a negative means a miscount, not a number
+    post(script, {
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [
+        ...dayPayload('2026-08-01').tabs,
+        { tab: 'Calculation Step Dough Make (estimate)',
+          row: { Date: '2026-08-01', 'Indi Trays': 4, 'Trays Total': 78, Batches: 8 } },
+        { tab: 'Estimated Dough Amount after Dough Gang',
+          row: { Date: '2026-08-01', Indi: 64, Small: 378 } },
+      ],
+    });
+    expect(script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!
+      .rowByIndex(2, 10)[9]).toBe('8');
+    expect(script.world.ss.getSheetByName('Estimated Dough Amount after Dough Gang')!
+      .getCell(2, 2)).toBe(64);
   });
 
   it('the retired layout can be cleared away once the new one is trusted', () => {
@@ -227,7 +226,6 @@ describe('dough script — the sheet does the maths itself', () => {
     expect(post(script, { secret: SECRET, type: 'retire', confirm: 'WIPE ALL DATA' }))
       .toMatchObject({ ok: true, removed: 2 });
     expect(script.world.ss.getSheetByName('Summary')).toBeNull();
-    // …and it refuses without the confirm phrase.
     script.world.ss.insertSheet('Summary');
     expect(post(script, { secret: SECRET, type: 'retire' }).ok).toBe(false);
     expect(script.world.ss.getSheetByName('Summary')).not.toBeNull();
@@ -247,7 +245,7 @@ describe('dough script — fitted bibles (§8)', () => {
 });
 
 describe('bible tripwire — app JSON vs the mirror the script writes', () => {
-  it('the mirror holds exactly src/data, and builds both lookup directions', () => {
+  it('the mirror tabs hold exactly the numbers in src/data', () => {
     const script = freshDough();
     expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
       .toMatchObject({ ok: true, bibles: 'updated' });
@@ -258,17 +256,6 @@ describe('bible tripwire — app JSON vs the mirror the script writes', () => {
         [row.sales, row.indi, row.small, row.large, row.sic].map(String),
       );
     });
-
-    // The hidden lookup tab carries a plain (round-down) copy and a key-shifted
-    // (round-up) copy, so one VLOOKUP serves either direction.
-    const lookup = script.world.ss.getSheetByName('Bible Lookup (auto)')!;
-    const first = bibles.regular.rows[0];
-    const second = bibles.regular.rows[1];
-    expect(lookup.getCell(1, 1)).toBe(first.sales);
-    expect(lookup.getCell(1, 2)).toBe(first.indi);
-    expect(Number(lookup.getCell(1, 7))).toBeLessThan(0); // below the first row clamps to it
-    expect(Number(lookup.getCell(2, 7))).toBeCloseTo(first.sales + 0.000001, 5);
-    expect(lookup.getCell(2, 8)).toBe(second.indi);
 
     expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
       .toMatchObject({ bibles: 'unchanged' });
@@ -359,9 +346,6 @@ describe('wipe — deliberate clean slate (secret + confirm phrase)', () => {
       .toMatchObject({ ok: true });
     expect(input.getLastRow()).toBe(1); // header only
     expect(input.headerRow(3)).toEqual(['Date', "Today's Forecast", 'Current Sales']);
-    // The formulas that do the maths are untouched by a data wipe.
-    expect(script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!
-      .formulas.get('2:2')).toContain('ARRAYFORMULA');
     expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow()).toBeGreaterThan(5);
     // Life goes on: the next save starts cleanly at row 2.
     post(script, dayPayload('2026-08-03'));

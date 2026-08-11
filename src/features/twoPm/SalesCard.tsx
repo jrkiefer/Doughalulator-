@@ -37,7 +37,7 @@ export function SalesCard(props: {
           value={form[key]}
           onChange={numericChangeHandler({ decimal: true }, (value) => onChange({ [key]: value }))}
         />
-        {props.synced && form[key].trim() !== '' && <span className="chip">✓</span>}
+        {props.synced && form[key].trim() !== '' && <span className="chip">saved</span>}
         <DollarEcho raw={form[key]} />
       </div>
     </div>

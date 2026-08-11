@@ -27,7 +27,7 @@ function CountField(props: {
           value={value}
           onChange={numericChangeHandler({}, (v) => props.onChange({ [props.formKey]: v }))}
         />
-        {props.synced && value.trim() !== '' && <span className="chip">✓</span>}
+        {props.synced && value.trim() !== '' && <span className="chip">saved</span>}
       </div>
     </div>
   );

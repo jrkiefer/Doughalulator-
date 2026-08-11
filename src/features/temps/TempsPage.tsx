@@ -59,7 +59,7 @@ export function TempsPage(props: {
                     onChange={(e) => props.onReading(props.slot, station, e.target.value)}
                   />
                   <span className="suffix">°F</span>
-                  {props.synced && value.trim() !== '' && <span className="chip chip-temp">✓</span>}
+                  {props.synced && value.trim() !== '' && <span className="chip chip-temp">saved</span>}
                 </div>
               </div>
             );
