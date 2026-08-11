@@ -118,7 +118,7 @@ const engine = createSyncEngine({
         bibles,
         cfg,
       );
-      return { type: 'eon', date, tabs: eonRecordToTabWrites(record, dayRecord?.bibleUsed) };
+      return { type: 'eon', date, tabs: eonRecordToTabWrites(record, dayRecord?.bibleUsed, dayRecord ? amUseFor(date, dayRecord) : null) };
     }
     return entry.temps ? tempsEntryToPayload(date, entry.temps, cfg) : null;
   },

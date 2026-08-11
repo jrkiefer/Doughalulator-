@@ -1,25 +1,28 @@
 /**
- * Hot Tomato Dough Log — Google Apps Script (formula-driven layout).
+ * Hot Tomato Dough Log — Google Apps Script.
  *
  * Setup: paste into the sheet's Apps Script editor, set SECRET, run setup()
  * once, deploy as a web app (execute as Me, access: Anyone), then give the
  * app the URL + secret in Settings.
  *
  * THE SHAPE OF THIS SHEET
- * The app writes exactly TWO tabs — the 2 PM count and the EON count. Every
- * other number is a live formula, installed once by setup() as a single
- * ARRAYFORMULA per column, so a new date calculates itself the moment its
- * counts land. Nothing ever needs filling down.
+ * The app is the only calculator. It works out every number from the counts
+ * the owner types and writes each one into its tab here, so this sheet holds
+ * a plain record with no formulas to break:
  *
- *   2PM Dough Count  -+-> Look up Dough Use for PM / for Tomorrow
- *   EON Dough Count  -|      +-> Dough Make (estimate) -> Final Make Amount
- *                     |            +-> Estimated Dough Amount after Dough Gang
- *                     +-> AM Dough Use / PM Dough Use -> fitted bibles
+ *   the 2 PM save  -> 2PM Dough Count, Look up Dough Use for PM / Tomorrow,
+ *                     Dough Make (estimate), Final Make Amount,
+ *                     Estimated Dough After Gang, AM Dough Use
+ *   the EON save   -> EON Dough Count, PM Dough Use, and tonight's row on the
+ *                     matching New Bieblerb tab
  *
- * The formulas mirror the app's calculation engine rule for rule (trays
- * floored at zero, round-down batches floored at one, Boli topped back up to
- * 36 balls, the 40/60 Small/Large batch split), so the app can read these
- * numbers back and show the owner that both agree.
+ * The one exception is the new-bible suggestion: after each EON save the
+ * script fits a line through every night recorded on those tabs and rewrites
+ * the suggested column, because that needs the whole history rather than one
+ * night's numbers.
+ *
+ * Correcting a number by hand stays corrected until the app saves that date
+ * again; pull it back with LOAD FROM SHEET to recalculate from it.
  *
  * Saves are merge-upserts by Date and run under a script lock, so two phones
  * saving in the same second can never race into duplicate rows.
@@ -33,15 +36,19 @@ var SHEET_NAME = 'Hot Tomato Dough Log';
 
 var T_IN = '2PM Dough Count';
 var T_EON = 'EON Dough Count';
-var T_PM = 'Calculation Step Look up Dough Use for PM';
-var T_TOM = 'Calculation Step Look up Dough Use for Tomorrow';
-var T_MAKE = 'Calculation Step Dough Make (estimate)';
+// Google truncates a tab name at 31 characters. The two "look up" names used
+// to be long enough to truncate to the SAME 31 characters, so the second tab
+// silently ended up called Sheet2 and everything written to it vanished.
+// These are kept short and unmistakably different for that reason.
+var NAME_LIMIT = 31;
+var T_PM = 'Look up Dough Use for PM';
+var T_TOM = 'Look up Dough Use Tomorrow';
+var T_MAKE = 'Dough Make (estimate)';
 var T_FINAL = 'Final Make Amount';
-var T_AFTER = 'Estimated Dough Amount after Dough Gang';
+var T_AFTER = 'Estimated Dough After Gang';
 var T_AM = 'AM Dough Use';
 var T_PM_USE = 'PM Dough Use';
 var BIBLE_TABS = { dough: 'Dough Bible', peach: 'Peach Bible' };
-var FITTED_TABS = { dough: 'New Bieblerb', peach: 'New Peach Bieblerb' };
 var PEACH_START = '07-01';
 var PEACH_END = '08-31';
 
@@ -57,16 +64,33 @@ TABS[T_IN] = ['Date', "Today's Forecast", 'Current Sales', 'Sales Left', "Tomorr
 TABS[T_PM] = ['Date', 'Bible', 'Forecast Rounding', 'Sales Left', 'Indi', 'Small', 'Large', 'Sic'];
 TABS[T_TOM] = ['Date', 'Bible', 'Forecast Rounding', "Tomorrow's Forecast",
   'Indi', 'Small', 'Large', 'Sic'];
-TABS[T_MAKE] = ['Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic Balls', 'Sic Trays',
-  'Boli Trays', 'Batch Rounding', 'Trays Total', 'Batches'];
-TABS[T_FINAL] = ['Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic Balls', 'Boli Trays'];
+TABS[T_MAKE] = ['Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic (balls)', 'Boli Trays',
+  'Batch Rounding', 'Trays Total', 'Batches'];
+TABS[T_FINAL] = ['Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic (balls)', 'Boli Trays'];
 TABS[T_AFTER] = ['Date', 'Indi', 'Small', 'Large', 'Sic', 'Boli'];
 TABS[T_EON] = ['Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count',
-  'EON Sic Count', 'EON Boli Count'];
+  'EON Sic Count'];
 TABS[T_AM] = ['Date', 'AM Sales $', 'AM Indi Use', 'AM Small Use', 'AM Large Use', 'AM Sic Use',
   'Bible Used'];
 TABS[T_PM_USE] = ['Date', 'PM Sales $', 'PM Indi Use', 'PM Small Use', 'PM Large Use', 'PM Sic Use',
   'Bible Used'];
+
+/**
+ * The self-building bible tabs. Columns A-F accumulate one row per night (the
+ * app writes them); the blocks from H on hold the current thresholds beside a
+ * freshly fitted suggestion, recomputed from that history after every EON save.
+ */
+// Keyed to match BIBLE_TABS, so each builder can find its own bible mirror.
+var BIBLE_BUILD_TABS = { dough: 'New Bieblerb', peach: 'New Peach Bieblerb' };
+var BIBLE_BUILD_HEADERS = ['Date', 'Total Sales', 'Indi', 'Small', 'Large', 'Sic', '',
+  'X Sales', 'Old Indi', 'New Indi', '',
+  'X Sales ', 'Old Small', 'New Small', '',
+  'X Sales', 'Old Large ', 'New Large', '',
+  'X Sales', 'Old Sic', 'New Sic'];
+/** Column (1-based) where each size's threshold block starts. */
+var BIBLE_BUILD_BLOCK = { indi: 8, small: 12, large: 16, sic: 20 };
+/** Column holding each size's nightly total use, in A-F. */
+var BIBLE_BUILD_USE = { indi: 3, small: 4, large: 5, sic: 6 };
 
 /** Columns that may legitimately hold negatives - everything else must be >= 0. */
 var NEGATIVE_OK = {};
@@ -85,19 +109,43 @@ function setup() {
   if (ss.getName().indexOf('Untitled') === 0) ss.rename(SHEET_NAME);
 
   Object.keys(TABS).forEach(function (name) {
-    var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-    var headers = TABS[name];
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    sheet.getRange('A2:A').setNumberFormat('yyyy-mm-dd');
+    writeHeaders(makeTab(ss, name), TABS[name]);
   });
-
   Object.keys(BIBLE_TABS).forEach(function (key) {
-    if (!ss.getSheetByName(BIBLE_TABS[key])) ss.insertSheet(BIBLE_TABS[key]);
+    makeTab(ss, BIBLE_TABS[key]);
+  });
+  Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
+    writeHeaders(makeTab(ss, BIBLE_BUILD_TABS[key]), BIBLE_BUILD_HEADERS);
   });
 
   var starter = ss.getSheetByName('Sheet1');
   if (starter && starter.getLastRow() === 0) ss.deleteSheet(starter);
+}
+
+/**
+ * Fetch or create a tab, and refuse to continue if Google did not give it the
+ * name asked for. A name past the 31-character limit is silently replaced with
+ * something like "Sheet2", and every later read and write to it disappears —
+ * which is exactly how the previous build broke.
+ */
+function makeTab(ss, name) {
+  if (name.length > NAME_LIMIT) {
+    throw new Error('tab name too long for Google (' + name.length + ' chars): ' + name);
+  }
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    if (sheet.getName() !== name) {
+      throw new Error('Google renamed the tab to "' + sheet.getName() + '" instead of "' + name + '"');
+    }
+  }
+  return sheet;
+}
+
+function writeHeaders(sheet, headers) {
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  sheet.getRange('A2:A').setNumberFormat('yyyy-mm-dd');
 }
 
 /** Custom menu so the owner can re-run maintenance without touching code. */
@@ -105,7 +153,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Dough Tools')
     .addItem('Re-run setup', 'setup')
-    .addItem('Regenerate fitted bibles', 'generateFittedBibles')
+    .addItem('Refresh new-bible suggestions', 'refreshBibleBuilds')
     .addItem('Remove retired tabs', 'removeRetiredTabs')
     .addToUi();
 }
@@ -141,6 +189,8 @@ function doPost(e) {
       (body.tabs || []).forEach(function (write) {
         upsertRow(write.tab, write.row);
       });
+      // A finished night changes the history the suggestion is fitted from.
+      if (body.type === 'eon') refreshBibleBuilds();
       return jsonOut({ ok: true, saved: body.type, date: normalizeDate(body.date) });
     }
     if (body.type === 'bibles') {
@@ -170,7 +220,7 @@ function validateSave(body) {
   var hasContent = false;
   for (var i = 0; i < tabs.length; i++) {
     var write = tabs[i];
-    if (!TABS[write.tab]) return 'unknown tab: ' + write.tab;
+    if (!TABS[write.tab] && !isBibleBuildTab(write.tab)) return 'unknown tab: ' + write.tab;
     if (!write.row || !normalizeDate(write.row.Date)) {
       return 'row missing a valid Date in tab ' + write.tab;
     }
@@ -190,8 +240,19 @@ function validateSave(body) {
   return null;
 }
 
+function isBibleBuildTab(name) {
+  return Object.keys(BIBLE_BUILD_TABS).some(function (k) { return BIBLE_BUILD_TABS[k] === name; });
+}
+
+/** The headings a tab is written against. */
+function headersFor(tabName) {
+  // The bible-building tabs are written only in their left-hand history block;
+  // the suggestion blocks to the right belong to refreshBibleBuild().
+  return isBibleBuildTab(tabName) ? BIBLE_BUILD_HEADERS.slice(0, 6) : TABS[tabName];
+}
+
 /**
- * Merge-upsert one row into an input tab by Date. Only the provided columns
+ * Merge-upsert one row into a tab by Date. Only the provided columns
  * change (blank = clear): the tab's data block is read ONCE - which yields
  * both the matching row's position and its current values - the payload's
  * columns are overlaid, and the row goes back in ONE ranged write.
@@ -199,7 +260,7 @@ function validateSave(body) {
 function upsertRow(tabName, row) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(tabName);
   if (!sheet) throw new Error('missing tab (run setup): ' + tabName);
-  var headers = TABS[tabName];
+  var headers = headersFor(tabName);
   var date = normalizeDate(row.Date);
 
   var last = sheet.getLastRow();
@@ -288,12 +349,9 @@ function ensureRows(sheet, lastRow) {
 }
 
 /**
- * Rewrite the two read-only bible tabs, plus the hidden lookup blocks the
- * formulas read. Skipped when the content hash is unchanged.
- *
- * The lookup tab holds four blocks so one VLOOKUP can serve every row: the
- * plain table (round DOWN - the row at or below) and a key-shifted copy
- * (round UP - the next row up unless sales land exactly on a row).
+ * Mirror the app's two bible tables into their read-only tabs, in the owner's
+ * format: headings on row 1, thresholds from row 2. Skipped when the content
+ * hash is unchanged, so a save almost never pays for this.
  */
 function writeBibles(payload) {
   var props = PropertiesService.getScriptProperties();
@@ -301,120 +359,76 @@ function writeBibles(payload) {
     return { ok: true, bibles: 'unchanged' };
   }
   var ss = SpreadsheetApp.getActive();
+  var header = ['Threshold', 'Indi', 'Small', 'Large', 'Sicilian'];
   Object.keys(BIBLE_TABS).forEach(function (key) {
     var table = payload.bibles[key];
-    var sheet = ss.getSheetByName(BIBLE_TABS[key]) || ss.insertSheet(BIBLE_TABS[key]);
+    var sheet = makeTab(ss, BIBLE_TABS[key]);
     sheet.clear();
-    var meta = [[table.name], ['Season: ' + table.season], [table.notes], ['']];
-    sheet.getRange(1, 1, meta.length, 1).setValues(meta);
-    sheet.getRange(1, 1).setFontWeight('bold');
-    var header = ['Threshold', 'Indi', 'Small', 'Large', 'Sicilian'];
-    sheet.getRange(5, 1, 1, header.length).setValues([header]).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
     if (table.rows.length) {
-      sheet.getRange(6, 1, table.rows.length, header.length).setValues(table.rows);
+      sheet.getRange(2, 1, table.rows.length, header.length).setValues(table.rows);
     }
   });
   props.setProperty('bibleHash', payload.hash);
   return { ok: true, bibles: 'updated' };
 }
 
-// ----- fitted bibles -----
+// ----- the self-building bible -----
 
 /**
- * Fit a robust line (Theil-Sen: median of pairwise slopes) of actual use vs
- * that day's sales, per size and per season, then emit candidate bible
- * tables at the same thresholds as the current bibles - new numbers beside
- * current ones, clearly labeled as suggestions.
+ * Refresh the suggestion columns on both bible-building tabs. The app has
+ * already added tonight's row to columns A-F; this fits a line through all the
+ * nights recorded there and writes what each bible threshold WOULD say, beside
+ * what it says today. Runs after every EON save, so the suggestion keeps
+ * sharpening on its own as nights accumulate.
+ *
+ * This is the one sum the sheet does rather than the app: it needs the whole
+ * recorded history, which the app would otherwise have to re-download on every
+ * single save.
  */
-function generateFittedBibles() {
-  var ss = SpreadsheetApp.getActive();
-  var am = ss.getSheetByName(T_AM);
-  var pm = ss.getSheetByName(T_PM_USE);
-  if (!am || !pm) return;
-
-  var points = {
-    regular: { indi: [], small: [], large: [], sic: [] },
-    peach: { indi: [], small: [], large: [], sic: [] }
-  };
-  function rowsOf(sheet) {
-    return sheet.getLastRow() >= 2
-      ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getDisplayValues()
-      : [];
-  }
-  var SIZES = ['indi', 'small', 'large', 'sic'];
-  // AM and PM use are two halves of the same night: sum them per date.
-  var byDate = {};
-  [rowsOf(am), rowsOf(pm)].forEach(function (rows) {
-    rows.forEach(function (r) {
-      var d = normalizeDate(r[0]);
-      if (!d) return;
-      var slot = byDate[d] || (byDate[d] = { sales: 0, use: {}, season: 'regular' });
-      var sales = Number(r[1]);
-      if (r[1] !== '' && isFinite(sales)) slot.sales += sales;
-      SIZES.forEach(function (size, i) {
-        var v = Number(r[i + 2]);
-        if (r[i + 2] !== '' && isFinite(v)) slot.use[size] = (slot.use[size] || 0) + v;
-      });
-      if (r[6] === 'peach') slot.season = 'peach';
-    });
+function refreshBibleBuilds() {
+  Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
+    refreshBibleBuild(key);
   });
-  Object.keys(byDate).forEach(function (d) {
-    var slot = byDate[d];
-    if (!slot.sales) return;
-    SIZES.forEach(function (size) {
-      if (slot.use[size] !== undefined) points[slot.season][size].push([slot.sales, slot.use[size]]);
-    });
-  });
-
-  writeFittedTab(FITTED_TABS.dough, BIBLE_TABS.dough, points.regular);
-  writeFittedTab(FITTED_TABS.peach, BIBLE_TABS.peach, points.peach);
 }
 
-function writeFittedTab(fittedName, mirrorName, sizePoints) {
+function refreshBibleBuild(key) {
   var ss = SpreadsheetApp.getActive();
-  var mirror = ss.getSheetByName(mirrorName);
-  var sheet = ss.getSheetByName(fittedName) || ss.insertSheet(fittedName);
-  sheet.clear();
-  sheet.getRange(1, 1).setValue(
-    'SUGGESTED bible from recorded history - read-only, regenerate from the Dough Tools menu. The current bible stays in charge.'
-  ).setFontWeight('bold');
+  var sheet = ss.getSheetByName(BIBLE_BUILD_TABS[key]);
+  var mirror = ss.getSheetByName(BIBLE_TABS[key]);
+  if (!sheet || !mirror || mirror.getLastRow() < 2) return;
 
-  if (!mirror || mirror.getLastRow() < 6) {
-    sheet.getRange(3, 1).setValue('The bible mirror tab is empty - save a record first so the app mirrors the bibles.');
-    return;
-  }
-  var mirrorRows = mirror.getRange(6, 1, mirror.getLastRow() - 5, 5).getValues();
+  // Every night recorded on this bible: sales against total use, per size.
+  var last = sheet.getLastRow();
+  var history = last >= 2 ? sheet.getRange(2, 1, last - 1, 6).getValues() : [];
+  var thresholds = mirror.getRange(2, 1, mirror.getLastRow() - 1, 5).getValues();
 
-  var sizes = ['indi', 'small', 'large', 'sic'];
-  var fits = {};
-  var enough = false;
-  sizes.forEach(function (size) {
-    var pts = sizePoints[size];
-    fits[size] = pts.length >= 3 ? theilSen(pts) : null;
-    if (fits[size]) enough = true;
-  });
-  if (!enough) {
-    sheet.getRange(3, 1).setValue('Not enough history yet - need at least 3 recorded nights in this season.');
-    return;
-  }
-
-  var header = ['Sales', 'Indi (new)', 'Indi (now)', 'Small (new)', 'Small (now)',
-    'Large (new)', 'Large (now)', 'Sic (new)', 'Sic (now)'];
-  sheet.getRange(3, 1, 1, header.length).setValues([header]).setFontWeight('bold');
-  var out = mirrorRows.map(function (row) {
-    var sales = Number(row[0]);
-    var line = [sales];
-    sizes.forEach(function (size, i) {
-      var fit = fits[size];
-      line.push(fit ? Math.max(0, Math.round(fit.slope * sales + fit.intercept)) : '');
-      line.push(row[i + 1]);
+  Object.keys(BIBLE_BUILD_BLOCK).forEach(function (size, sizeIndex) {
+    var points = [];
+    history.forEach(function (row) {
+      var sales = Number(row[1]);
+      var use = Number(row[BIBLE_BUILD_USE[size] - 1]);
+      if (row[1] !== '' && row[BIBLE_BUILD_USE[size] - 1] !== '' && isFinite(sales) && isFinite(use)) {
+        points.push([sales, use]);
+      }
     });
-    return line;
+    // Under three nights any line is noise, so the column stays blank.
+    var fit = points.length >= 3 ? theilSen(points) : null;
+    var block = thresholds.map(function (row) {
+      var sales = Number(row[0]);
+      var current = row[sizeIndex + 1];
+      var suggested = fit ? Math.max(0, Math.round(fit.slope * sales + fit.intercept)) : '';
+      return [sales, current, suggested];
+    });
+    if (block.length) {
+      ensureRows(sheet, block.length + 1);
+      sheet.getRange(2, BIBLE_BUILD_BLOCK[size], block.length, 3).setValues(block);
+    }
   });
-  sheet.getRange(4, 1, out.length, header.length).setValues(out);
 }
 
-/** Median-of-pairwise-slopes fit - outlier nights can't drag the line. */
+/** Median-of-pairwise-slopes fit - one wild night can't drag the line. */
 function theilSen(points) {
   var slopes = [];
   for (var i = 0; i < points.length; i++) {
@@ -433,11 +447,6 @@ function median(values) {
   var sorted = values.slice().sort(function (a, b) { return a - b; });
   var mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function inPeachWindow(isoDate) {
-  var md = isoDate.slice(5);
-  return md >= PEACH_START && md <= PEACH_END;
 }
 
 // ----- read path -----

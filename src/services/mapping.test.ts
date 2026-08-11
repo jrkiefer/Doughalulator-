@@ -56,12 +56,15 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
     const writes = dayRecordToTabWrites(dayRecord);
     expect(writes.map((w) => w.tab)).toEqual([
       '2PM Dough Count',
-      'Calculation Step Look up Dough Use for PM',
-      'Calculation Step Look up Dough Use for Tomorrow',
-      'Calculation Step Dough Make (estimate)',
+      'Look up Dough Use for PM',
+      'Look up Dough Use Tomorrow',
+      'Dough Make (estimate)',
       'Final Make Amount',
-      'Estimated Dough Amount after Dough Gang',
+      'Estimated Dough After Gang',
     ]);
+    // Google truncates a tab name at 31 characters; two that truncate alike
+    // silently collide, which is how the previous build lost a whole tab.
+    writes.forEach((w) => expect(w.tab.length).toBeLessThanOrEqual(31));
 
     const row = (tab: string) => writes.find((w) => w.tab === tab)!.row;
     expect(row('2PM Dough Count')).toEqual({
@@ -81,15 +84,15 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
     });
 
     // Tonight's use and tomorrow's need are the engine's, not re-derived.
-    expect(row('Calculation Step Look up Dough Use for PM')).toMatchObject({
+    expect(row('Look up Dough Use for PM')).toMatchObject({
       Indi: dayRecord.use.indi, Small: dayRecord.use.small, 'Sales Left': 2700,
     });
-    expect(row('Calculation Step Look up Dough Use for Tomorrow')).toMatchObject({
+    expect(row('Look up Dough Use Tomorrow')).toMatchObject({
       Indi: dayRecord.need.indi, "Tomorrow's Forecast": 9100,
     });
-    expect(row('Calculation Step Dough Make (estimate)')).toMatchObject({
+    expect(row('Dough Make (estimate)')).toMatchObject({
       'Indi Trays': dayRecord.trays.indi,
-      'Sic Balls': dayRecord.sicBalls,
+      'Sic (balls)': dayRecord.sicBalls,
       'Boli Trays': dayRecord.boliTrays,
       'Trays Total': dayRecord.totalTrays,
       Batches: dayRecord.batchUp!.batches,
@@ -97,7 +100,7 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
     expect(row('Final Make Amount')).toMatchObject({
       'Small Trays': dayRecord.batchUp!.finalTraysToMake.small,
     });
-    expect(row('Estimated Dough Amount after Dough Gang')).toMatchObject({
+    expect(row('Estimated Dough After Gang')).toMatchObject({
       Indi: dayRecord.batchUp!.finalDough.indiTotal,
       Boli: dayRecord.batchUp!.finalDough.boliTotal,
     });
@@ -124,8 +127,8 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
   it('the batch-dependent tabs wait until a choice is tapped', () => {
     const writes = dayRecordToTabWrites({ ...dayRecord, chosenBatchOption: null });
     expect(writes.map((w) => w.tab)).not.toContain('Final Make Amount');
-    expect(writes.map((w) => w.tab)).not.toContain('Estimated Dough Amount after Dough Gang');
-    const make = writes.find((w) => w.tab === 'Calculation Step Dough Make (estimate)')!.row;
+    expect(writes.map((w) => w.tab)).not.toContain('Estimated Dough After Gang');
+    const make = writes.find((w) => w.tab === 'Dough Make (estimate)')!.row;
     expect(make.Batches).toBe(''); // trays are known; the batch count is not
     expect(make['Trays Total']).toBe(dayRecord.totalTrays);
   });
@@ -162,7 +165,6 @@ describe('eonRecordToTabWrites — the close, and what the night used', () => {
       'EON Small Count': 156,
       'EON Large Count': 154,
       'EON Sic Count': 2,
-      'EON Boli Count': 36,
     });
   });
 });
@@ -257,11 +259,11 @@ describe('reverse mapping (loading)', () => {
   it('recent fetch → history lines, newest first', () => {
     const history = summaryRowsToHistory({
       '2026-07-28': {
-        'Calculation Step Dough Make (estimate)': { Batches: 4 },
+        'Dough Make (estimate)': { Batches: 4 },
         'EON Dough Count': { 'EON Sales': 8200 },
       },
       '2026-07-29': {
-        'Calculation Step Dough Make (estimate)': { Batches: 5 },
+        'Dough Make (estimate)': { Batches: 5 },
         'EON Dough Count': null,
       },
       '2026-07-30': null,
@@ -269,5 +271,29 @@ describe('reverse mapping (loading)', () => {
     expect(history.map((h) => h.date)).toEqual(['2026-07-29', '2026-07-28']);
     expect(history[0]).toMatchObject({ batchesMade: '5', finalSales: '' });
     expect(history[1]).toMatchObject({ batchesMade: '4', finalSales: '8200' });
+  });
+});
+
+describe("the night's line on the self-building bible", () => {
+  it('records total sales and the whole day’s use — morning plus night', () => {
+    const amUse = { sales: 4500, use: { indi: 5, small: 12, large: 9, sic: 1, boli: null } };
+    const writes = eonRecordToTabWrites(eonRecord, 'regular', amUse);
+    const line = writes.find((w) => w.tab === 'New Bieblerb')!.row;
+    expect(line.Date).toBe('2026-01-15');
+    expect(line['Total Sales']).toBe(7900);
+    // Whatever the morning used plus whatever the night used.
+    expect(line.Indi).toBe(5 + (eonRecord.pmUse?.indi ?? 0));
+  });
+
+  it('a peach night builds the peach bible instead', () => {
+    const writes = eonRecordToTabWrites(eonRecord, 'peach', null);
+    expect(writes.map((w) => w.tab)).toContain('New Peach Bieblerb');
+    expect(writes.map((w) => w.tab)).not.toContain('New Bieblerb');
+  });
+
+  it('a night with no final sales adds nothing to the history', () => {
+    const noSales = { ...eonRecord, finalSales: null };
+    expect(eonRecordToTabWrites(noSales, 'regular', null).map((w) => w.tab))
+      .not.toContain('New Bieblerb');
   });
 });

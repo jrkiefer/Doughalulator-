@@ -180,20 +180,18 @@ describe('dough script — a plain record, no formulas to break', () => {
       'Indi Count', 'Small Count', 'Large Count', 'Sic Count', 'Boli Count',
       'Bible', 'Forecast Rounding', 'Batch Rounding',
     ]);
-    expect(ss.getSheetByName('EON Dough Count')!.headerRow(7)).toEqual([
-      'Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count',
-      'EON Sic Count', 'EON Boli Count',
+    expect(ss.getSheetByName('EON Dough Count')!.headerRow(6)).toEqual([
+      'Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count', 'EON Sic Count',
     ]);
-    expect(ss.getSheetByName('Calculation Step Dough Make (estimate)')!.headerRow(10)).toEqual([
-      'Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic Balls', 'Sic Trays',
-      'Boli Trays', 'Batch Rounding', 'Trays Total', 'Batches',
+    expect(ss.getSheetByName('Dough Make (estimate)')!.headerRow(9)).toEqual([
+      'Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic (balls)', 'Boli Trays',
+      'Batch Rounding', 'Trays Total', 'Batches',
     ]);
+    expect(ss.getSheetByName('Estimated Dough After Gang')!.headerRow(6)[0]).toBe('Date');
+    // Every tab name has to survive Google's 31-character cap.
+    for (const name of ss.sheets.keys()) expect(name.length).toBeLessThanOrEqual(31);
     expect(ss.getSheetByName('AM Dough Use')!.headerRow(7)[2]).toBe('AM Indi Use');
     expect(ss.getSheetByName('PM Dough Use')!.headerRow(7)[2]).toBe('PM Indi Use');
-    expect(ss.getSheetByName('Estimated Dough Amount after Dough Gang')!.headerRow(6)).toEqual([
-      'Date', 'Indi', 'Small', 'Large', 'Sic', 'Boli',
-    ]);
-
     // The app is the only calculator: nothing in this sheet computes anything.
     for (const sheet of ss.sheets.values()) {
       expect(sheet.formulas.size).toBe(0);
@@ -207,15 +205,15 @@ describe('dough script — a plain record, no formulas to break', () => {
       secret: SECRET, type: 'day', date: '2026-08-01',
       tabs: [
         ...dayPayload('2026-08-01').tabs,
-        { tab: 'Calculation Step Dough Make (estimate)',
+        { tab: 'Dough Make (estimate)',
           row: { Date: '2026-08-01', 'Indi Trays': 4, 'Trays Total': 78, Batches: 8 } },
-        { tab: 'Estimated Dough Amount after Dough Gang',
+        { tab: 'Estimated Dough After Gang',
           row: { Date: '2026-08-01', Indi: 64, Small: 378 } },
       ],
     });
-    expect(script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!
-      .rowByIndex(2, 10)[9]).toBe('8');
-    expect(script.world.ss.getSheetByName('Estimated Dough Amount after Dough Gang')!
+    expect(script.world.ss.getSheetByName('Dough Make (estimate)')!
+      .rowByIndex(2, 9)[8]).toBe('8');
+    expect(script.world.ss.getSheetByName('Estimated Dough After Gang')!
       .getCell(2, 2)).toBe(64);
   });
 
@@ -251,8 +249,9 @@ describe('bible tripwire — app JSON vs the mirror the script writes', () => {
       .toMatchObject({ ok: true, bibles: 'updated' });
 
     const mirror = script.world.ss.getSheetByName('Dough Bible')!;
+    expect(mirror.headerRow(5)).toEqual(['Threshold', 'Indi', 'Small', 'Large', 'Sicilian']);
     bibles.regular.rows.forEach((row, i) => {
-      expect(mirror.rowByIndex(6 + i, 5)).toEqual(
+      expect(mirror.rowByIndex(2 + i, 5)).toEqual(
         [row.sales, row.indi, row.small, row.large, row.sic].map(String),
       );
     });
@@ -494,5 +493,61 @@ describe('a wipe erases data without stripping the sheet formatting', () => {
     expect(input.headerRow(2)[0]).toBe('Date'); // header intact
     // Deleting rows would have shrunk the sheet and its formats along with it.
     expect(input.getMaxRows()).toBe(maxRowsBefore);
+  });
+});
+
+describe('the new bible builds itself as nights accumulate', () => {
+  /** One finished night: its sales and what it got through, per size. */
+  function night(script: LoadedScript, date: string, sales: number, use: number) {
+    post(script, {
+      secret: SECRET,
+      type: 'eon',
+      date,
+      tabs: [
+        { tab: 'EON Dough Count', row: { Date: date, 'EON Sales': sales } },
+        { tab: 'New Bieblerb',
+          row: { Date: date, 'Total Sales': sales, Indi: use, Small: use, Large: use, Sic: use } },
+      ],
+    });
+  }
+
+  it('fills the suggested column from the recorded nights, beside the current bible', () => {
+    const script = freshDough();
+    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    const build = script.world.ss.getSheetByName('New Bieblerb')!;
+
+    // Under three nights a line is noise, so nothing is suggested yet.
+    night(script, '2026-08-01', 4000, 40);
+    night(script, '2026-08-02', 6000, 60);
+    expect(build.getCell(2, 10)).toBe(''); // New Indi still blank
+
+    // A third night makes the trend real: use runs at 1% of sales.
+    night(script, '2026-08-03', 8000, 80);
+    const first = bibles.regular.rows[0];
+    expect(build.getCell(2, 8)).toBe(first.sales); // X Sales
+    expect(build.getCell(2, 9)).toBe(first.indi); // Old Indi — today's bible
+    expect(build.getCell(2, 10)).toBe(Math.round(first.sales * 0.01)); // New Indi — the fit
+    // Each size gets its own block across the row.
+    expect(build.getCell(2, 12)).toBe(first.sales);
+    expect(build.getCell(2, 13)).toBe(first.small);
+    expect(build.getCell(2, 21)).toBe(first.sic);
+
+    // And it keeps sharpening: a fourth night at a different rate moves it.
+    night(script, '2026-08-04', 10000, 200);
+    expect(build.getCell(2, 10)).not.toBe(Math.round(first.sales * 0.01));
+  });
+
+  it('peach nights build the peach suggestion, leaving the regular one alone', () => {
+    const script = freshDough();
+    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
+    ['2026-07-01', '2026-07-02', '2026-07-03'].forEach((date, i) => {
+      post(script, {
+        secret: SECRET, type: 'eon', date,
+        tabs: [{ tab: 'New Peach Bieblerb',
+          row: { Date: date, 'Total Sales': 4000 + i * 2000, Indi: 40 + i * 20 } }],
+      });
+    });
+    expect(script.world.ss.getSheetByName('New Peach Bieblerb')!.getCell(2, 10)).not.toBe('');
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe('');
   });
 });

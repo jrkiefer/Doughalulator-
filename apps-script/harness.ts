@@ -182,6 +182,10 @@ export class FakeSheet {
     return this;
   }
 
+  getName() {
+    return this.name;
+  }
+
   appendRow(values: Cell[]) {
     const row = this.getLastRow() + 1;
     values.forEach((v, i) => this.setCell(row, i + 1, v));

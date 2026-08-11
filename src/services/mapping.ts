@@ -26,13 +26,15 @@ function cellOf(value: Maybe): string | number {
 /** The tabs the app writes. It works out every number in them. */
 export const DAY_TAB = '2PM Dough Count';
 export const EON_TAB = 'EON Dough Count';
-export const PM_LOOKUP_TAB = 'Calculation Step Look up Dough Use for PM';
-export const TOMORROW_LOOKUP_TAB = 'Calculation Step Look up Dough Use for Tomorrow';
-export const MAKE_TAB = 'Calculation Step Dough Make (estimate)';
+export const PM_LOOKUP_TAB = 'Look up Dough Use for PM';
+export const TOMORROW_LOOKUP_TAB = 'Look up Dough Use Tomorrow';
+export const MAKE_TAB = 'Dough Make (estimate)';
 export const FINAL_MAKE_TAB = 'Final Make Amount';
-export const AFTER_TAB = 'Estimated Dough Amount after Dough Gang';
+export const AFTER_TAB = 'Estimated Dough After Gang';
 export const AM_USE_TAB = 'AM Dough Use';
 export const PM_USE_TAB = 'PM Dough Use';
+/** The tabs whose history the new-bible suggestion is fitted from. */
+export const BIBLE_BUILD_TABS = { regular: 'New Bieblerb', peach: 'New Peach Bieblerb' } as const;
 
 /**
  * Everything the 2 PM save writes: the counts as typed, then each step of the
@@ -104,8 +106,7 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
         'Indi Trays': cellOf(record.trays.indi),
         'Small Trays': cellOf(record.trays.small),
         'Large Trays': cellOf(record.trays.large),
-        'Sic Balls': cellOf(record.sicBalls),
-        'Sic Trays': cellOf(record.trays.sic),
+        'Sic (balls)': cellOf(record.sicBalls),
         'Boli Trays': cellOf(record.boliTrays),
         'Batch Rounding': record.chosenBatchOption ?? '',
         'Trays Total': cellOf(record.totalTrays),
@@ -124,7 +125,7 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
           'Indi Trays': cellOf(chosen.finalTraysToMake.indi),
           'Small Trays': cellOf(chosen.finalTraysToMake.small),
           'Large Trays': cellOf(chosen.finalTraysToMake.large),
-          'Sic Balls': cellOf(record.sicBalls),
+          'Sic (balls)': cellOf(record.sicBalls),
           'Boli Trays': cellOf(chosen.finalTraysToMake.boli),
         },
       },
@@ -161,7 +162,11 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
 }
 
 /** Everything the EON save writes: the final count, and what the night used. */
-export function eonRecordToTabWrites(record: EonRecord, bible?: string): TabWrite[] {
+export function eonRecordToTabWrites(
+  record: EonRecord,
+  bible?: string,
+  amUse?: AmUse | null,
+): TabWrite[] {
   const d = record.date;
   const writes: TabWrite[] = [
     {
@@ -173,7 +178,6 @@ export function eonRecordToTabWrites(record: EonRecord, bible?: string): TabWrit
         'EON Small Count': cellOf(record.eonHave.small),
         'EON Large Count': cellOf(record.eonHave.large),
         'EON Sic Count': cellOf(record.eonHave.sic),
-        'EON Boli Count': cellOf(record.eonHave.boli),
       },
     },
   ];
@@ -189,6 +193,29 @@ export function eonRecordToTabWrites(record: EonRecord, bible?: string): TabWrit
         'PM Large Use': cellOf(record.pmUse.large),
         'PM Sic Use': cellOf(record.pmUse.sic),
         'Bible Used': bible ?? record.bibleUsed ?? '',
+      },
+    });
+  }
+
+  // Tonight's line on the bible this date used — the history the suggested
+  // bible is fitted from. Total use is the morning's plus the night's.
+  const season = bible === 'peach' ? 'peach' : 'regular';
+  const nightly = (size: 'indi' | 'small' | 'large' | 'sic') => {
+    const am = amUse?.use[size] ?? null;
+    const pm = record.pmUse?.[size] ?? null;
+    if (am === null && pm === null) return '';
+    return (am ?? 0) + (pm ?? 0);
+  };
+  if (record.finalSales !== null) {
+    writes.push({
+      tab: BIBLE_BUILD_TABS[season],
+      row: {
+        Date: record.date,
+        'Total Sales': record.finalSales,
+        Indi: nightly('indi'),
+        Small: nightly('small'),
+        Large: nightly('large'),
+        Sic: nightly('sic'),
       },
     });
   }
