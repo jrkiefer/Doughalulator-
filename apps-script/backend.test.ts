@@ -389,3 +389,72 @@ describe('wipe — deliberate clean slate (secret + confirm phrase)', () => {
     expect(overview.rowByIndex(9, 4)).toEqual(['Freezer', '', '', '']);
   });
 });
+
+describe('dough script — batched reads (one pass per tab, any number of dates)', () => {
+  it('date / recent / range agree on content, and absent tabs stay null', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    post(script, dayPayload('2026-08-02'));
+    post(script, {
+      secret: SECRET,
+      type: 'eon',
+      date: '2026-08-02',
+      tabs: [{ tab: 'EON Count', row: { Date: '2026-08-02', 'Final Sales $': 9100 } }],
+    });
+
+    const one = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    const tabs = one.tabs as Record<string, Record<string, string> | null>;
+    expect(one.ok).toBe(true);
+    expect(tabs['Summary']!['Forecast Tonight $']).toBe('7200');
+    expect(tabs['Summary']!.Date).toBe('2026-08-01');
+    // A tab with no row for this date reads null, not an empty object.
+    expect(tabs['EON Count']).toBeNull();
+
+    // recent returns the same rows, newest dates last, one entry per date.
+    const recent = get(script, { secret: SECRET, action: 'recent', n: '30' });
+    const recentDates = recent.dates as Record<string, Record<string, Record<string, string> | null>>;
+    expect(Object.keys(recentDates).sort()).toEqual(['2026-08-01', '2026-08-02']);
+    expect(recentDates['2026-08-01']['Summary']).toEqual(tabs['Summary']);
+    expect(recentDates['2026-08-02']['EON Count']!['Final Sales $']).toBe('9100');
+
+    // range narrows by date without changing row content.
+    const range = get(script, { secret: SECRET, action: 'range', from: '2026-08-02', to: '2026-08-31' });
+    const rangeDates = range.dates as Record<string, unknown>;
+    expect(Object.keys(rangeDates)).toEqual(['2026-08-02']);
+
+    // n caps the list to the most recent dates.
+    const justOne = get(script, { secret: SECRET, action: 'recent', n: '1' });
+    expect(Object.keys(justOne.dates as object)).toEqual(['2026-08-02']);
+  });
+
+  it('a duplicate hand-typed date row resolves to the first one, as a top-down scan would', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    const summary = script.world.ss.getSheetByName('Summary')!;
+    // Someone hand-adds a second row for the same date, in another format.
+    summary.setCell(3, 1, '8/1/26');
+    summary.setCell(3, 3, 9999);
+
+    const answer = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    const tabs = answer.tabs as Record<string, Record<string, string> | null>;
+    expect(tabs['Summary']!['Forecast Tonight $']).toBe('7200'); // the first row wins
+    // …and a save still merges into that same first row rather than the duplicate.
+    post(script, {
+      secret: SECRET,
+      type: 'day',
+      date: '8/1/26',
+      tabs: [{ tab: 'Summary', row: { Date: '8/1/26', 'Forecast Tonight $': 8100 } }],
+    });
+    expect(summary.getCell(2, 3)).toBe(8100);
+    expect(summary.getCell(3, 3)).toBe(9999); // duplicate untouched
+  });
+
+  it('reads work on an empty log and on a date nobody saved', () => {
+    const script = freshDough();
+    expect(get(script, { secret: SECRET, action: 'recent', n: '30' }).dates).toEqual({});
+    const answer = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
+    const tabs = answer.tabs as Record<string, unknown>;
+    expect(answer.ok).toBe(true);
+    expect(Object.values(tabs).every((t) => t === null)).toBe(true);
+  });
+});

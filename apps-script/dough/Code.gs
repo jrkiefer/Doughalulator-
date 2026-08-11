@@ -359,9 +359,10 @@ function validateSave(body) {
 
 /**
  * Merge-upsert one row into a tab by Date. Only the provided columns change
- * (blank = clear): the current row is read whole, the payload's columns are
- * overlaid, and the row goes back in ONE ranged write — cell-by-cell writes
- * were the slowest part of every save.
+ * (blank = clear): the tab's data block is read ONCE — which yields both the
+ * matching row's position and its current values — the payload's columns are
+ * overlaid, and the row goes back in ONE ranged write. Two Sheets calls per
+ * tab; per-cell reads and writes were the slowest part of every save.
  */
 function upsertRow(tabName, row) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(tabName);
@@ -369,13 +370,21 @@ function upsertRow(tabName, row) {
   var headers = TABS[tabName];
   var date = normalizeDate(row.Date);
 
-  var rowIndex = findDateRow(sheet, date);
-  var values;
+  var last = sheet.getLastRow();
+  var block = last >= 2 ? sheet.getRange(2, 1, last - 1, headers.length).getValues() : [];
+  var rowIndex = -1;
+  var values = null;
+  for (var i = 0; i < block.length; i++) {
+    // First match wins, exactly as a top-down scan of column A would.
+    if (normalizeDate(block[i][0]) === date) {
+      rowIndex = i + 2;
+      values = block[i];
+      break;
+    }
+  }
   if (rowIndex === -1) {
-    rowIndex = sheet.getLastRow() + 1;
+    rowIndex = last + 1;
     values = headers.map(function () { return ''; });
-  } else {
-    values = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
   }
   values[0] = date;
   Object.keys(row).forEach(function (key) {
@@ -433,17 +442,6 @@ function pad2(n) {
   return ('0' + n).slice(-2);
 }
 
-/** Find the sheet row holding a date in column A, tolerant of hand-typed formats. */
-function findDateRow(sheet, date) {
-  var last = sheet.getLastRow();
-  if (last < 2) return -1;
-  var values = sheet.getRange(2, 1, last - 1, 1).getDisplayValues();
-  for (var i = 0; i < values.length; i++) {
-    if (normalizeDate(values[i][0]) === date) return i + 2;
-  }
-  return -1;
-}
-
 /** Rewrite the two read-only bible tabs, but only when the content hash changed. */
 function writeBibles(payload) {
   var props = PropertiesService.getScriptProperties();
@@ -478,6 +476,7 @@ function doGet(e) {
     if (p.action === 'ping') {
       return jsonOut({ ok: true, sheet: 'dough', time: new Date().toISOString() });
     }
+    // One pass over the tabs serves whichever read follows.
     if (p.action === 'date') {
       var date = normalizeDate(p.date);
       if (!date) return jsonOut({ ok: false, error: 'missing or invalid date: ' + p.date });
@@ -487,12 +486,14 @@ function doGet(e) {
       var from = normalizeDate(p.from);
       var to = normalizeDate(p.to);
       if (!from || !to) return jsonOut({ ok: false, error: 'range needs valid from and to dates' });
-      var dates = allDates().filter(function (d) { return d >= from && d <= to; });
-      return jsonOut({ ok: true, dates: readMany(dates) });
+      var rangeIndex = loadTabIndex();
+      var dates = allDates(rangeIndex).filter(function (d) { return d >= from && d <= to; });
+      return jsonOut({ ok: true, dates: readMany(dates, rangeIndex) });
     }
     if (p.action === 'recent') {
       var n = Math.max(1, Math.min(60, Number(p.n) || 7));
-      return jsonOut({ ok: true, dates: readMany(allDates().slice(-n)) });
+      var recentIndex = loadTabIndex();
+      return jsonOut({ ok: true, dates: readMany(allDates(recentIndex).slice(-n), recentIndex) });
     }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {
@@ -500,42 +501,62 @@ function doGet(e) {
   }
 }
 
-/** One date's row from every data tab, keyed by header. Missing tabs/rows → null. */
-function readDate(date) {
+/**
+ * Read every data tab ONCE and index its rows by date — the whole read path
+ * costs one Sheets call per tab no matter how many dates are asked for.
+ * (Reading per date per tab meant ~24 calls per day and minutes of waiting
+ * once the log held months of history.)
+ */
+function loadTabIndex() {
   var ss = SpreadsheetApp.getActive();
-  var out = {};
+  var index = {};
   Object.keys(TABS).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
-    if (!sheet) { out[name] = null; return; }
-    var rowIndex = findDateRow(sheet, date);
-    if (rowIndex === -1) { out[name] = null; return; }
+    if (!sheet) { index[name] = null; return; }
     var headers = TABS[name];
-    var values = sheet.getRange(rowIndex, 1, 1, headers.length).getDisplayValues()[0];
-    var row = {};
-    headers.forEach(function (h, i) { row[h] = values[i]; });
-    row.Date = date;
-    out[name] = row;
+    var byDate = {};
+    var last = sheet.getLastRow();
+    if (last >= 2) {
+      sheet.getRange(2, 1, last - 1, headers.length).getDisplayValues().forEach(function (values) {
+        var d = normalizeDate(values[0]);
+        // First match wins, exactly as a top-down scan of column A would.
+        if (!d || byDate[d]) return;
+        var row = {};
+        headers.forEach(function (h, i) { row[h] = values[i]; });
+        row.Date = d;
+        byDate[d] = row;
+      });
+    }
+    index[name] = byDate;
+  });
+  return index;
+}
+
+function readMany(dates, index) {
+  index = index || loadTabIndex();
+  var out = {};
+  dates.forEach(function (date) {
+    var tabs = {};
+    Object.keys(TABS).forEach(function (name) {
+      tabs[name] = index[name] ? (index[name][date] || null) : null;
+    });
+    out[date] = tabs;
   });
   return out;
 }
 
-function readMany(dates) {
-  var out = {};
-  dates.forEach(function (d) { out[d] = readDate(d); });
-  return out;
+/** One date's row from every data tab, keyed by header. Missing tabs/rows → null. */
+function readDate(date, index) {
+  return readMany([date], index)[date];
 }
 
 /** Every date present in Summary or EON Count, ascending. */
-function allDates() {
-  var ss = SpreadsheetApp.getActive();
+function allDates(index) {
+  index = index || loadTabIndex();
   var seen = {};
   ['Summary', 'EON Count'].forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet || sheet.getLastRow() < 2) return;
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().forEach(function (r) {
-      var d = normalizeDate(r[0]);
-      if (d) seen[d] = true;
-    });
+    if (!index[name]) return;
+    Object.keys(index[name]).forEach(function (d) { seen[d] = true; });
   });
   return Object.keys(seen).sort();
 }
