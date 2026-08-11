@@ -54,17 +54,17 @@ In August 2026 the owner's previous tracking spreadsheets were imported into the
 - Both Apps Scripts accept a secret-guarded erase (`type: 'wipe'` with the confirm phrase `WIPE ALL DATA`) over their web-app URL. It is destructive and reachable by anyone holding the sheet's secret — kept because that same secret already allows overwriting every row, and because it is how a remote helper resets the sheets. `wipeAllData()` can also be called from the Apps Script editor if you would rather keep it off the network.
 - Column A of every tab is date-formatted, so Google stores real dates there and `getValues()` hands back Date objects, not the text that was written. Anything matching rows by date must go through `normalizeDate` (which handles all three shapes) — matching on the raw value silently appends duplicate rows instead of merging. The test harness models this quirk deliberately.
 
-## How the Dough Log works now (v1.2.0)
+## How the Dough Log works now (v1.3.0)
 
-The app works out every number and writes it into the right tab. The notebook keeps the record; it contains no formulas, so nothing in it can break.
+The app works out every number and writes it into the right tab. The notebook keeps the record; it holds no formulas, so nothing in it can break.
 
-- **The 2 PM save** fills: `2PM Dough Count`, both `Calculation Step Look up Dough Use…` tabs, `Calculation Step Dough Make (estimate)`, `Final Make Amount`, `Estimated Dough Amount after Dough Gang`, and `AM Dough Use`.
-- **The EON save** fills: `EON Dough Count` and `PM Dough Use`.
-- Change any one number and the whole day is worked out and saved again.
-- Each number you type shows **saved** on its corner once it has reached the notebook.
-- Correcting a number **in the notebook** stays corrected until the app saves that date again. To make a notebook correction stick, open that date in the app and tap **LOAD FROM SHEET** — the app pulls your correction in and recalculates everything from it.
-- The `Final Make Amount` and `Estimated Dough Amount…` tabs stay empty until a batch choice (up/down) is tapped, because they depend on it.
-- Once the new layout is trusted, **🍕 Dough Tools → Remove retired tabs** deletes the old layout's tabs.
+- **The 2 PM save** fills: `2PM Dough Count`, `Look up Dough Use for PM`, `Look up Dough Use Tomorrow`, `Dough Make (estimate)`, `Final Make Amount`, `Estimated Dough After Gang`, and `AM Dough Use`.
+- **The EON save** fills: `EON Dough Count`, `PM Dough Use`, and that night's line on `New Bieblerb` (or `New Peach Bieblerb`).
+- Change any one number and the whole day is worked out and saved again. Each number shows **saved** on its corner once it has reached the notebook.
+- **The new bible builds itself.** Each finished night adds a line — date, that night's sales, the day's whole use per size. After every end-of-night save the script refits a line through *all* the recorded nights and rewrites the "New" column beside the current one. Three nights in it starts suggesting; it sharpens from there with nothing to press. A night with no takings is left out so it can't drag the fit.
+- **Tab names must stay at or under 31 characters.** Google truncates longer ones, and two that truncate alike silently collide — one tab ends up called `Sheet2` and everything written to it disappears. That bug cost a whole rebuild; `makeTab()` now refuses to run rather than let it happen quietly.
+- Correcting a number **in the notebook** stays corrected until the app saves that date again. To make it stick, open that date in the app and tap **LOAD FROM SHEET** — the app pulls your correction in and recalculates from it.
+- A night whose end-of-night sales came in below the 2 PM figure leaves its PM-takings cell blank rather than showing a negative.
 
 ## If something ever looks wrong
 
