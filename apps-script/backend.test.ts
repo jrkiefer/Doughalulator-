@@ -27,8 +27,23 @@ function dayPayload(date: string) {
     type: 'day',
     date,
     tabs: [
-      { tab: 'Summary', row: { Date: date, 'Forecast Tonight $': 7200, 'Sales Left $': -300 } },
-      { tab: 'Dough Count', row: { Date: date, 'Boli Trays': 2, 'Boli Singles': 1, 'Boli Have': 13 } },
+      {
+        tab: '2PM Dough Count',
+        row: {
+          Date: date,
+          "Today's Forecast": 7200,
+          'Current Sales': 4500,
+          'Sales Left': 2700,
+          "Tomorrow's Forecast": 9100,
+          'Indi Count': 34,
+          'Small Count': 156,
+          'Large Count': 154,
+          'Sic Count': 2,
+          'Boli Count': 36,
+          Bible: 'regular',
+          'Batch Rounding': 'up',
+        },
+      },
     ],
   };
 }
@@ -44,12 +59,11 @@ describe('dough script — lock (§7)', () => {
   it('a busy lock answers retryable-shaped — the client treats it as network-class', () => {
     const script = freshDough();
     script.world.lock.busy = true;
-    const answer = post(script, dayPayload('2026-08-01'));
-    expect(answer).toMatchObject({ ok: false, retryable: true });
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: false, retryable: true });
   });
 });
 
-describe('dough script — validation (§7)', () => {
+describe('dough script — the app may only write the two count tabs', () => {
   it('rejects a bad secret', () => {
     const script = freshDough();
     const answer = post(script, { ...dayPayload('2026-08-01'), secret: 'WRONG' });
@@ -63,38 +77,31 @@ describe('dough script — validation (§7)', () => {
     expect(String(post(script, dayPayload('')).error)).toContain('invalid date');
   });
 
-  it('rejects an empty save (nothing beyond the date)', () => {
+  it('refuses to write a calculated tab — those belong to the formulas', () => {
     const script = freshDough();
     const answer = post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [{ tab: 'Summary', row: { Date: '2026-08-01' } }],
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: 'Final Make Amount', row: { Date: '2026-08-01', 'Indi Trays': 3 } }],
     });
-    expect(String(answer.error)).toContain('empty save');
+    expect(String(answer.error)).toContain('not a tab the app may write');
   });
 
-  it('rejects nonsensical negatives but allows sales-left and Left/EON Check negatives', () => {
+  it('rejects an empty save and nonsensical negatives, but allows a negative sales-left', () => {
     const script = freshDough();
-    const bad = post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [{ tab: 'Dough Count', row: { Date: '2026-08-01', 'Boli Trays': -2 } }],
-    });
-    expect(String(bad.error)).toContain('negative value');
+    expect(String(post(script, {
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01' } }],
+    }).error)).toContain('empty save');
 
-    const fine = post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [
-        { tab: 'Summary', row: { Date: '2026-08-01', 'Sales Left $': -300 } },
-        { tab: 'Left', row: { Date: '2026-08-01', Small: -9, Shortages: 'Small -9' } },
-        { tab: 'EON Check', row: { Date: '2026-08-01', Boli: -9, 'Trays Short': 'Boli 2' } },
-      ],
-    });
-    expect(fine.ok).toBe(true);
+    expect(String(post(script, {
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', 'Indi Count': -2 } }],
+    }).error)).toContain('negative value');
+
+    expect(post(script, {
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', 'Sales Left': -300 } }],
+    }).ok).toBe(true);
   });
 });
 
@@ -103,31 +110,30 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
     post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [{ tab: 'Summary', row: { Date: '2026-08-01', 'Forecast Tonight $': 8000 } }],
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-08-01', "Today's Forecast": 8000 } }],
     });
-    const summary = script.world.ss.getSheetByName('Summary')!;
-    expect(summary.getLastRow()).toBe(2); // header + one data row
-    expect(summary.getCell(2, 3)).toBe(8000); // updated in place
-    expect(summary.getCell(2, 5)).toBe(-300); // merge kept the untouched column
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    expect(sheet.getLastRow()).toBe(2); // header + one data row
+    expect(sheet.getCell(2, 2)).toBe(8000); // updated in place
+    expect(sheet.getCell(2, 6)).toBe(34); // merge kept the untouched column
   });
 
   it('matches hand-typed sheet dates in common formats (M/D/YY)', () => {
     const script = freshDough();
-    const summary = script.world.ss.getSheetByName('Summary')!;
-    summary.setCell(2, 1, '8/1/26'); // someone hand-typed the date
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    sheet.setCell(2, 1, '8/1/26');
     post(script, dayPayload('2026-08-01'));
-    expect(summary.getLastRow()).toBe(2); // merged into the hand-typed row
+    expect(sheet.getLastRow()).toBe(2); // merged into the hand-typed row
   });
 
-  it('normalizeDate handles ISO, M/D/YYYY, and 2-digit years', () => {
+  it('normalizeDate handles ISO, M/D/YYYY, 2-digit years, and real date cells', () => {
     const script = freshDough();
     const norm = script.fns.normalizeDate as (v: unknown) => string;
     expect(norm('2026-08-01')).toBe('2026-08-01');
     expect(norm('8/1/2026')).toBe('2026-08-01');
     expect(norm('8/1/26')).toBe('2026-08-01');
+    expect(norm(new Date(2026, 7, 1))).toBe('2026-08-01');
     expect(norm('Aug 1')).toBe('');
   });
 
@@ -135,55 +141,96 @@ describe('dough script — merge-upsert + tolerant dates (§7)', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
     post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [{ tab: 'Summary', row: { Date: '2026-08-01', 'Forecast Tonight $': '', 'Sales Left $': -300 } }],
+      secret: SECRET, type: 'day', date: '2026-08-01',
+      // A save always carries the whole row, so a cleared field travels
+      // alongside the fields that still have numbers.
+      tabs: [{
+        tab: '2PM Dough Count',
+        row: { Date: '2026-08-01', "Today's Forecast": '', 'Current Sales': 4500 },
+      }],
     });
-    const summary = script.world.ss.getSheetByName('Summary')!;
-    expect(summary.getCell(2, 3)).toBe('');
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    expect(sheet.getCell(2, 2)).toBe('');
+    expect(sheet.getCell(2, 3)).toBe(4500);
+  });
+
+  it('an EON save lands in its own tab, untouched by the 2 PM save', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    post(script, {
+      secret: SECRET, type: 'eon', date: '2026-08-01',
+      tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-08-01', 'EON Sales': 9100, 'EON Indi Count': 20 } }],
+    });
+    expect(script.world.ss.getSheetByName('EON Dough Count')!.rowByIndex(2, 3))
+      .toEqual(['2026-08-01', '9100', '20']);
+    expect(script.world.ss.getSheetByName('2PM Dough Count')!.getCell(2, 6)).toBe(34);
   });
 });
 
-describe('dough script — headers and rename integrity (§0)', () => {
-  it('setup writes Boli headers everywhere and the old misspelling never survives', () => {
+describe('dough script — the sheet does the maths itself', () => {
+  it('setup builds the two input tabs and one auto-filling formula per calculated column', () => {
     const script = freshDough();
-    const doughCount = script.world.ss.getSheetByName('Dough Count')!;
-    const headers = doughCount.headerRow(14);
-    expect(headers).toContain('Boli Trays');
-    expect(headers).toContain('Boli Have');
-    const eonCheck = script.world.ss.getSheetByName('EON Check')!.headerRow(7);
-    expect(eonCheck).toEqual(['Date', 'Indi', 'Small', 'Large', 'Sic', 'Boli', 'Trays Short']);
-    for (const sheet of script.world.ss.sheets.values()) {
-      for (const value of sheet.grid.values()) {
-        expect(String(value)).not.toMatch(new RegExp('b' + 'oil', 'i'));
-      }
-    }
-  });
+    const ss = script.world.ss;
 
-  it('setup no longer creates the retired snapshot tab', () => {
-    const script = freshDough();
-    expect(script.world.ss.getSheetByName('Actual Use')).toBeNull();
-  });
-});
-
-describe('dough script — Dough Use formulas (§8)', () => {
-  it('installs the date spine and one live formula per usage column', () => {
-    const script = freshDough();
-    const use = script.world.ss.getSheetByName('Dough Use')!;
-    expect(use.headerRow(13)).toEqual([
-      'Date', 'AM Sales $', 'AM Indi', 'AM Small', 'AM Large', 'AM Sic', 'AM Boli',
-      'PM Sales $', 'PM Indi', 'PM Small', 'PM Large', 'PM Sic', 'PM Boli',
+    expect(ss.getSheetByName('2PM Dough Count')!.headerRow(13)).toEqual([
+      'Date', "Today's Forecast", 'Current Sales', 'Sales Left', "Tomorrow's Forecast",
+      'Indi Count', 'Small Count', 'Large Count', 'Sic Count', 'Boli Count',
+      'Bible', 'Forecast Rounding', 'Batch Rounding',
     ]);
-    expect(use.formulas.get('2:1')).toContain('SORT(UNIQUE');
-    // AM Indi: yesterday's EON have − today's 2 PM have.
-    expect(use.formulas.get('2:3')).toContain("VLOOKUP($A2:$A-1,'EON Count'");
-    expect(use.formulas.get('2:3')).toContain("'Dough Count'");
-    // PM Boli: final dough − EON have, gated by IFERROR on missing finals.
-    const pmBoli = use.formulas.get('2:13')!;
-    expect(pmBoli).toContain("'Final Dough'");
-    expect(pmBoli).toContain("'EON Count'");
-    expect(pmBoli).toContain('IFERROR');
+    expect(ss.getSheetByName('EON Dough Count')!.headerRow(7)).toEqual([
+      'Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count',
+      'EON Sic Count', 'EON Boli Count',
+    ]);
+
+    // Every calculated column is a single ARRAYFORMULA in row 2 — that is what
+    // makes a brand-new date calculate itself with nothing to fill down.
+    const make = ss.getSheetByName('Calculation Step Dough Make (estimate)')!;
+    expect(make.headerRow(10)[9]).toBe('Batches');
+    for (let c = 1; c <= 10; c++) {
+      expect(make.formulas.get(`2:${c}`)).toContain('ARRAYFORMULA');
+    }
+    // …and no calculated tab holds a second row of formulas to maintain.
+    expect([...make.formulas.keys()].every((k) => k.startsWith('2:'))).toBe(true);
+
+    const pm = ss.getSheetByName('Calculation Step Look up Dough Use for PM')!;
+    expect(pm.formulas.get('2:5')).toContain('VLOOKUP');
+    expect(pm.formulas.get('2:5')).toContain('Bible Lookup (auto)');
+    expect(pm.formulas.get('2:5')).toContain('<=0'); // nothing left to sell → nothing used
+
+    expect(ss.getSheetByName('Bible Lookup (auto)')!.hidden).toBe(true);
+  });
+
+  it('the make formulas follow the app rules: floored trays, Boli top-up, batches never below one', () => {
+    const script = freshDough();
+    const make = script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!;
+    const indiTrays = make.formulas.get('2:2')!;
+    expect(indiTrays).toContain('CEILING'); // part-trays round up
+    expect(indiTrays).toContain('<0,0,'); // never a negative make
+    expect(indiTrays).toContain('/11'); // eleven Indi to a tray
+    expect(make.formulas.get('2:7')).toContain('36'); // Boli tops back up to 36 balls
+    expect(make.formulas.get('2:10')).toContain('<1,1,'); // round-down floored at one batch
+  });
+
+  it('AM use keys on YESTERDAY rather than the row above, so a missing night blanks instead of lying', () => {
+    const script = freshDough();
+    const indi = script.world.ss.getSheetByName('AM Dough Use')!.formulas.get('2:3')!;
+    expect(indi).toContain('-1'); // yesterday's date
+    expect(indi).toContain("'EON Dough Count'");
+    expect(indi).toContain('VLOOKUP');
+    expect(indi).toContain('check count?'); // a negative means a miscount, not a number
+  });
+
+  it('the retired layout can be cleared away once the new one is trusted', () => {
+    const script = freshDough();
+    script.world.ss.insertSheet('Summary');
+    script.world.ss.insertSheet('Dough Use');
+    expect(post(script, { secret: SECRET, type: 'retire', confirm: 'WIPE ALL DATA' }))
+      .toMatchObject({ ok: true, removed: 2 });
+    expect(script.world.ss.getSheetByName('Summary')).toBeNull();
+    // …and it refuses without the confirm phrase.
+    script.world.ss.insertSheet('Summary');
+    expect(post(script, { secret: SECRET, type: 'retire' }).ok).toBe(false);
+    expect(script.world.ss.getSheetByName('Summary')).not.toBeNull();
   });
 });
 
@@ -193,57 +240,17 @@ describe('dough script — fitted bibles (§8)', () => {
     const theilSen = script.fns.theilSen as (
       pts: [number, number][],
     ) => { slope: number; intercept: number };
-    // Perfect line y = 0.01x, plus one wild outlier.
-    const fit = theilSen([
-      [4000, 40], [6000, 60], [8000, 80], [10000, 100], [7000, 500],
-    ]);
+    const fit = theilSen([[4000, 40], [6000, 60], [8000, 80], [10000, 100], [7000, 500]]);
     expect(fit.slope).toBeCloseTo(0.01, 3);
     expect(Math.abs(fit.intercept)).toBeLessThan(5);
-  });
-
-  it('emits a suggested table at the current thresholds beside current values', () => {
-    const script = freshDough();
-    // Mirror the real bibles first (thresholds + current values come from here).
-    post(script, { secret: SECRET, ...biblesToPayload(bibles) });
-
-    // Synthetic winter history in Dough Use + EON sales: use ≈ 1% of sales for
-    // every size (AM half + PM half), across four nights.
-    const use = script.world.ss.getSheetByName('Dough Use')!;
-    const eon = script.world.ss.getSheetByName('EON Count')!;
-    const nights: [string, number][] = [
-      ['2026-01-05', 4000], ['2026-01-06', 8000], ['2026-01-07', 12000], ['2026-01-08', 16000],
-    ];
-    nights.forEach(([date, sales], i) => {
-      const half = sales * 0.005;
-      use.setCell(i + 2, 1, date);
-      [3, 4, 5, 6].forEach((col) => use.setCell(i + 2, col, half)); // AM per size
-      [10, 11, 12, 13].forEach((col) => use.setCell(i + 2, col, half)); // PM per size
-      eon.setCell(i + 2, 1, date);
-      eon.setCell(i + 2, 16, sales);
-    });
-
-    script.fns.generateFittedBibles();
-    const fitted = script.world.ss.getSheetByName('New Dough Bible')!;
-    expect(fitted.getCell(1, 1)).toContain('SUGGESTED');
-    expect(fitted.rowByIndex(3, 9)).toEqual([
-      'Sales', 'Indi (new)', 'Indi (now)', 'Small (new)', 'Small (now)',
-      'Large (new)', 'Large (now)', 'Sic (new)', 'Sic (now)',
-    ]);
-    // First threshold is 3,750: fit says 1% of sales ≈ 38 balls; current Indi is 11.
-    expect(fitted.getCell(4, 1)).toBe(3750);
-    expect(fitted.getCell(4, 2)).toBe(38);
-    expect(fitted.getCell(4, 3)).toBe(11);
-    // Peach tab has no peach-season nights → says so instead of inventing numbers.
-    const peachFitted = script.world.ss.getSheetByName('New Peach Bible')!;
-    expect(String(peachFitted.getCell(3, 1))).toContain('Not enough history');
   });
 });
 
 describe('bible tripwire — app JSON vs the mirror the script writes', () => {
-  it('the mirror tabs hold exactly the numbers in src/data', () => {
+  it('the mirror holds exactly src/data, and builds both lookup directions', () => {
     const script = freshDough();
-    const answer = post(script, { secret: SECRET, ...biblesToPayload(bibles) });
-    expect(answer).toMatchObject({ ok: true, bibles: 'updated' });
+    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+      .toMatchObject({ ok: true, bibles: 'updated' });
 
     const mirror = script.world.ss.getSheetByName('Dough Bible')!;
     bibles.regular.rows.forEach((row, i) => {
@@ -251,16 +258,20 @@ describe('bible tripwire — app JSON vs the mirror the script writes', () => {
         [row.sales, row.indi, row.small, row.large, row.sic].map(String),
       );
     });
-    const peachMirror = script.world.ss.getSheetByName('Peach Bible')!;
-    bibles.peach.rows.forEach((row, i) => {
-      expect(peachMirror.rowByIndex(6 + i, 5)).toEqual(
-        [row.sales, row.indi, row.small, row.large, row.sic].map(String),
-      );
-    });
-    // And the hash gate: an identical resend is a no-op.
-    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) })).toMatchObject({
-      bibles: 'unchanged',
-    });
+
+    // The hidden lookup tab carries a plain (round-down) copy and a key-shifted
+    // (round-up) copy, so one VLOOKUP serves either direction.
+    const lookup = script.world.ss.getSheetByName('Bible Lookup (auto)')!;
+    const first = bibles.regular.rows[0];
+    const second = bibles.regular.rows[1];
+    expect(lookup.getCell(1, 1)).toBe(first.sales);
+    expect(lookup.getCell(1, 2)).toBe(first.indi);
+    expect(Number(lookup.getCell(1, 7))).toBeLessThan(0); // below the first row clamps to it
+    expect(Number(lookup.getCell(2, 7))).toBeCloseTo(first.sales + 0.000001, 5);
+    expect(lookup.getCell(2, 8)).toBe(second.indi);
+
+    expect(post(script, { secret: SECRET, ...biblesToPayload(bibles) }))
+      .toMatchObject({ bibles: 'unchanged' });
   });
 });
 
@@ -338,27 +349,23 @@ describe('wipe — deliberate clean slate (secret + confirm phrase)', () => {
     post(script, { secret: SECRET, ...biblesToPayload(bibles) });
     post(script, dayPayload('2026-08-01'));
     post(script, dayPayload('2026-08-02'));
-    script.fns.generateFittedBibles();
-    expect(script.world.ss.getSheetByName('New Dough Bible')).not.toBeNull();
+    const input = script.world.ss.getSheetByName('2PM Dough Count')!;
 
     // Without the confirm phrase nothing happens.
-    const refused = post(script, { secret: SECRET, type: 'wipe' });
-    expect(refused.ok).toBe(false);
-    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(3);
+    expect(post(script, { secret: SECRET, type: 'wipe' }).ok).toBe(false);
+    expect(input.getLastRow()).toBe(3);
 
-    const answer = post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' });
-    expect(answer).toMatchObject({ ok: true });
-    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(1); // header only
-    expect(script.world.ss.getSheetByName('Dough Count')!.getLastRow()).toBe(1);
-    expect(script.world.ss.getSheetByName('Summary')!.headerRow(3)).toEqual([
-      'Date', 'Bible Used', 'Forecast Tonight $',
-    ]);
-    // The real-data bible mirror survives; the test-derived suggestions do not.
+    expect(post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' }))
+      .toMatchObject({ ok: true });
+    expect(input.getLastRow()).toBe(1); // header only
+    expect(input.headerRow(3)).toEqual(['Date', "Today's Forecast", 'Current Sales']);
+    // The formulas that do the maths are untouched by a data wipe.
+    expect(script.world.ss.getSheetByName('Calculation Step Dough Make (estimate)')!
+      .formulas.get('2:2')).toContain('ARRAYFORMULA');
     expect(script.world.ss.getSheetByName('Dough Bible')!.getLastRow()).toBeGreaterThan(5);
-    expect(script.world.ss.getSheetByName('New Dough Bible')).toBeNull();
     // Life goes on: the next save starts cleanly at row 2.
     post(script, dayPayload('2026-08-03'));
-    expect(script.world.ss.getSheetByName('Summary')!.getLastRow()).toBe(2);
+    expect(input.getLastRow()).toBe(2);
   });
 
   it('temps: clears Log, station tabs, and Overview readings but keeps station names', () => {
@@ -399,23 +406,23 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
       secret: SECRET,
       type: 'eon',
       date: '2026-08-02',
-      tabs: [{ tab: 'EON Count', row: { Date: '2026-08-02', 'Final Sales $': 9100 } }],
+      tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-08-02', 'EON Sales': 9100 } }],
     });
 
     const one = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
     const tabs = one.tabs as Record<string, Record<string, string> | null>;
     expect(one.ok).toBe(true);
-    expect(tabs['Summary']!['Forecast Tonight $']).toBe('7200');
-    expect(tabs['Summary']!.Date).toBe('2026-08-01');
+    expect(tabs['2PM Dough Count']!["Today's Forecast"]).toBe('7200');
+    expect(tabs['2PM Dough Count']!.Date).toBe('2026-08-01');
     // A tab with no row for this date reads null, not an empty object.
-    expect(tabs['EON Count']).toBeNull();
+    expect(tabs['EON Dough Count']).toBeNull();
 
     // recent returns the same rows, newest dates last, one entry per date.
     const recent = get(script, { secret: SECRET, action: 'recent', n: '30' });
     const recentDates = recent.dates as Record<string, Record<string, Record<string, string> | null>>;
     expect(Object.keys(recentDates).sort()).toEqual(['2026-08-01', '2026-08-02']);
-    expect(recentDates['2026-08-01']['Summary']).toEqual(tabs['Summary']);
-    expect(recentDates['2026-08-02']['EON Count']!['Final Sales $']).toBe('9100');
+    expect(recentDates['2026-08-01']['2PM Dough Count']).toEqual(tabs['2PM Dough Count']);
+    expect(recentDates['2026-08-02']['EON Dough Count']!['EON Sales']).toBe('9100');
 
     // range narrows by date without changing row content.
     const range = get(script, { secret: SECRET, action: 'range', from: '2026-08-02', to: '2026-08-31' });
@@ -430,23 +437,23 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
   it('a duplicate hand-typed date row resolves to the first one, as a top-down scan would', () => {
     const script = freshDough();
     post(script, dayPayload('2026-08-01'));
-    const summary = script.world.ss.getSheetByName('Summary')!;
+    const input = script.world.ss.getSheetByName('2PM Dough Count')!;
     // Someone hand-adds a second row for the same date, in another format.
-    summary.setCell(3, 1, '8/1/26');
-    summary.setCell(3, 3, 9999);
+    input.setCell(3, 1, '8/1/26');
+    input.setCell(3, 2, 9999);
 
     const answer = get(script, { secret: SECRET, action: 'date', date: '2026-08-01' });
     const tabs = answer.tabs as Record<string, Record<string, string> | null>;
-    expect(tabs['Summary']!['Forecast Tonight $']).toBe('7200'); // the first row wins
+    expect(tabs['2PM Dough Count']!["Today's Forecast"]).toBe('7200'); // the first row wins
     // …and a save still merges into that same first row rather than the duplicate.
     post(script, {
       secret: SECRET,
       type: 'day',
       date: '8/1/26',
-      tabs: [{ tab: 'Summary', row: { Date: '8/1/26', 'Forecast Tonight $': 8100 } }],
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '8/1/26', "Today's Forecast": 8100 } }],
     });
-    expect(summary.getCell(2, 3)).toBe(8100);
-    expect(summary.getCell(3, 3)).toBe(9999); // duplicate untouched
+    expect(input.getCell(2, 2)).toBe(8100);
+    expect(input.getCell(3, 2)).toBe(9999); // duplicate untouched
   });
 
   it('reads work on an empty log and on a date nobody saved', () => {
@@ -462,15 +469,15 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
 describe('writing past the sheet ceiling (a fresh Google sheet stops at 1000 rows)', () => {
   it('dough: a save that lands past the last row grows the sheet instead of throwing', () => {
     const script = freshDough();
-    const summary = script.world.ss.getSheetByName('Summary')!;
+    const input = script.world.ss.getSheetByName('2PM Dough Count')!;
     // Pretend the log already fills the sheet to its ceiling.
-    summary.setCell(summary.getMaxRows(), 1, '2026-01-01');
-    expect(summary.getLastRow()).toBe(1000);
+    input.setCell(input.getMaxRows(), 1, '2026-01-01');
+    expect(input.getLastRow()).toBe(1000);
 
     const answer = post(script, dayPayload('2026-08-01'));
     expect(answer.ok).toBe(true); // a throw here would park the record as "rejected"
-    expect(summary.getMaxRows()).toBeGreaterThan(1000);
-    expect(summary.getCell(1001, 3)).toBe(7200);
+    expect(input.getMaxRows()).toBeGreaterThan(1000);
+    expect(input.getCell(1001, 2)).toBe(7200);
   });
 
   it('temps: the append-only Log grows past the ceiling rather than refusing saves', () => {
@@ -491,25 +498,17 @@ describe('writing past the sheet ceiling (a fresh Google sheet stops at 1000 row
 });
 
 describe('a wipe erases data without stripping the sheet formatting', () => {
-  it('keeps the header row, the row count, and the red-warning rules setup() installed', () => {
+  it('keeps the header row and the sheet size a wipe should never shrink', () => {
     const script = freshDough();
-    const left = script.world.ss.getSheetByName('Left')!;
-    const rulesBefore = left.getConditionalFormatRules().length;
-    const maxRowsBefore = left.getMaxRows();
-    post(script, {
-      secret: SECRET,
-      type: 'day',
-      date: '2026-08-01',
-      tabs: [{ tab: 'Left', row: { Date: '2026-08-01', Small: -9, Shortages: 'Small -9' } }],
-    });
-    expect(left.getLastRow()).toBe(2);
+    const input = script.world.ss.getSheetByName('2PM Dough Count')!;
+    const maxRowsBefore = input.getMaxRows();
+    post(script, dayPayload('2026-08-01'));
+    expect(input.getLastRow()).toBe(2);
 
     expect(post(script, { secret: SECRET, type: 'wipe', confirm: 'WIPE ALL DATA' }).ok).toBe(true);
-    expect(left.getLastRow()).toBe(1); // data gone
-    expect(left.headerRow(6)[0]).toBe('Date'); // header intact
-    // Deleting rows would have shrunk both of these, silently killing the red
-    // highlight the owner relies on to spot a miscount.
-    expect(left.getConditionalFormatRules().length).toBe(rulesBefore);
-    expect(left.getMaxRows()).toBe(maxRowsBefore);
+    expect(input.getLastRow()).toBe(1); // data gone
+    expect(input.headerRow(2)[0]).toBe('Date'); // header intact
+    // Deleting rows would have shrunk the sheet and its formats along with it.
+    expect(input.getMaxRows()).toBe(maxRowsBefore);
   });
 });

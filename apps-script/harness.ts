@@ -124,6 +124,7 @@ export class FakeSheet {
   frozenRows = 0;
   /** Columns formatted as dates — writes of date-like text become Date objects. */
   dateColumns = new Set<number>();
+  hidden = false;
   private maxRows = 1000; // a fresh Google sheet's row ceiling
 
   constructor(public name: string) {}
@@ -174,6 +175,11 @@ export class FakeSheet {
 
   setFrozenRows(n: number) {
     this.frozenRows = n;
+  }
+
+  hideSheet() {
+    this.hidden = true;
+    return this;
   }
 
   appendRow(values: Cell[]) {

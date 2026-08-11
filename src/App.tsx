@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultConfig, type BibleId } from './config';
 import { runDoughCalculation, runEonCalculation, selectBibleId, slotForTime, type TempSlot } from './core';
 import type { DoughDayRecord } from './core/types';
@@ -7,6 +7,7 @@ import { BibleViewer } from './features/bibleViewer/BibleViewer';
 import { EonPage } from './features/eon/EonPage';
 import { emptyEonForm, type EonForm } from './features/eon/formState';
 import { HistoryCard } from './features/history/HistoryCard';
+import { AgreementCheck } from './features/shell/AgreementCheck';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { ActiveDate } from './features/shell/ActiveDate';
 import { BibleToggle } from './features/shell/BibleToggle';
@@ -18,6 +19,7 @@ import { parseCounts, toNumOrNull } from './features/shared/counts';
 import { emptyTwoPmForm, type TwoPmForm } from './features/twoPm/formState';
 import { TwoPmPage } from './features/twoPm/TwoPmPage';
 import type { Rounding } from './features/twoPm/DaysWork';
+import { checkAgreement, type SheetTabs } from './services/agreement';
 import { postJson } from './services/client';
 import { fetchDate, type FetchedDay } from './services/doughService';
 import {
@@ -172,6 +174,10 @@ export default function App() {
   const [resetArmed, setResetArmed] = useState(false);
   const [lastTempsNote, setLastTempsNote] = useState('');
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  // What the sheet's own formulas worked out for this date, for the bottom check.
+  const [sheetTabs, setSheetTabs] = useState<SheetTabs | null>(null);
+  const [checkNote, setCheckNote] = useState('');
+  const [checkSeq, setCheckSeq] = useState(0);
   const [, setTick] = useState(0);
 
   const rehydrate = useCallback((forDate: string) => {
@@ -190,6 +196,8 @@ export default function App() {
     rehydrate(date);
     setLoadMsg('');
     setLoadArmed(false);
+    setSheetTabs(null);
+    setCheckNote('');
   }
 
   // Boot: sweep pre-rename caches, resend anything dirty, wire the retry triggers.
@@ -227,7 +235,7 @@ export default function App() {
     let alive = true;
     const seqBefore = engine.editSeq(date);
     const timer = setTimeout(() => {
-      fetchDate(date, loadSettings(), cfg).then((result) => {
+      fetchDate(date, loadSettings()).then((result) => {
         if (!alive || result.kind !== 'loaded') return;
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
@@ -240,7 +248,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [date, rehydrate]);
+  }, [date, rehydrate, checkSeq]);
 
   const record = useMemo(
     () => buildDayRecord(date, form, rounding, bibleOverride),
@@ -248,6 +256,15 @@ export default function App() {
   );
   const status = engine.status(date);
   const synced = status.state === 'synced';
+  const agreement = useMemo(() => checkAgreement(record, sheetTabs), [record, sheetTabs]);
+
+  // Each time a save completes the sheet has recalculated — pull it back and
+  // re-run the comparison so the bottom line reflects what is actually stored.
+  const wasSynced = useRef(false);
+  useEffect(() => {
+    if (synced && !wasSynced.current) setCheckSeq((n) => n + 1);
+    wasSynced.current = synced;
+  }, [synced]);
   const activeBible = bibleOverride ?? selectBibleId(date, cfg);
 
   // ————— edits: React state + engine, in lockstep —————
@@ -309,7 +326,7 @@ export default function App() {
     }
     setLoadArmed(false);
     setLoadMsg('Loading…');
-    const result = await fetchDate(date, loadSettings(), cfg);
+    const result = await fetchDate(date, loadSettings());
     if (result.kind === 'empty') return setLoadMsg('The sheet has no row for this date.');
     if (result.kind === 'unreachable') return setLoadMsg("Can't reach the sheet — check Settings or connection.");
     if (result.kind === 'rejected') return setLoadMsg(`Sheet said no: ${result.reason}`);
@@ -431,6 +448,7 @@ export default function App() {
 
       <HistoryCard onPick={(d) => setDate(d)} />
       {mode !== 'temps' && <BibleViewer bible={bibles[activeBible]} />}
+      <AgreementCheck agreement={agreement} note={checkNote} />
       <Footer onSettings={() => setShowSettings(true)} />
     </div>
   );

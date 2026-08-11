@@ -7,14 +7,7 @@
  * choice stay blank until a choice exists.
  */
 import type { AppConfig } from '../config';
-import type {
-  Bibles,
-  CountedInventory,
-  DoughDayRecord,
-  EonRecord,
-  Maybe,
-  PerSize,
-} from '../core/types';
+import type { Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
 
 /** One tab's worth of a save: the row is merged into the tab by Date. */
 export interface TabWrite {
@@ -22,243 +15,68 @@ export interface TabWrite {
   row: Record<string, string | number>;
 }
 
-const SIZE_LABELS = { indi: 'Indi', small: 'Small', large: 'Large', sic: 'Sic', boli: 'Boli' } as const;
-
 /** Blank cell for unknowns — the sheet mirrors "not entered", never a fake 0. */
 function cellOf(value: Maybe): string | number {
   return value === null ? '' : value;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
+/** The 2 PM tab name — the only tab a day save writes. */
+export const DAY_TAB = '2PM Dough Count';
+/** The EON tab name — the only tab an end-of-night save writes. */
+export const EON_TAB = 'EON Dough Count';
+/** Calculated tabs the app reads back to check the sheet against its own math. */
+export const MAKE_TAB = 'Calculation Step Dough Make (estimate)';
 
-/** Everything the 2 PM save writes. */
+/**
+ * The 2 PM save: ONE row of what the owner counted and typed. The sheet's
+ * formulas take it from there — nothing derived is written, so a hand-edit
+ * in the sheet recalculates instead of being overwritten by the next save.
+ *
+ * Counts go as ball totals, which is what the count columns mean. Forecast
+ * Rounding is left blank so the sheet applies the same threshold rule the
+ * engine did, and stays free for the owner to override by typing up/down.
+ */
 export function dayRecordToTabWrites(record: DoughDayRecord): TabWrite[] {
-  const d = record.date;
-  const chosen =
-    record.chosenBatchOption === null
-      ? null
-      : record.chosenBatchOption === 'down'
-        ? record.batchDown
-        : record.batchUp;
-  const c = record.counts;
-
-  const shortages = record.flags.shortageSizes
-    .map((size) => `${SIZE_LABELS[size]} ${record.left[size]}`)
-    .join(', ');
-
-  const tonightMatched =
-    record.salesLeft === null
-      ? ''
-      : record.tonightRowMatched
-        ? record.tonightRowMatched.sales
-        : record.flags.negativeSalesLeft
-          ? '0 — flagged'
-          : '0';
-
-  const tomorrowMatched =
-    record.tomorrowForecast === null
-      ? ''
-      : record.flags.closedTomorrow
-        ? 'Closed'
-        : (record.tomorrowRowMatched?.sales ?? '');
-
-  const writes: TabWrite[] = [
+  return [
     {
-      tab: 'Summary',
+      tab: DAY_TAB,
       row: {
-        Date: d,
-        'Bible Used': record.bibleName,
-        'Forecast Tonight $': cellOf(record.todayForecast),
-        'Current Sales $': cellOf(record.currentSales),
-        'Sales Left $': cellOf(record.salesLeft),
-        'Forecast Tomorrow $': cellOf(record.tomorrowForecast),
-        'Total Trays To Make': cellOf(record.totalTrays),
-        'Exact Batches': record.exactBatches === null ? '' : round2(record.exactBatches),
-        'Chosen (Up/Down)':
-          record.chosenBatchOption === null ? '' : record.chosenBatchOption === 'up' ? 'Up' : 'Down',
-        'Batches Made': chosen === null ? '' : chosen.batches,
-        'Shortage?': record.flags.shortageSizes.map((s) => SIZE_LABELS[s]).join(', '),
-      },
-    },
-    {
-      tab: 'Dough Count',
-      row: {
-        Date: d,
-        'Indi Trays': cellOf(c.indiTrays),
-        'Indi Singles': cellOf(c.indiSingles),
-        'Indi Have': cellOf(record.have.indi),
-        'Small Trays': cellOf(c.smallTrays),
-        'Small Singles': cellOf(c.smallSingles),
-        'Small Have': cellOf(record.have.small),
-        'Large Trays': cellOf(c.largeTrays),
-        'Large Singles': cellOf(c.largeSingles),
-        'Large Have': cellOf(record.have.large),
-        'Sic Have': cellOf(record.have.sic),
-        'Boli Trays': cellOf(c.boliTrays),
-        'Boli Singles': cellOf(c.boliSingles),
-        'Boli Have': cellOf(record.have.boli),
-      },
-    },
-    {
-      tab: 'Sales',
-      row: {
-        Date: d,
-        'Forecast Tonight (entered)': cellOf(record.todayForecastRaw),
-        'Forecast Tonight $': cellOf(record.todayForecast),
-        'Current Sales (entered)': cellOf(record.currentSalesRaw),
-        'Current Sales $': cellOf(record.currentSales),
-        'Sales Left $': cellOf(record.salesLeft),
-        'Forecast Tomorrow (entered)': cellOf(record.tomorrowForecastRaw),
-        'Forecast Tomorrow $': cellOf(record.tomorrowForecast),
-        'Bible Used': record.bibleName,
-        'Bible Row Matched Tonight': tonightMatched,
-        'Bible Row Matched Tomorrow': tomorrowMatched,
-      },
-    },
-    {
-      tab: 'Use Tonight',
-      row: {
-        Date: d,
-        Indi: cellOf(record.use.indi),
-        Small: cellOf(record.use.small),
-        Large: cellOf(record.use.large),
-        Sic: cellOf(record.use.sic),
-      },
-    },
-    {
-      tab: 'Left',
-      row: {
-        Date: d,
-        Indi: cellOf(record.left.indi),
-        Small: cellOf(record.left.small),
-        Large: cellOf(record.left.large),
-        Sic: cellOf(record.left.sic),
-        Shortages: shortages,
-      },
-    },
-    {
-      tab: 'Need Tomorrow',
-      row: {
-        Date: d,
-        Indi: cellOf(record.need.indi),
-        Small: cellOf(record.need.small),
-        Large: cellOf(record.need.large),
-        Sic: cellOf(record.need.sic),
-      },
-    },
-    {
-      tab: 'Make',
-      row: {
-        Date: d,
-        'Indi Balls': cellOf(record.make.indi),
-        'Indi Trays': cellOf(record.trays.indi),
-        'Small Balls': cellOf(record.make.small),
-        'Small Trays': cellOf(record.trays.small),
-        'Large Balls': cellOf(record.make.large),
-        'Large Trays': cellOf(record.trays.large),
-        'Sic Balls': cellOf(record.sicBalls),
-        'Sic Trays': cellOf(record.trays.sic),
-        'Boli Trays': cellOf(record.boliTrays),
+        Date: record.date,
+        "Today's Forecast": cellOf(record.todayForecast),
+        'Current Sales': cellOf(record.currentSales),
+        'Sales Left': cellOf(record.salesLeft),
+        "Tomorrow's Forecast": cellOf(record.tomorrowForecast),
+        'Indi Count': cellOf(record.have.indi),
+        'Small Count': cellOf(record.have.small),
+        'Large Count': cellOf(record.have.large),
+        'Sic Count': cellOf(record.have.sic),
+        'Boli Count': cellOf(record.have.boli),
+        Bible: record.bibleUsed,
+        'Forecast Rounding': '',
+        'Batch Rounding': record.chosenBatchOption ?? '',
       },
     },
   ];
-
-  // Batches and Final Dough exist only once the owner has tapped a choice.
-  if (chosen) {
-    writes.push(
-      {
-        tab: 'Batches',
-        row: {
-          Date: d,
-          'Total Trays': cellOf(record.totalTrays),
-          Batches: chosen.batches,
-          'Rounded (Up/Down)': record.chosenBatchOption === 'up' ? 'Up' : 'Down',
-          Indi: cellOf(chosen.finalTraysToMake.indi),
-          Small: cellOf(chosen.finalTraysToMake.small),
-          Large: cellOf(chosen.finalTraysToMake.large),
-          Sic: cellOf(chosen.finalTraysToMake.sic),
-          Boli: cellOf(chosen.finalTraysToMake.boli),
-        },
-      },
-      {
-        tab: 'Final Dough',
-        row: {
-          Date: d,
-          'Indi Trays': cellOf(chosen.finalDough.indiTrays),
-          'Indi Singles': cellOf(chosen.finalDough.indiSingles),
-          'Indi Final': cellOf(chosen.finalDough.indiTotal),
-          'Small Trays': cellOf(chosen.finalDough.smallTrays),
-          'Small Singles': cellOf(chosen.finalDough.smallSingles),
-          'Small Final': cellOf(chosen.finalDough.smallTotal),
-          'Large Trays': cellOf(chosen.finalDough.largeTrays),
-          'Large Singles': cellOf(chosen.finalDough.largeSingles),
-          'Large Final': cellOf(chosen.finalDough.largeTotal),
-          'Sic Final': cellOf(chosen.finalDough.sicTotal),
-          'Boli Trays': cellOf(chosen.finalDough.boliTrays),
-          'Boli Singles': cellOf(chosen.finalDough.boliSingles),
-          'Boli Final': cellOf(chosen.finalDough.boliTotal),
-        },
-      },
-    );
-  }
-
-  return writes;
 }
 
-/** Everything the EON save writes. */
+/** The EON save: ONE row of the final count and the night's sales. */
 export function eonRecordToTabWrites(record: EonRecord): TabWrite[] {
-  const d = record.date;
-  const c = record.counts;
-
-  const writes: TabWrite[] = [
+  return [
     {
-      tab: 'EON Count',
+      tab: EON_TAB,
       row: {
-        Date: d,
-        'Indi Trays': cellOf(c.indiTrays),
-        'Indi Singles': cellOf(c.indiSingles),
-        'Indi Have': cellOf(record.eonHave.indi),
-        'Small Trays': cellOf(c.smallTrays),
-        'Small Singles': cellOf(c.smallSingles),
-        'Small Have': cellOf(record.eonHave.small),
-        'Large Trays': cellOf(c.largeTrays),
-        'Large Singles': cellOf(c.largeSingles),
-        'Large Have': cellOf(record.eonHave.large),
-        'Sic Have': cellOf(record.eonHave.sic),
-        'Boli Trays': cellOf(c.boliTrays),
-        'Boli Singles': cellOf(c.boliSingles),
-        'Boli Have': cellOf(record.eonHave.boli),
-        'Final Sales (entered)': cellOf(record.finalSalesRaw),
-        'Final Sales $': cellOf(record.finalSales),
+        Date: record.date,
+        'EON Sales': cellOf(record.finalSales),
+        'EON Indi Count': cellOf(record.eonHave.indi),
+        'EON Small Count': cellOf(record.eonHave.small),
+        'EON Large Count': cellOf(record.eonHave.large),
+        'EON Sic Count': cellOf(record.eonHave.sic),
+        'EON Boli Count': cellOf(record.eonHave.boli),
       },
     },
   ];
-
-  if (record.eonLeft && record.traysShort) {
-    const shortParts = (['indi', 'small', 'large', 'sic'] as const)
-      .filter((size) => (record.traysShort![size] ?? 0) > 0)
-      .map((size) => `${SIZE_LABELS[size]} ${record.traysShort![size]}`);
-    if ((record.boliTraysShort ?? 0) > 0) shortParts.push(`Boli ${record.boliTraysShort}`);
-    writes.push({
-      tab: 'EON Check',
-      row: {
-        Date: d,
-        Indi: cellOf(record.eonLeft.indi),
-        Small: cellOf(record.eonLeft.small),
-        Large: cellOf(record.eonLeft.large),
-        Sic: cellOf(record.eonLeft.sic),
-        Boli: cellOf(record.boliLeft),
-        'Trays Short': shortParts.join(', '),
-      },
-    });
-  }
-
-  return writes;
 }
 
-/** Deterministic content hash (FNV-1a) — used for the bible-mirror gate and payload dedupe. */
 export function hashString(text: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -362,68 +180,54 @@ function cell(row: SheetRow, key: string): string {
   return v === undefined || v === null ? '' : String(v);
 }
 
-/** Sheet "Dough Count" / "EON Count" row → the nine count-field strings. */
-export function countsRowToFields(row: SheetRow): Record<string, string> {
+/**
+ * The count tabs hold whole-ball totals per size, so a loaded row comes back
+ * in the Singles fields with Trays blank. That is faithful — the sheet never
+ * knew the tray/singles split — and the totals are what the math uses.
+ */
+export function countsRowToFields(row: SheetRow, prefix = ''): Record<string, string> {
+  const count = (size: string) => cell(row, `${prefix}${size} Count`);
   return {
-    indiTrays: cell(row, 'Indi Trays'),
-    indiSingles: cell(row, 'Indi Singles'),
-    smallTrays: cell(row, 'Small Trays'),
-    smallSingles: cell(row, 'Small Singles'),
-    largeTrays: cell(row, 'Large Trays'),
-    largeSingles: cell(row, 'Large Singles'),
-    sicSingles: cell(row, 'Sic Have'),
-    boliTrays: cell(row, 'Boli Trays'),
-    boliSingles: cell(row, 'Boli Singles'),
+    indiTrays: '',
+    indiSingles: count('Indi'),
+    smallTrays: '',
+    smallSingles: count('Small'),
+    largeTrays: '',
+    largeSingles: count('Large'),
+    sicSingles: count('Sic'),
+    boliTrays: '',
+    boliSingles: count('Boli'),
   };
 }
 
-/** Sheet "Sales" row → the three raw entered sales strings. */
+/** 2 PM row → the three sales strings the form holds. */
 export function salesRowToFields(row: SheetRow): {
   todayForecast: string;
   currentSales: string;
   tomorrowForecast: string;
 } {
   return {
-    todayForecast: cell(row, 'Forecast Tonight (entered)'),
-    currentSales: cell(row, 'Current Sales (entered)'),
-    tomorrowForecast: cell(row, 'Forecast Tomorrow (entered)'),
+    todayForecast: cell(row, "Today's Forecast"),
+    currentSales: cell(row, 'Current Sales'),
+    tomorrowForecast: cell(row, "Tomorrow's Forecast"),
   };
 }
 
-/** Sheet "Sales" row → which bible the record used (display name → id). */
-export function salesRowToBible(row: SheetRow, config: AppConfig): 'regular' | 'peach' | null {
-  const name = cell(row, 'Bible Used');
-  if (name === config.bibleDisplayNames.regular) return 'regular';
-  if (name === config.bibleDisplayNames.peach) return 'peach';
-  return null;
+/** 2 PM row → which bible the record used. */
+export function salesRowToBible(row: SheetRow): 'regular' | 'peach' | null {
+  const v = cell(row, 'Bible').toLowerCase();
+  return v === 'peach' ? 'peach' : v === 'regular' ? 'regular' : null;
 }
 
-/** Sheet "Summary" row → the tapped rounding choice. */
+/** 2 PM row → the tapped batch-rounding choice. */
 export function summaryRowToRounding(row: SheetRow): 'down' | 'up' | null {
-  const v = cell(row, 'Chosen (Up/Down)').toLowerCase();
+  const v = cell(row, 'Batch Rounding').toLowerCase();
   return v === 'up' ? 'up' : v === 'down' ? 'down' : null;
 }
 
-/** Sheet "EON Count" row → end-of-night balls on hand (for reference displays). */
-export function eonCountRowToHave(row: SheetRow): PerSize | null {
-  // A blank cell is missing data, not a zero — '' must not coerce to 0.
-  const n = (key: string) => {
-    const s = cell(row, key).trim();
-    return s === '' ? NaN : Number(s);
-  };
-  const have = {
-    indi: n('Indi Have'),
-    small: n('Small Have'),
-    large: n('Large Have'),
-    sic: n('Sic Have'),
-    boli: n('Boli Have'),
-  };
-  return Object.values(have).every(Number.isFinite) ? have : null;
-}
-
-/** Sheet "EON Count" row → the EON form's final-sales string. */
+/** EON row → the EON form's final-sales string. */
 export function eonCountRowToFinalSales(row: SheetRow): string {
-  return cell(row, 'Final Sales (entered)');
+  return cell(row, 'EON Sales');
 }
 
 /** History-card lines from a `recent` fetch. Newest first. */
@@ -439,12 +243,16 @@ export function summaryRowsToHistory(
 ): HistorySummary[] {
   return Object.entries(dates)
     .filter((entry): entry is [string, Record<string, SheetRow | null>] => entry[1] !== null)
-    .map(([date, tabs]) => ({
-      date,
-      finalSales: tabs['EON Count'] ? cell(tabs['EON Count'], 'Final Sales $') : '',
-      batchesMade: tabs['Summary'] ? cell(tabs['Summary'], 'Batches Made') : '',
-      shortage: tabs['Summary'] ? cell(tabs['Summary'], 'Shortage?') !== '' : false,
-    }))
+    .map(([date, tabs]) => {
+      const eon = tabs[EON_TAB];
+      const make = tabs[MAKE_TAB];
+      return {
+        date,
+        finalSales: eon ? cell(eon, 'EON Sales') : '',
+        batchesMade: make ? cell(make, 'Batches') : '',
+        shortage: false,
+      };
+    })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 

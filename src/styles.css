@@ -1023,3 +1023,80 @@ button {
 .save-bar {
   margin: 22px 0 6px;
 }
+
+/* ————— app-vs-sheet agreement, at the very bottom ————— */
+.agreement {
+  margin: 18px 0 4px;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agreement-mark {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.agreement-ok {
+  border-color: var(--indi);
+  color: var(--indi);
+  font-weight: 700;
+}
+
+.agreement-unchecked {
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.agreement-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.agreement-differ {
+  display: block;
+  border-color: #a33e2a;
+  color: #a33e2a;
+}
+
+.agreement-head {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agreement-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.agreement-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.agreement-values {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #a33e2a;
+}

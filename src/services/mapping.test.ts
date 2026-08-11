@@ -7,7 +7,6 @@ import {
   countsRowToFields,
   dayRecordToTabWrites,
   eonCountRowToFinalSales,
-  eonCountRowToHave,
   eonRecordToTabWrites,
   hashString,
   salesRowToBible,
@@ -18,7 +17,6 @@ import {
   tempsOverviewRows,
   tempsStationWrites,
   tempsToPayload,
-  type TabWrite,
 } from './mapping';
 
 /** The worked example: Jan 15, regular bible, owner tapped UP. */
@@ -52,177 +50,67 @@ const eonRecord = runEonCalculation(
   defaultConfig,
 );
 
-function tabOf(writes: TabWrite[], name: string) {
-  const found = writes.filter((w) => w.tab === name);
-  expect(found).toHaveLength(1);
-  return found[0].row;
-}
 
-describe('dayRecordToTabWrites', () => {
-  const writes = dayRecordToTabWrites(dayRecord);
-
-  it('writes the nine 2 PM tabs — and no usage snapshots (the sheet computes those)', () => {
-    expect(writes.map((w) => w.tab).sort()).toEqual(
-      ['Batches', 'Dough Count', 'Final Dough', 'Left', 'Make',
-       'Need Tomorrow', 'Sales', 'Summary', 'Use Tonight'].sort(),
-    );
-  });
-
-  it('Summary row', () => {
-    expect(tabOf(writes, 'Summary')).toEqual({
+describe('dayRecordToTabWrites — one row, counts only', () => {
+  it('writes a single 2 PM row: what was counted and typed, nothing derived', () => {
+    const writes = dayRecordToTabWrites(dayRecord);
+    expect(writes.map((w) => w.tab)).toEqual(['2PM Dough Count']);
+    expect(writes[0].row).toEqual({
       Date: '2026-01-15',
-      'Bible Used': "Bible '26",
-      'Forecast Tonight $': 7200,
-      'Current Sales $': 4500,
-      'Sales Left $': 2700,
-      'Forecast Tomorrow $': 9100,
-      'Total Trays To Make': 48,
-      'Exact Batches': 4.36,
-      'Chosen (Up/Down)': 'Up',
-      'Batches Made': 5,
-      'Shortage?': 'Small, Large, Sic',
+      "Today's Forecast": 7200,
+      'Current Sales': 4500,
+      'Sales Left': 2700,
+      "Tomorrow's Forecast": 9100,
+      'Indi Count': 15,
+      'Small Count': 43,
+      'Large Count': 26,
+      'Sic Count': 1,
+      'Boli Count': 13,
+      Bible: 'regular',
+      // Blank on purpose: the sheet applies the same threshold rule the engine
+      // did, and the owner stays free to override it by hand.
+      'Forecast Rounding': '',
+      'Batch Rounding': 'up',
     });
   });
 
-  it('Left row keeps the raw negatives with the shortage text', () => {
-    expect(tabOf(writes, 'Left')).toEqual({
-      Date: '2026-01-15',
-      Indi: 4, Small: -9, Large: -18, Sic: -1,
-      Shortages: 'Small -9, Large -18, Sic -1',
-    });
-  });
-
-  it('Make is pre-adjustment (set-out replaced); Batches sums to batches × 11', () => {
-    const make = tabOf(writes, 'Make');
-    expect(make).toMatchObject({
-      'Small Balls': 134, 'Small Trays': 17, 'Large Balls': 135, 'Large Trays': 23,
-      'Sic Balls': 4, 'Boli Trays': 4,
-    });
-    const batches = tabOf(writes, 'Batches');
-    expect(batches).toMatchObject({ Batches: 5, 'Rounded (Up/Down)': 'Up', Small: 20, Large: 27 });
-    const sum =
-      (batches.Indi as number) + (batches.Small as number) + (batches.Large as number) +
-      (batches.Sic as number) + (batches.Boli as number);
-    expect(sum).toBe(5 * defaultConfig.traysPerBatch);
-  });
-
-  it('Final Dough comes from the chosen (up) option, Boli singles included', () => {
-    expect(tabOf(writes, 'Final Dough')).toMatchObject({
-      'Small Trays': 25, 'Small Final': 203, 'Large Final': 188, 'Sic Final': 5,
-      'Boli Trays': 6, 'Boli Singles': 1, 'Boli Final': 37,
-    });
-  });
-
-  it('without a tapped choice, the choice-dependent tabs are simply absent (§11.3)', () => {
-    const untapped = dayRecordToTabWrites(baseRecord);
-    expect(untapped.some((w) => w.tab === 'Batches')).toBe(false);
-    expect(untapped.some((w) => w.tab === 'Final Dough')).toBe(false);
-    const summary = tabOf(untapped, 'Summary');
-    expect(summary['Chosen (Up/Down)']).toBe('');
-    expect(summary['Batches Made']).toBe('');
-  });
-
-  it('blanks travel as EMPTY CELLS, never fabricated zeros (§2)', () => {
+  it('a blank count stays an empty cell — never a fabricated zero', () => {
     const partial = runDoughCalculation(
       {
         date: '2026-01-15',
-        counts: counts({ smallTrays: 5 }), // only Small counted
+        counts: counts({ smallSingles: 40, sicSingles: 0 }),
         todayForecastRaw: 7.2,
         currentSalesRaw: 4.5,
-        tomorrowForecastRaw: null, // tomorrow blank
+        tomorrowForecastRaw: 9.1,
       },
       bibles,
       defaultConfig,
     );
-    const writes2 = dayRecordToTabWrites(partial);
-    const summary = tabOf(writes2, 'Summary');
-    expect(summary['Forecast Tomorrow $']).toBe('');
-    expect(summary['Total Trays To Make']).toBe('');
-    const count = tabOf(writes2, 'Dough Count');
-    expect(count['Indi Trays']).toBe('');
-    expect(count['Indi Have']).toBe('');
-    expect(count['Small Have']).toBe(40);
-    expect(count['Small Singles']).toBe(''); // sibling blank stays blank in the sheet
-    const sales = tabOf(writes2, 'Sales');
-    expect(sales['Forecast Tomorrow (entered)']).toBe('');
-    expect(sales['Bible Row Matched Tomorrow']).toBe('');
-    const need = tabOf(writes2, 'Need Tomorrow');
-    expect(need.Indi).toBe('');
+    const row = dayRecordToTabWrites(partial)[0].row;
+    expect(row['Small Count']).toBe(40);
+    expect(row['Sic Count']).toBe(0); // a typed zero is a real zero
+    expect(row['Indi Count']).toBe(''); // never counted → blank
   });
 
-  it('a typed 0 lands as a real 0 cell, and closed tomorrow labels the matched row', () => {
-    const closed = runDoughCalculation(
-      {
-        date: '2026-01-15',
-        counts: counts({ sicSingles: 0 }),
-        todayForecastRaw: 5.2,
-        currentSalesRaw: 2.2,
-        tomorrowForecastRaw: 0,
-      },
-      bibles,
-      defaultConfig,
-    );
-    const writes2 = dayRecordToTabWrites(closed);
-    expect(tabOf(writes2, 'Dough Count')['Sic Have']).toBe(0);
-    expect(tabOf(writes2, 'Summary')['Forecast Tomorrow $']).toBe(0);
-    expect(tabOf(writes2, 'Sales')['Bible Row Matched Tomorrow']).toBe('Closed');
-    expect(tabOf(writes2, 'Need Tomorrow')).toMatchObject({ Indi: 0, Small: 0, Large: 0, Sic: 0 });
-  });
-
-  it('"0 — flagged" lands in Bible Row Matched Tonight when sales left went negative', () => {
-    const negative = runDoughCalculation(
-      {
-        date: '2026-01-15', counts: counts({ smallTrays: 1 }),
-        todayForecastRaw: 5.2, currentSalesRaw: 5.5, tomorrowForecastRaw: 5.2,
-      },
-      bibles, defaultConfig,
-    );
-    expect(tabOf(dayRecordToTabWrites(negative), 'Sales')['Bible Row Matched Tonight'])
-      .toBe('0 — flagged');
+  it('no batch choice tapped yet leaves Batch Rounding blank', () => {
+    expect(dayRecordToTabWrites({ ...dayRecord, chosenBatchOption: null })[0].row['Batch Rounding'])
+      .toBe('');
   });
 });
 
-describe('eonRecordToTabWrites', () => {
-  const writes = eonRecordToTabWrites(eonRecord);
-
-  it('writes only EON tabs (merge semantics), no usage snapshot', () => {
-    expect(writes.map((w) => w.tab).sort()).toEqual(['EON Check', 'EON Count']);
-  });
-
-  it('EON Count row: trays/singles/have per size plus both final-sales forms', () => {
-    expect(tabOf(writes, 'EON Count')).toMatchObject({
+describe('eonRecordToTabWrites — one row', () => {
+  it('writes a single EON row of the final count and the sales', () => {
+    const writes = eonRecordToTabWrites(eonRecord);
+    expect(writes.map((w) => w.tab)).toEqual(['EON Dough Count']);
+    expect(writes[0].row).toEqual({
       Date: '2026-01-15',
-      'Indi Have': 34, 'Small Have': 156, 'Large Have': 154, 'Sic Have': 2, 'Boli Have': 36,
-      'Final Sales (entered)': 7.9,
-      'Final Sales $': 7900,
+      'EON Sales': 7900,
+      'EON Indi Count': 34,
+      'EON Small Count': 156,
+      'EON Large Count': 154,
+      'EON Sic Count': 2,
+      'EON Boli Count': 36,
     });
-  });
-
-  it('EON Check row now includes Boli against its 36-ball target (§11.1)', () => {
-    expect(tabOf(writes, 'EON Check')).toEqual({
-      Date: '2026-01-15',
-      Indi: 8, Small: 31, Large: 37, Sic: -1, Boli: 0,
-      'Trays Short': 'Sic 1',
-    });
-  });
-
-  it('a Boli shortfall joins the Trays Short text', () => {
-    const short = runEonCalculation(
-      {
-        date: '2026-01-15',
-        counts: counts({
-          indiTrays: 3, indiSingles: 1, smallTrays: 19, smallSingles: 4,
-          largeTrays: 25, largeSingles: 4, sicSingles: 2, boliTrays: 4, boliSingles: 3,
-        }),
-        finalSalesRaw: 7.9,
-      },
-      dayRecord,
-      bibles,
-      defaultConfig,
-    );
-    const row = tabOf(eonRecordToTabWrites(short), 'EON Check');
-    expect(row.Boli).toBe(-9);
-    expect(row['Trays Short']).toBe('Sic 1, Boli 2');
   });
 });
 
@@ -287,64 +175,46 @@ describe('temps mapping', () => {
 });
 
 describe('reverse mapping (loading)', () => {
-  it('Dough Count row round-trips counts, blanks staying blank (§2)', () => {
-    const partial = runDoughCalculation(
-      {
-        date: '2026-01-15',
-        counts: counts({ smallTrays: 5, sicSingles: 0 }),
-        todayForecastRaw: null,
-        currentSalesRaw: null,
-        tomorrowForecastRaw: null,
-      },
-      bibles,
-      defaultConfig,
-    );
-    const row = tabOf(dayRecordToTabWrites(partial), 'Dough Count');
+  it('a 2 PM row hydrates back into the form — counts land as ball totals', () => {
+    const row = dayRecordToTabWrites(dayRecord)[0].row;
     const fields = countsRowToFields(row);
-    expect(fields.smallTrays).toBe('5');
-    expect(fields.smallSingles).toBe(''); // blank hydrates back as blank
-    expect(fields.indiTrays).toBe('');
-    expect(fields.sicSingles).toBe('0'); // explicit zero hydrates back as '0'
-  });
-
-  it('Sales row → raw entered strings + the record’s bible', () => {
-    const row = tabOf(dayRecordToTabWrites(dayRecord), 'Sales');
+    // The sheet never knew the tray/singles split, so totals come back as singles.
+    expect(fields.smallSingles).toBe('43');
+    expect(fields.smallTrays).toBe('');
+    expect(fields.sicSingles).toBe('1');
     expect(salesRowToFields(row)).toEqual({
-      todayForecast: '7.2', currentSales: '4.5', tomorrowForecast: '9.1',
+      todayForecast: '7200', currentSales: '4500', tomorrowForecast: '9100',
     });
-    expect(salesRowToBible(row, defaultConfig)).toBe('regular');
-    expect(salesRowToBible({ 'Bible Used': "Peach '24" }, defaultConfig)).toBe('peach');
-    expect(salesRowToBible({}, defaultConfig)).toBeNull();
+    expect(salesRowToBible(row)).toBe('regular');
+    expect(summaryRowToRounding(row)).toBe('up');
   });
 
-  it('Summary row → the tapped rounding choice', () => {
-    expect(summaryRowToRounding({ 'Chosen (Up/Down)': 'Up' })).toBe('up');
-    expect(summaryRowToRounding({ 'Chosen (Up/Down)': 'Down' })).toBe('down');
+  it('an EON row hydrates back through the EON prefix', () => {
+    const row = eonRecordToTabWrites(eonRecord)[0].row;
+    expect(countsRowToFields(row, 'EON ').largeSingles).toBe('154');
+    expect(eonCountRowToFinalSales(row)).toBe('7900');
+  });
+
+  it('unknown bible / rounding cells read as nothing rather than guessing', () => {
+    expect(salesRowToBible({})).toBeNull();
     expect(summaryRowToRounding({})).toBeNull();
-  });
-
-  it('EON Count row → eonHave and the entered final sales', () => {
-    const row = tabOf(eonRecordToTabWrites(eonRecord), 'EON Count');
-    expect(eonCountRowToHave(row)).toEqual({ indi: 34, small: 156, large: 154, sic: 2, boli: 36 });
-    expect(eonCountRowToFinalSales(row)).toBe('7.9');
-    expect(eonCountRowToHave({})).toBeNull();
+    expect(salesRowToBible({ Bible: 'peach' })).toBe('peach');
   });
 
   it('recent fetch → history lines, newest first', () => {
     const history = summaryRowsToHistory({
       '2026-07-28': {
-        Summary: { 'Batches Made': 4, 'Shortage?': '' },
-        'EON Count': { 'Final Sales $': 8200 },
+        'Calculation Step Dough Make (estimate)': { Batches: 4 },
+        'EON Dough Count': { 'EON Sales': 8200 },
       },
       '2026-07-29': {
-        Summary: { 'Batches Made': 5, 'Shortage?': 'Small' },
-        'EON Count': null,
+        'Calculation Step Dough Make (estimate)': { Batches: 5 },
+        'EON Dough Count': null,
       },
-      '2026-07-27': null,
+      '2026-07-30': null,
     });
-    expect(history).toEqual([
-      { date: '2026-07-29', finalSales: '', batchesMade: '5', shortage: true },
-      { date: '2026-07-28', finalSales: '8200', batchesMade: '4', shortage: false },
-    ]);
+    expect(history.map((h) => h.date)).toEqual(['2026-07-29', '2026-07-28']);
+    expect(history[0]).toMatchObject({ batchesMade: '5', finalSales: '' });
+    expect(history[1]).toMatchObject({ batchesMade: '4', finalSales: '8200' });
   });
 });

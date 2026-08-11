@@ -2,19 +2,21 @@
  * Sheet reads for the dough log (saves go through the sync engine). All
  * fetches resolve to explicit results — nothing here throws.
  */
-import type { AppConfig } from '../config';
 import type { Bibles } from '../core/types';
 import { getJson, postJson } from './client';
 import {
   biblesToPayload,
   countsRowToFields,
+  DAY_TAB,
   eonCountRowToFinalSales,
+  EON_TAB,
   salesRowToBible,
   salesRowToFields,
   summaryRowsToHistory,
   summaryRowToRounding,
   type HistorySummary,
 } from './mapping';
+import type { SheetTabs } from './agreement';
 import { cacheHistory, cachedHistory } from './local';
 import type { SheetSettings } from './settings';
 
@@ -35,6 +37,8 @@ export interface FetchedDay {
   bible: 'regular' | 'peach' | null;
   eonCounts: Record<string, string> | null;
   finalSales: string | null;
+  /** Every tab the sheet answered with — what the agreement check reads. */
+  tabs: SheetTabs;
 }
 
 export type FetchDayResult =
@@ -47,7 +51,6 @@ export type FetchDayResult =
 export async function fetchDate(
   date: string,
   settings: SheetSettings,
-  config: AppConfig,
 ): Promise<FetchDayResult> {
   if (!settings.doughUrl.trim()) return { kind: 'unreachable' };
   const outcome = await getJson(settings.doughUrl, {
@@ -59,16 +62,19 @@ export async function fetchDate(
   if (outcome.kind === 'rejected') return { kind: 'rejected', reason: outcome.reason };
 
   const t = (outcome.data as { tabs?: Record<string, SheetRow | null> }).tabs ?? {};
-  if (!t['Sales'] && !t['Dough Count'] && !t['EON Count']) return { kind: 'empty' };
+  const day = t[DAY_TAB];
+  const eon = t[EON_TAB];
+  if (!day && !eon) return { kind: 'empty' };
   return {
     kind: 'loaded',
     day: {
-      sales: t['Sales'] ? salesRowToFields(t['Sales']) : null,
-      counts: t['Dough Count'] ? countsRowToFields(t['Dough Count']) : null,
-      rounding: t['Summary'] ? summaryRowToRounding(t['Summary']) : null,
-      bible: t['Sales'] ? salesRowToBible(t['Sales'], config) : null,
-      eonCounts: t['EON Count'] ? countsRowToFields(t['EON Count']) : null,
-      finalSales: t['EON Count'] ? eonCountRowToFinalSales(t['EON Count']) : null,
+      sales: day ? salesRowToFields(day) : null,
+      counts: day ? countsRowToFields(day) : null,
+      rounding: day ? summaryRowToRounding(day) : null,
+      bible: day ? salesRowToBible(day) : null,
+      eonCounts: eon ? countsRowToFields(eon, 'EON ') : null,
+      finalSales: eon ? eonCountRowToFinalSales(eon) : null,
+      tabs: t,
     },
   };
 }
