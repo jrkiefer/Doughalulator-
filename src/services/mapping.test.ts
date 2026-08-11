@@ -297,3 +297,16 @@ describe("the night's line on the self-building bible", () => {
       .not.toContain('New Bieblerb');
   });
 });
+
+describe('nights whose numbers do not line up', () => {
+  it('leaves PM takings blank rather than recording a negative', () => {
+    const odd = { ...eonRecord, pmSales: -2400 };
+    const row = eonRecordToTabWrites(odd, 'regular')!.find((w) => w.tab === 'PM Dough Use')!.row;
+    expect(row['PM Sales $']).toBe('');
+  });
+
+  it('a night with no takings teaches the bible nothing', () => {
+    const zero = { ...eonRecord, finalSales: 0 };
+    expect(eonRecordToTabWrites(zero, 'regular').map((w) => w.tab)).not.toContain('New Bieblerb');
+  });
+});

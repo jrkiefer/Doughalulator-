@@ -23,8 +23,8 @@
 import { readFileSync } from 'node:fs';
 import { get, loadScript, post } from '../apps-script/harness';
 import { defaultConfig } from '../src/config';
-import { runDoughCalculation, runEonCalculation } from '../src/core';
-import type { BibleId, DoughDayRecord } from '../src/core/types';
+import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation } from '../src/core';
+import type { AmUse, BibleId, DoughDayRecord } from '../src/core/types';
 import { bibles } from '../src/features/bibleData';
 import { emptyEonForm, type EonForm } from '../src/features/eon/formState';
 import { parseCounts, toNumOrNull } from '../src/features/shared/counts';
@@ -82,6 +82,32 @@ const dates = Object.keys(history).sort();
 
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
 
+/** Yesterday's closing count, in balls — what the morning's use is measured from. */
+function eonHaveOn(date: string) {
+  const counts = history[date]?.eon?.counts;
+  if (!counts) return null;
+  return computeHave(
+    parseCounts({
+      ...emptyEonForm,
+      indiSingles: str(counts.indi),
+      smallSingles: str(counts.small),
+      largeSingles: str(counts.large),
+      sicSingles: str(counts.sic),
+      boliSingles: str(counts.boli),
+    }),
+    cfg,
+  );
+}
+
+/** The morning's use for a date: last night's close against this afternoon's count. */
+function amUseFor(date: string, record: DoughDayRecord): AmUse | null {
+  const [y, m, d] = date.split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+  const yesterday = eonHaveOn(prev);
+  if (!yesterday) return null;
+  return computeAmUse(yesterday, record.have, record.currentSales);
+}
+
 function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payload: Payload } | null {
   const t = e.twoPm;
   if (!t) return null;
@@ -122,7 +148,7 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
   const record: DoughDayRecord = { ...base, chosenBatchOption: rounding };
   // Only the counts travel: the sheet's formulas work out the make, the
   // batches and the final dough from them.
-  const tabs = dayRecordToTabWrites(record);
+  const tabs = dayRecordToTabWrites(record, amUseFor(date, record));
   return { record, payload: { type: 'day', date, tabs } };
 }
 
@@ -151,7 +177,15 @@ function buildEon(date: string, e: HistoryEntry, dayRecord: DoughDayRecord | nul
     bibles,
     cfg,
   );
-  return { type: 'eon', date, tabs: eonRecordToTabWrites(record) };
+  return {
+    type: 'eon',
+    date,
+    tabs: eonRecordToTabWrites(
+      record,
+      dayRecord?.bibleUsed ?? e.twoPm?.bible,
+      dayRecord ? amUseFor(date, dayRecord) : null,
+    ),
+  };
 }
 
 const payloads: Payload[] = [];

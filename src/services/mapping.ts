@@ -187,7 +187,9 @@ export function eonRecordToTabWrites(
       tab: PM_USE_TAB,
       row: {
         Date: d,
-        'PM Sales $': cellOf(record.pmSales),
+        // A night whose final sales came in under the 2 PM figure has no
+        // meaningful PM takings — the owner's own sheet showed NA() here.
+        'PM Sales $': record.pmSales !== null && record.pmSales < 0 ? '' : cellOf(record.pmSales),
         'PM Indi Use': cellOf(record.pmUse.indi),
         'PM Small Use': cellOf(record.pmUse.small),
         'PM Large Use': cellOf(record.pmUse.large),
@@ -206,7 +208,8 @@ export function eonRecordToTabWrites(
     if (am === null && pm === null) return '';
     return (am ?? 0) + (pm ?? 0);
   };
-  if (record.finalSales !== null) {
+  // Only a night with real takings can teach the bible anything.
+  if (record.finalSales !== null && record.finalSales > 0) {
     writes.push({
       tab: BIBLE_BUILD_TABS[season],
       row: {
