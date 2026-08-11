@@ -54,6 +54,17 @@ In August 2026 the owner's previous tracking spreadsheets were imported into the
 - Both Apps Scripts accept a secret-guarded erase (`type: 'wipe'` with the confirm phrase `WIPE ALL DATA`) over their web-app URL. It is destructive and reachable by anyone holding the sheet's secret — kept because that same secret already allows overwriting every row, and because it is how a remote helper resets the sheets. `wipeAllData()` can also be called from the Apps Script editor if you would rather keep it off the network.
 - Column A of every tab is date-formatted, so Google stores real dates there and `getValues()` hands back Date objects, not the text that was written. Anything matching rows by date must go through `normalizeDate` (which handles all three shapes) — matching on the raw value silently appends duplicate rows instead of merging. The test harness models this quirk deliberately.
 
+## How the Dough Log works now (v1.1.0)
+
+The app saves only two things: the **2PM Dough Count** row and the **EON Dough Count** row. Everything else in the notebook — tonight's use, tomorrow's need, the make, the batches, the final dough, AM/PM use — is a formula that fills itself in. That means:
+
+- **You can correct a number in the notebook** and everything downstream recalculates. The app will not overwrite it, because the app never writes those columns.
+- **Nothing needs dragging down.** Each calculated column is one formula in row 2 that covers the whole column forever.
+- **The bottom of the app screen** compares the notebook's answers with the app's own maths and says whether they agree. If a line disagrees it names it with both numbers — usually that means someone edited a count in the notebook, which is exactly what you want to know.
+- `Forecast Rounding` in the 2 PM tab is normally blank, meaning "use the standard rule" (below $10,000 rounds down, at or above rounds up). Type `up` or `down` in it to force a row.
+- The hidden `Bible Lookup (auto)` tab is housekeeping the script maintains — leave it alone.
+- Once the new layout is trusted, **🍕 Dough Tools → Remove retired tabs** deletes the old layout's tabs.
+
 ## If something ever looks wrong
 
 - App won't save ("will sync" forever): open SETTINGS and tap both **Test Connection** buttons. If one fails, re-copy that sheet's URL and secret (steps above).

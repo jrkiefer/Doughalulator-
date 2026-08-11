@@ -16,4 +16,6 @@
 3. Sheet columns that depend on the tapped batch choice stay blank until a choice is tapped, then sync.
 4. Sicilian EON shortfalls report at full strength (no clamp, no minimum).
 
+- [x] **v1.1.0 — the sheet owns the maths** · Rebuilt the dough log to the owner's own design (`Doughalulator.ods`): the app saves ONE 2 PM count row and ONE EON count row, and every other number is a live formula. `setup()` installs a single ARRAYFORMULA per calculated column, so a new date calculates itself with nothing to fill down. Formulas mirror the engine rule for rule (trays floored at zero, round-down batches floored at one, Boli topped back to 36 balls, 40/60 Small/Large split); a hidden `Bible Lookup (auto)` tab carries round-down and key-shifted round-up copies of each bible so one VLOOKUP serves either direction. Two fixes to the owner's prototype: rows 3+ referenced whole columns instead of their own row, and AM use assumed the 2 PM and EON tabs stayed row-aligned — it is now keyed on yesterday's date. The app cross-checks the sheet's numbers against its own engine and shows the verdict at the very bottom of the screen. `scripts/import-history.ts` writes the same two rows. 151 tests.
+
 **The app is live and in real use.**
