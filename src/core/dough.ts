@@ -66,6 +66,11 @@ export function buildBatchOption(
     countedSizes.large && trays.large !== null,
   );
 
+  // The floor at zero wins over hitting the batch target exactly: a big
+  // round-down can ask Small or Large to give up more trays than it has, and a
+  // negative tray count is nonsense on a bench. So when it bites, the per-size
+  // trays add up to MORE than batches × traysPerBatch. That is the intended
+  // trade — the mixer runs whole batches either way — not a rounding slip.
   const finalTraysToMake: PerSizeMaybe = {
     indi: trays.indi,
     small: trays.small === null ? null : Math.max(0, trays.small + smallTrayDelta),
@@ -207,7 +212,12 @@ export function runDoughCalculation(
       : null;
 
   // Batches need tonight AND tomorrow to be known; uncounted sizes are excluded.
-  const batchesKnown = tonightKnown && tomorrowNeed !== null;
+  // With NOTHING counted there is no answer to give: every size would contribute
+  // zero and the total would read as a confident "nothing to make" when the real
+  // state is "we haven't counted yet". Closed tomorrow is the exception — then
+  // zero is the true answer whatever the counts say.
+  const anySizeCounted = BIBLE_SIZES.some((size) => countedSizes[size]) || countedSizes.boli;
+  const batchesKnown = tonightKnown && tomorrowNeed !== null && (closedTomorrow || anySizeCounted);
   let totalTrays: Maybe = null;
   if (batchesKnown) {
     totalTrays = closedTomorrow

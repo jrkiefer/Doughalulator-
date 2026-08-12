@@ -219,6 +219,35 @@ describe('splitTrayDelta (40/60 between Small and Large)', () => {
   });
 });
 
+describe('the tray floor at zero (a deliberate trade, pinned here)', () => {
+  it('never asks for negative trays, even when that overshoots the batch target', () => {
+    // Small has only 1 tray to give but the round-down wants several back.
+    const option = buildBatchOption(
+      1,
+      {
+        totalTrays: 30,
+        trays: { indi: 20, small: 1, large: 9, sic: 0 },
+        sicBalls: 0,
+        boliTrays: 0,
+        counts: counts({ indiTrays: 0, smallTrays: 0, largeTrays: 0, boliTrays: 0, sicSingles: 0 }),
+        countedSizes: { indi: true, small: true, large: true, sic: true, boli: true },
+        have: { indi: 0, small: 0, large: 0, sic: 0, boli: 0 },
+      },
+      defaultConfig,
+    );
+    expect(option.finalTraysToMake.small).toBe(0);
+    expect(option.finalTraysToMake.large).toBeGreaterThanOrEqual(0);
+    // The floor bit, so the trays now sum ABOVE the 11-tray target. Intended:
+    // a negative tray count would be nonsense on a bench.
+    const summed =
+      option.finalTraysToMake.indi! +
+      option.finalTraysToMake.small! +
+      option.finalTraysToMake.large! +
+      option.finalTraysToMake.boli!;
+    expect(summed).toBeGreaterThan(option.targetTrays);
+  });
+});
+
 describe('blank vs zero through the calculation (§2)', () => {
   it('a size typed as 0 participates fully; a blank size stays out', () => {
     const record = run({
@@ -231,6 +260,46 @@ describe('blank vs zero through the calculation (§2)', () => {
     expect(record.have.sic).toBe(0);
     expect(record.make.sic).toBe(2);
     expect(record.trays.sic).toBe(1);
+  });
+
+  it('sales filled but NOTHING counted yet leaves the batch total unknown, not zero', () => {
+    // The sales card sits above the counts on the page, so this is the state
+    // the owner passes through every afternoon. Every size contributing zero
+    // must NOT read as a finished "nothing to make".
+    const record = run({
+      counts: counts(),
+      todayForecastRaw: 11,
+      currentSalesRaw: 4.2,
+      tomorrowForecastRaw: 12,
+    });
+    expect(record.totalTrays).toBeNull();
+    expect(record.exactBatches).toBeNull();
+    expect(record.batchDown).toBeNull();
+    expect(record.batchUp).toBeNull();
+    // Tomorrow's need is still knowable — only the make is not.
+    expect(record.need.indi).not.toBeNull();
+  });
+
+  it('one counted size is enough to give a batch total', () => {
+    const record = run({
+      counts: counts({ smallTrays: 5 }),
+      todayForecastRaw: 11,
+      currentSalesRaw: 4.2,
+      tomorrowForecastRaw: 12,
+    });
+    expect(record.totalTrays).not.toBeNull();
+    expect(record.totalTrays!).toBeGreaterThan(0);
+  });
+
+  it('closed tomorrow still answers zero with nothing counted — zero is the truth there', () => {
+    const record = run({
+      counts: counts(),
+      todayForecastRaw: 11,
+      currentSalesRaw: 4.2,
+      tomorrowForecastRaw: 0,
+    });
+    expect(record.flags.closedTomorrow).toBe(true);
+    expect(record.totalTrays).toBe(0);
   });
 
   it('an uncounted size has null use/left/make even with full sales', () => {

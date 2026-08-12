@@ -104,6 +104,9 @@ export function EonPage(props: {
                       props.onFormChange({ manualTomorrowForecast: v }),
                     )}
                   />
+                  {props.synced && form.manualTomorrowForecast.trim() !== '' && (
+                    <span className="chip">saved</span>
+                  )}
                   <DollarEcho raw={form.manualTomorrowForecast} />
                 </div>
               </div>

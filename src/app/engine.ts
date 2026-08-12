@@ -12,7 +12,7 @@ import { parseCounts, toNumOrNull } from '../features/shared/counts';
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { postJson } from '../services/client';
-import { addDays, type FetchedDay } from '../services/doughService';
+import { addDays, syncBibles, type FetchedDay } from '../services/doughService';
 import {
   clearEntry,
   freshMeta,
@@ -23,10 +23,16 @@ import {
 } from '../services/local';
 import { dayRecordToTabWrites, eonRecordToTabWrites } from '../services/mapping';
 import { loadSettings } from '../services/settings';
-import { createSyncEngine } from '../services/sync';
+import { createSyncEngine, type RecordType } from '../services/sync';
 import { tempsEntryToPayload } from '../services/tempsService';
 
 const cfg = defaultConfig;
+
+/**
+ * The record types a dough-sheet fetch speaks for. Temps are deliberately not
+ * here: they live in the other notebook, so a dough fetch must never clear them.
+ */
+export const DOUGH_SHEET_RECORDS = ['day', 'eon'] as const satisfies readonly RecordType[];
 
 /** A record worth sending: at least one field the owner actually filled in. */
 export function formHasContent(form: Record<string, string>): boolean {
@@ -139,3 +145,17 @@ export const engine = createSyncEngine({
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (id) => clearTimeout(id),
 });
+
+/**
+ * Push the two bible tables to their read-only mirror tabs, once per app start.
+ *
+ * This is not housekeeping. `refreshBibleBuild()` in the dough script gives up
+ * silently when a mirror tab is empty, so after an Erase all data the
+ * self-building bible would just stop suggesting with nothing to show why.
+ * Sending them at boot makes the mirror heal itself; the script compares a
+ * content hash and does nothing at all when they already match, so the standing
+ * cost is one small request per start.
+ */
+export function mirrorBibles(): void {
+  void syncBibles(bibles, loadSettings());
+}

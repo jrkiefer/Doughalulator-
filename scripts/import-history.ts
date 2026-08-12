@@ -146,8 +146,8 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
         ? 'up'
         : null);
   const record: DoughDayRecord = { ...base, chosenBatchOption: rounding };
-  // Only the counts travel: the sheet's formulas work out the make, the
-  // batches and the final dough from them.
+  // The app is the calculator: the make, the batches and the final dough are
+  // all worked out here and written into place. The sheet holds no formulas.
   const tabs = dayRecordToTabWrites(record, amUseFor(date, record));
   return { record, payload: { type: 'day', date, tabs } };
 }

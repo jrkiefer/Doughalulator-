@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Outcome } from './client';
-import type { DateEntry } from './local';
+import type { DateEntry, DayEntry } from './local';
 import { createSyncEngine, type RecordType, type SyncDeps } from './sync';
 
 /**
@@ -295,10 +295,26 @@ describe('boot retry (§3c-4)', () => {
   });
 });
 
+/** What a dough-sheet fetch speaks for — mirrors DOUGH_SHEET_RECORDS in src/app/engine.ts. */
+const FROM_DOUGH_SHEET = ['day', 'eon'] as const;
+
+/** A day record as a fetch would build it: whole, not a patch onto what's there. */
+function fetchedDay(todayForecast: string): DayEntry {
+  return {
+    form: { todayForecast },
+    rounding: null,
+    bibleOverride: null,
+    updatedAt: 0,
+    syncedAt: 0,
+    ackHash: null,
+    rejectedReason: null,
+  };
+}
+
 describe('two-phone merge (§4)', () => {
   it('a clean local record is replaced silently by the sheet copy', () => {
     const world = makeWorld();
-    const result = world.engine.applyFetched(D, (entry) => {
+    const result = world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
       entry.day = {
         form: { todayForecast: '8' },
         rounding: null,
@@ -317,11 +333,50 @@ describe('two-phone merge (§4)', () => {
   it('a dirty local record wins and is not overwritten', () => {
     const world = makeWorld();
     typeSales(world, '7.7');
-    const result = world.engine.applyFetched(D, (entry) => {
-      entry.day!.form.todayForecast = '8';
+    const result = world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
     });
     expect(result).toBe('kept-dirty');
     expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('7.7');
+  });
+
+  it('a force-load CLEARS a record the sheet has no row for, instead of keeping it green', () => {
+    // The trap: the fetch only writes back what the sheet actually holds, so
+    // without clearing first, an EON the sheet never saw would survive on
+    // screen AND be stamped synced — a green badge over numbers that are
+    // nowhere but this phone.
+    const world = makeWorld();
+    world.engine.edit(D, 'eon', (rec) => {
+      rec.form = { finalSales: '10.8' };
+    });
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.night = { 'Walk-In': '36' };
+    });
+
+    // A sheet row with a 2 PM entry and no end-of-night entry.
+    world.engine.overwrite(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
+    });
+
+    expect(world.engine.getEntry(D).eon).toBeUndefined();
+    expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('8');
+    // Temps come from the OTHER notebook — a dough fetch must not touch them.
+    expect(world.engine.getEntry(D).temps!.readings.night['Walk-In']).toBe('36');
+  });
+
+  it('the background merge clears a stale record the same way', () => {
+    const world = makeWorld();
+    // Clean local EON (as if fetched earlier), then the sheet's row goes away.
+    world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.eon = { form: { finalSales: '9' }, updatedAt: 0, syncedAt: 0, ackHash: null, rejectedReason: null };
+    });
+    expect(world.engine.getEntry(D).eon).toBeDefined();
+
+    const result = world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
+    });
+    expect(result).toBe('replaced');
+    expect(world.engine.getEntry(D).eon).toBeUndefined();
   });
 
   it('the keystroke guard has a per-date edit sequence to detect mid-fetch typing', () => {
@@ -334,8 +389,8 @@ describe('two-phone merge (§4)', () => {
   it('overwrite (confirmed force-load) replaces even dirty content and marks it clean', () => {
     const world = makeWorld();
     typeSales(world, '7.7');
-    world.engine.overwrite(D, (entry) => {
-      entry.day!.form.todayForecast = '8';
+    world.engine.overwrite(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
     });
     expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('8');
     expect(world.engine.isDirty(D)).toBe(false);

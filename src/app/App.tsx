@@ -20,7 +20,7 @@ import { fetchDate } from '../services/doughService';
 import { cachedLatestTemps, cacheLatestTemps, sweepStaleKeys, type DateEntry } from '../services/local';
 import { loadSettings, type SheetSettings } from '../services/settings';
 import { fetchLatestTemps } from '../services/tempsService';
-import { applyFetchedToEntry, buildDayRecord, engine } from './engine';
+import { applyFetchedToEntry, buildDayRecord, DOUGH_SHEET_RECORDS, engine, mirrorBibles } from './engine';
 
 const cfg = defaultConfig;
 
@@ -81,6 +81,7 @@ export default function App() {
   useEffect(() => {
     sweepStaleKeys();
     engine.start();
+    mirrorBibles();
     const unsubscribe = engine.subscribe(() => setTick((t) => t + 1));
     const onOnline = () => void engine.flush();
     // Leaving a FIELD syncs right away instead of waiting out the debounce.
@@ -116,7 +117,9 @@ export default function App() {
         if (!alive || result.kind !== 'loaded') return;
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
-        const applied = engine.applyFetched(date, (entry) => applyFetchedToEntry(entry, result.day, date));
+        const applied = engine.applyFetched(date, DOUGH_SHEET_RECORDS, (entry) =>
+          applyFetchedToEntry(entry, result.day, date),
+        );
         if (applied === 'replaced') rehydrate(date);
         else setLoadMsg('Phone copy kept — tap LOAD FROM SHEET to pull the sheet.');
       });
@@ -210,7 +213,7 @@ export default function App() {
       JSON.stringify({ form, rounding, bible: bibleOverride ?? null, eon: eonForm });
     if (same) return setLoadMsg('Up to date ✓');
 
-    engine.overwrite(date, (entry) => applyFetchedToEntry(entry, result.day, date));
+    engine.overwrite(date, DOUGH_SHEET_RECORDS, (entry) => applyFetchedToEntry(entry, result.day, date));
     rehydrate(date);
     setLoadMsg('Loaded from the sheet ✓');
   }

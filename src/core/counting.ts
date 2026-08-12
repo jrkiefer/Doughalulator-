@@ -29,7 +29,9 @@ export function computeHave(counts: CountedInventory, config: AppConfig): PerSiz
     indi: haveFor(counted.indi, counts.indiTrays, bpt.indi, counts.indiSingles),
     small: haveFor(counted.small, counts.smallTrays, bpt.small, counts.smallSingles),
     large: haveFor(counted.large, counts.largeTrays, bpt.large, counts.largeSingles),
-    sic: counted.sic ? (counts.sicSingles ?? 0) : null,
+    // No `?? 0` here: `counted.sic` IS `sicSingles !== null`, so by this point
+    // it cannot be blank. Spelling a fallback would invent a case.
+    sic: counts.sicSingles,
     boli: haveFor(counted.boli, counts.boliTrays, bpt.boli, counts.boliSingles),
   };
 }

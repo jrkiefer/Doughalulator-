@@ -79,12 +79,22 @@ export interface SyncEngine {
   edit(date: string, type: 'day', apply: (rec: DayEntry) => void): void;
   edit(date: string, type: 'eon', apply: (rec: EonEntry) => void): void;
   edit(date: string, type: 'temps', apply: (rec: TempsEntry) => void): void;
-  /** Replace a date's entry from a sheet fetch — only where the local copy is clean. */
-  applyFetched(date: string, apply: (entry: DateEntry) => void): 'replaced' | 'kept-dirty';
+  /**
+   * Replace a date's entry from a sheet fetch — only where the local copy is
+   * clean. `replaces` names the record types this fetch speaks for: they are
+   * cleared first, so a type the sheet has no row for ends up genuinely empty
+   * instead of keeping a stale local copy. Types not listed (temps, which come
+   * from the other notebook) are left alone.
+   */
+  applyFetched(
+    date: string,
+    replaces: readonly RecordType[],
+    apply: (entry: DateEntry) => void,
+  ): 'replaced' | 'kept-dirty';
   /** True when any of the date's records has unsynced typed content. */
   isDirty(date: string): boolean;
   /** Force-load path: overwrite local with fetched content and mark clean. */
-  overwrite(date: string, apply: (entry: DateEntry) => void): void;
+  overwrite(date: string, replaces: readonly RecordType[], apply: (entry: DateEntry) => void): void;
   /** Two-tap reset target: blank the date and make sure nothing ever posts. */
   reset(date: string): void;
   /** Note that an edit landed while a fetch was in flight (keystroke guard §4). */
@@ -152,6 +162,35 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
 
   function isDirtyRecord(rec: SyncMeta | undefined): boolean {
     return !!rec && rec.updatedAt > rec.syncedAt && rec.rejectedReason === null;
+  }
+
+  /**
+   * Take a sheet fetch as the truth for the record types it speaks for.
+   *
+   * Clearing those types FIRST is the whole point: the fetch only writes back
+   * the ones the sheet actually has a row for, so without this a record the
+   * sheet doesn't hold would survive on screen and then get stamped synced —
+   * a green badge over numbers the sheet has never seen.
+   */
+  function takeFromSheet(
+    date: string,
+    replaces: readonly RecordType[],
+    apply: (entry: DateEntry) => void,
+  ): void {
+    const entry = getEntry(date);
+    for (const type of replaces) delete entry[type];
+    apply(entry);
+    const now = deps.now();
+    for (const type of TYPE_ORDER) {
+      const rec = metaOf(entry, type);
+      if (rec) {
+        rec.updatedAt = now;
+        rec.syncedAt = now; // fetched content is by definition what the sheet has
+        rec.rejectedReason = null;
+      }
+    }
+    persist(date);
+    notify();
   }
 
   function edit(date: string, type: RecordType, apply: (rec: never) => void): void {
@@ -222,7 +261,6 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
         if (outcome.kind === 'ok') {
           rec.syncedAt = editStamp;
           rec.ackHash = hash;
-          offline = false;
           persist(date);
         } else if (outcome.kind === 'retryable') {
           // Network-class: keep dirty, stop bothering this sheet for now.
@@ -297,37 +335,14 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       );
     },
 
-    applyFetched(date, apply) {
+    applyFetched(date, replaces, apply) {
       if (this.isDirty(date)) return 'kept-dirty';
-      const entry = getEntry(date);
-      apply(entry);
-      const now = deps.now();
-      for (const type of TYPE_ORDER) {
-        const rec = metaOf(entry, type);
-        if (rec) {
-          rec.updatedAt = now;
-          rec.syncedAt = now; // fetched content is by definition what the sheet has
-        }
-      }
-      persist(date);
-      notify();
+      takeFromSheet(date, replaces, apply);
       return 'replaced';
     },
 
-    overwrite(date, apply) {
-      const entry = getEntry(date);
-      apply(entry);
-      const now = deps.now();
-      for (const type of TYPE_ORDER) {
-        const rec = metaOf(entry, type);
-        if (rec) {
-          rec.updatedAt = now;
-          rec.syncedAt = now;
-          rec.rejectedReason = null;
-        }
-      }
-      persist(date);
-      notify();
+    overwrite(date, replaces, apply) {
+      takeFromSheet(date, replaces, apply);
     },
 
     reset(date) {

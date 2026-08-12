@@ -111,6 +111,22 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   local wins, clean local is replaced; typing mid-fetch discards the fetch; LOAD FROM SHEET is a
   force-pull with a dirty double-tap; RESET is two-tap and blanks only the open date.
 
+## Things a review already found — don't reintroduce them
+
+- **A total summed from `?? 0` is not the same as an answer.** `totalTrays` stays `null` until at
+  least one size is counted: with every size contributing zero, "nothing to make" reads as a
+  finished decision when the truth is "nobody has counted yet". Any new roll-up needs the same care.
+- **A sheet fetch must clear what it speaks for before applying** (`takeFromSheet` in
+  `services/sync.ts`, `DOUGH_SHEET_RECORDS` in `app/engine.ts`). The fetch only writes back records
+  the sheet actually holds, so without clearing, a record the sheet lacks survives on screen *and*
+  gets stamped synced. Temps are excluded on purpose — different notebook.
+- **`mirrorBibles()` runs at boot for a reason.** `refreshBibleBuild()` gives up silently when a
+  bible mirror tab is empty, so without a re-send the self-building bible would just stop after an
+  Erase all data. The script no-ops on an unchanged hash.
+- **Setup mistakes must be told, not retried.** A typo'd address, a 404, or an HTML page instead of
+  JSON are all `rejected` with plain-words reasons — retrying those forever just shows
+  OFFLINE — WILL RETRY and teaches the owner nothing.
+
 ## Two Google rules learned the hard way — do not relearn them
 
 1. **A tab name is capped at 31 characters.** Google truncates longer ones, and two names that

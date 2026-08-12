@@ -98,6 +98,21 @@ describe('dough script — validation', () => {
     }).error)).toContain('unknown tab');
   });
 
+  it('refuses a column the tab does not have, instead of dropping it in silence', () => {
+    // upsertRow looks a column up by heading and skips what it cannot find. A
+    // heading renamed on one side only would otherwise just stop recording,
+    // with no error anywhere — the same quiet failure mode as a tab-name clash.
+    const script = freshDough();
+    const answer = post(script, {
+      type: 'day', date: '2026-08-01',
+      tabs: [{ tab: 'Final Make Amount', row: { Date: '2026-08-01', 'Indi Trayz': 3 } }],
+    });
+    expect(answer.ok).toBe(false);
+    expect(String(answer.error)).toContain('unknown column');
+    // and nothing was written on the way to finding out
+    expect(script.world.ss.getSheetByName('Final Make Amount')!.getLastRow()).toBe(1);
+  });
+
   it('rejects an empty save and nonsensical negatives, but allows a negative sales-left', () => {
     const script = freshDough();
     expect(String(post(script, {

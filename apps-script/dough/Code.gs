@@ -236,9 +236,17 @@ function validateSave(body) {
       return 'row missing a valid Date in tab ' + write.tab;
     }
     var keys = Object.keys(write.row);
+    var columns = headersFor(write.tab);
     for (var k = 0; k < keys.length; k++) {
       var key = keys[k];
       if (key === 'Date') continue;
+      // upsertRow drops a column it cannot find, in silence. Left unchecked, a
+      // heading renamed on one side only would simply stop recording numbers
+      // with nothing to show for it - the same quiet failure that the
+      // 31-character tab-name collision once cost a whole rebuild.
+      if (columns.indexOf(key) === -1) {
+        return 'unknown column: ' + write.tab + ' -> ' + key;
+      }
       var value = write.row[key];
       if (value !== '' && value !== null) hasContent = true;
       var allowNegative = NEGATIVE_OK[write.tab] && NEGATIVE_OK[write.tab][key];

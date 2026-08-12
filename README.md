@@ -175,6 +175,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.7.0** | A full read-through of every line, and the four real bugs it turned up: the Day's Work card claiming "nothing to make" before anything was counted; LOAD FROM SHEET keeping numbers the sheet doesn't have and marking them saved; a mistyped sheet address hanging Test Connection for ever; and the bible mirror never being sent, which could quietly stall the self-building bible. |
 | **1.6.0** | The repo tidied: everything in folders, the finished build's paperwork removed, duplicate code collapsed, this page written. |
 | **1.5.0** | The look — the Mise en Place design ported in, on one flat background that a phone's dark mode can't invert. |
 | **1.4.0** | Passwords dropped at the owner's request, and the erase button taken off the internet with them. |

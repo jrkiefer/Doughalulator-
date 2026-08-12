@@ -32,6 +32,34 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('setup mistakes get a plain answer, not an endless retry', () => {
+  it('a typo\'d address is rejected in words instead of throwing', async () => {
+    // No fetch stubbed on purpose: this must never reach the network.
+    const outcome = await getJson('script.google.com/macros/s/abc/exec', { action: 'ping' });
+    expect(outcome.kind).toBe('rejected');
+    expect(outcome.kind === 'rejected' && outcome.reason).toMatch(/https:\/\//);
+  });
+
+  it('a 404 is a wrong address, not something to retry for ever', async () => {
+    mockFetch(jsonResponse({ error: 'not found' }, 404));
+    const outcome = await getJson('https://sheet.test/exec', { action: 'ping' });
+    expect(outcome.kind).toBe('rejected');
+  });
+
+  it('a 500 IS worth retrying', async () => {
+    mockFetch(jsonResponse({}, 500));
+    const outcome = await getJson('https://sheet.test/exec', { action: 'ping' });
+    expect(outcome.kind).toBe('retryable');
+  });
+
+  it('an HTML sign-in page instead of data names the real problem', async () => {
+    mockFetch(async () => new Response('<!doctype html><title>Sign in</title>', { status: 200 }));
+    const outcome = await getJson('https://sheet.test/exec', { action: 'ping' });
+    expect(outcome.kind).toBe('rejected');
+    expect(outcome.kind === 'rejected' && outcome.reason).toMatch(/Anyone/);
+  });
+});
+
 describe('the three-outcome transport (§3d)', () => {
   it('ok:true → success with the data', async () => {
     mockFetch(jsonResponse({ ok: true, saved: 'day' }));

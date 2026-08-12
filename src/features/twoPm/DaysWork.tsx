@@ -32,6 +32,10 @@ export function DaysWork(props: {
   const trays = chosen ? chosen.finalTraysToMake : { ...record.trays, boli: record.boliTrays };
   const closed = record.flags.closedTomorrow;
   const ready = record.totalTrays !== null;
+  // Not ready splits two ways, and saying the wrong one is worse than saying
+  // nothing: the sales card comes first on the page, so between filling it in
+  // and counting the dough it is the COUNTS that are missing, not the sales.
+  const salesKnown = record.salesLeft !== null && record.tomorrowForecast !== null;
 
   return (
     <>
@@ -58,7 +62,11 @@ export function DaysWork(props: {
         )}
 
         {!closed && !ready && (
-          <p className="days-work-note">Set sales and both forecasts to get the batch count.</p>
+          <p className="days-work-note">
+            {salesKnown
+              ? 'Count the dough above to get the batch count.'
+              : 'Set sales and both forecasts to get the batch count.'}
+          </p>
         )}
 
         {!closed && ready && record.totalTrays === 0 && (
