@@ -165,8 +165,19 @@ export function runDoughCalculation(
   for (const size of BIBLE_SIZES) {
     if (!tonightUse || !countedSizes[size]) continue;
     use[size] = tonightUse[size];
-    left[size] = have[size]! - tonightUse[size];
-    const shortfall = left[size]! < 0 ? -left[size]! : 0;
+    const raw = have[size]! - tonightUse[size];
+    if (size === 'sic') {
+      // Sicilian is never set out and used the same day (owner's rule, Aug 2026):
+      // it simply runs out. So its "left" floors at zero rather than carrying a
+      // negative, there is nothing to set out, and tomorrow's make is the plain
+      // need — not the need plus a shortfall that was never covered.
+      left[size] = Math.max(0, raw);
+      setOutBalls[size] = 0;
+      setOutTrays[size] = 0;
+      continue;
+    }
+    left[size] = raw;
+    const shortfall = raw < 0 ? -raw : 0;
     setOutBalls[size] = shortfall;
     setOutTrays[size] = shortfall > 0 ? Math.ceil(shortfall / perTray[size]) : 0;
   }

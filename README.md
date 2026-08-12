@@ -34,9 +34,12 @@ here holds, and what to do when something looks wrong.
 4. **What to make** = what tomorrow needs, minus what will be left after tonight. If tonight is
    going to eat into dough you already have, that dough is flagged to **set out now**, and
    tomorrow's make replaces it — dough is never counted twice.
-5. **Trays into batches.** One mixer run is 11 trays. The app shows the exact number of batches and
+5. **Sicilian is the exception.** It is never set out and used the same day, so it just runs out:
+   it never shows a negative, it is never in the set-out list, and tomorrow simply makes what
+   tomorrow needs.
+6. **Trays into batches.** One mixer run is 11 trays. The app shows the exact number of batches and
    offers it rounded both ways; the tray difference is absorbed by Small and Large, 40/60.
-6. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
+7. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
 
 Typing `0` for tomorrow's forecast means **closed tomorrow** — nothing to make. Leaving it blank
 means *unknown*, which is not the same thing, and the app treats it that way throughout.
@@ -178,6 +181,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.8.3** | Sicilian never goes negative on the 2 PM page any more. It is never set out and used the same day, so it just runs out — no negative, nothing in the set-out list, and tomorrow makes plainly what tomorrow needs. |
 | **1.8.2** | Checked the app against your real Dough Log for the first time: every tab, every column and every self-building-bible number lines up exactly. Added a test proving "Re-run setup" can never touch a recorded night. |
 | **1.8.1** | Tidying up: the leftover branch is gone, so `main` is the only one, and the end-of-night page now says "1 ball" instead of "1 balls". |
 | **1.8.0** | A second read-through, aimed at the parts the first one covered least. One real bug: an end-of-night entry on a day with no 2 PM record was filed under the wrong dough bible during peach season. |

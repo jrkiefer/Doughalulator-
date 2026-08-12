@@ -92,6 +92,58 @@ describe('set-out and replacement (§1b)', () => {
   });
 });
 
+describe('Sicilian never goes negative same-day (owner\'s rule, Aug 2026)', () => {
+  // Sicilian is never set out and used the same day — it just runs out. So a
+  // shortfall tonight leaves 0, not a negative, and tomorrow makes the plain
+  // need rather than the need plus dough that was never actually set out.
+  const short = run({
+    counts: counts({ sicSingles: 1, smallTrays: 20, largeTrays: 20 }),
+    todayForecastRaw: 4.0,
+    currentSalesRaw: 0,
+    tomorrowForecastRaw: 4.0,
+  });
+
+  it('left floors at 0 instead of going negative', () => {
+    // Row 4000 asks for 2 Sic tonight against 1 on hand.
+    expect(short.use.sic).toBe(2);
+    expect(short.left.sic).toBe(0);
+  });
+
+  it('nothing is set out and it is not called a shortage', () => {
+    expect(short.setOutBalls.sic).toBe(0);
+    expect(short.setOutTrays.sic).toBe(0);
+    expect(short.flags.shortageSizes).not.toContain('sic');
+  });
+
+  it("tomorrow makes the plain need — the shortfall is not added back", () => {
+    expect(short.make.sic).toBe(short.need.sic);
+    expect(short.trays.sic).toBe(Math.ceil(short.need.sic! / defaultConfig.sicMakeTraySize));
+  });
+
+  it('the other sizes still set out and still replace their shortfall', () => {
+    const rec = run({
+      counts: counts({ smallTrays: 1, sicSingles: 9 }),
+      todayForecastRaw: 4.0,
+      currentSalesRaw: 0,
+      tomorrowForecastRaw: 4.0,
+    });
+    expect(rec.left.small).toBeLessThan(0);
+    expect(rec.setOutTrays.small).toBeGreaterThan(0);
+    expect(rec.make.small).toBe(rec.need.small! - rec.left.small!);
+  });
+
+  it('a Sicilian surplus is untouched — the floor only catches negatives', () => {
+    const spare = run({
+      counts: counts({ sicSingles: 40 }),
+      todayForecastRaw: 4.0,
+      currentSalesRaw: 0,
+      tomorrowForecastRaw: 4.0,
+    });
+    expect(spare.left.sic).toBe(40 - spare.use.sic!);
+    expect(spare.make.sic).toBe(Math.max(0, spare.need.sic! - spare.left.sic!));
+  });
+});
+
 describe('closed tomorrow (§1a)', () => {
   const record = run({
     counts: FULL_COUNTS,

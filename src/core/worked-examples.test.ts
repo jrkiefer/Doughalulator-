@@ -55,13 +55,15 @@ describe('worked example — the 2 PM session', () => {
     expect(record.use).toEqual({ indi: 11, small: 52, large: 44, sic: 2 });
   });
 
-  it('left keeps raw negatives; the shortfall becomes tonight’s set-out', () => {
-    // Indi 15−11 = 4 · Small 43−52 = −9 · Large 26−44 = −18 · Sic 1−2 = −1
-    expect(record.left).toEqual({ indi: 4, small: -9, large: -18, sic: -1 });
-    // Set out: Small 9 balls → 2 trays (÷8 up) · Large 18 → 3 trays · Sic 1 → 1 tray.
-    expect(record.setOutBalls).toEqual({ indi: 0, small: 9, large: 18, sic: 1 });
-    expect(record.setOutTrays).toEqual({ indi: 0, small: 2, large: 3, sic: 1 });
-    expect(record.flags.shortageSizes).toEqual(['small', 'large', 'sic']);
+  it('left keeps raw negatives — except Sicilian, which floors at 0', () => {
+    // Indi 15−11 = 4 · Small 43−52 = −9 · Large 26−44 = −18.
+    // Sic 1−2 = −1, but Sicilian is never set out and used the same day, so it
+    // just runs out: left 0, nothing to set out, no shortage flag.
+    expect(record.left).toEqual({ indi: 4, small: -9, large: -18, sic: 0 });
+    // Set out: Small 9 balls → 2 trays (÷8 up) · Large 18 → 3 trays.
+    expect(record.setOutBalls).toEqual({ indi: 0, small: 9, large: 18, sic: 0 });
+    expect(record.setOutTrays).toEqual({ indi: 0, small: 2, large: 3, sic: 0 });
+    expect(record.flags.shortageSizes).toEqual(['small', 'large']);
   });
 
   it('tomorrow: 9,100 hits an exact row — need 26 / 125 / 117 / 3', () => {
@@ -70,58 +72,59 @@ describe('worked example — the 2 PM session', () => {
   });
 
   it('make = need − left (set-out replaced), then trays round UP', () => {
-    // Indi 26−4 = 22 · Small 125−(−9) = 134 · Large 117−(−18) = 135 · Sic 3−(−1) = 4
-    expect(record.make).toEqual({ indi: 22, small: 134, large: 135, sic: 4 });
-    // Trays: 22÷11 = 2 · 134÷8 = 16.75 → 17 · 135÷6 = 22.5 → 23 · 4÷3 → 2
-    expect(record.trays).toEqual({ indi: 2, small: 17, large: 23, sic: 2 });
-    expect(record.sicBalls).toBe(4);
+    // Indi 26−4 = 22 · Small 125−(−9) = 134 · Large 117−(−18) = 135.
+    // Sic 3−0 = 3 — the plain need, with no shortfall added back.
+    expect(record.make).toEqual({ indi: 22, small: 134, large: 135, sic: 3 });
+    // Trays: 22÷11 = 2 · 134÷8 = 16.75 → 17 · 135÷6 = 22.5 → 23 · 3÷3 → 1
+    expect(record.trays).toEqual({ indi: 2, small: 17, large: 23, sic: 1 });
+    expect(record.sicBalls).toBe(3);
   });
 
   it('Boli: 13 balls on hand (trays AND singles) → 23 short → 4 trays', () => {
     expect(record.boliTrays).toBe(4);
   });
 
-  it('total 48 trays → 48/11 batches; both choices offered, never auto-picked', () => {
-    // 2 + 17 + 23 + 2 + 4 = 48 → 4.36…
-    expect(record.totalTrays).toBe(48);
-    expect(record.exactBatches).toBeCloseTo(48 / 11, 10);
+  it('total 47 trays → 47/11 batches; both choices offered, never auto-picked', () => {
+    // 2 + 17 + 23 + 1 + 4 = 47 → 4.27…
+    expect(record.totalTrays).toBe(47);
+    expect(record.exactBatches).toBeCloseTo(47 / 11, 10);
     expect(record.chosenBatchOption).toBeNull();
   });
 
-  it('round DOWN to 4 batches: drop 4 trays, split 40/60 → Small −2, Large −2', () => {
+  it('round DOWN to 4 batches: drop 3 trays, split 40/60 → Small −1, Large −2', () => {
     const down = record.batchDown!;
     expect(down.batches).toBe(4);
     expect(down.targetTrays).toBe(44);
-    expect(down.trayDelta).toBe(-4);
-    expect(down.smallTrayDelta).toBe(-2); // round(0.4 × −4) = −2
+    expect(down.trayDelta).toBe(-3);
+    expect(down.smallTrayDelta).toBe(-1); // round(0.4 × −3) = round(−1.2) = −1
     expect(down.largeTrayDelta).toBe(-2);
-    // Small 17−2 = 15 · Large 23−2 = 21. Sum 2+15+21+2+4 = 44 ✓
-    expect(down.finalTraysToMake).toEqual({ indi: 2, small: 15, large: 21, sic: 2, boli: 4 });
-    expect(down.ballsMade).toEqual({ indi: 22, small: 120, large: 126, sic: 4, boli: 24 });
+    // Small 17−1 = 16 · Large 23−2 = 21. Sum 2+16+21+1+4 = 44 ✓
+    expect(down.finalTraysToMake).toEqual({ indi: 2, small: 16, large: 21, sic: 1, boli: 4 });
+    expect(down.ballsMade).toEqual({ indi: 22, small: 128, large: 126, sic: 3, boli: 24 });
     expect(down.finalDough).toEqual({
       indiTrays: 3, indiSingles: 4, indiTotal: 37,      // 1+2 · 4 · 15+22
-      smallTrays: 20, smallSingles: 3, smallTotal: 163, // 5+15 · 3 · 43+120
+      smallTrays: 21, smallSingles: 3, smallTotal: 171, // 5+16 · 3 · 43+128
       largeTrays: 25, largeSingles: 2, largeTotal: 152, // 4+21 · 2 · 26+126
-      sicTotal: 5,                                      // 1+4
+      sicTotal: 4,                                      // 1+3
       boliTrays: 6, boliSingles: 1, boliTotal: 37,      // 2+4 · 1 · 13+24
     });
   });
 
-  it('round UP to 5 batches: add 7 trays, split 40/60 → Small +3, Large +4', () => {
+  it('round UP to 5 batches: add 8 trays, split 40/60 → Small +3, Large +5', () => {
     const up = record.batchUp!;
     expect(up.batches).toBe(5);
     expect(up.targetTrays).toBe(55);
-    expect(up.trayDelta).toBe(7);
-    expect(up.smallTrayDelta).toBe(3); // round(0.4 × 7) = 3
-    expect(up.largeTrayDelta).toBe(4);
-    // Small 17+3 = 20 · Large 23+4 = 27. Sum 2+20+27+2+4 = 55 ✓
-    expect(up.finalTraysToMake).toEqual({ indi: 2, small: 20, large: 27, sic: 2, boli: 4 });
-    expect(up.ballsMade).toEqual({ indi: 22, small: 160, large: 162, sic: 4, boli: 24 });
+    expect(up.trayDelta).toBe(8);
+    expect(up.smallTrayDelta).toBe(3); // round(0.4 × 8) = round(3.2) = 3
+    expect(up.largeTrayDelta).toBe(5);
+    // Small 17+3 = 20 · Large 23+5 = 28. Sum 2+20+28+1+4 = 55 ✓
+    expect(up.finalTraysToMake).toEqual({ indi: 2, small: 20, large: 28, sic: 1, boli: 4 });
+    expect(up.ballsMade).toEqual({ indi: 22, small: 160, large: 168, sic: 3, boli: 24 });
     expect(up.finalDough).toEqual({
       indiTrays: 3, indiSingles: 4, indiTotal: 37,
       smallTrays: 25, smallSingles: 3, smallTotal: 203, // 43+160
-      largeTrays: 31, largeSingles: 2, largeTotal: 188, // 26+162
-      sicTotal: 5,
+      largeTrays: 32, largeSingles: 2, largeTotal: 194, // 4+28 · 26+168
+      sicTotal: 4,
       boliTrays: 6, boliSingles: 1, boliTotal: 37,
     });
   });

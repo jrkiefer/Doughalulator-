@@ -56,6 +56,7 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **Ball** — one lump of dough, ready to become one pizza.
 - **Tray** — a tray of dough balls. Balls per tray: Indi 11, Small 8, Large 6, Boli 6.
 - **Singles** — loose balls not on a full tray. **Sicilian is counted as singles only** (no trays in inventory); its *make*-tray holds 3 balls and it is always *displayed* as balls.
+- **Sicilian never goes negative same-day** (owner's rule, Aug 2026): it is never set out and used the same day, so it simply runs out. Its `left` floors at 0, it is never in `setOutTrays`/`shortageSizes`, and tomorrow's make is the plain need — NOT the need plus a shortfall that was never covered. Every other size still sets out and still replaces its shortfall. This is the 2 PM path only; the EON tomorrow-check still reports Sicilian shortfalls at full strength (owner default 4 below).
 - **Boli** — special dough, never in the bible. Rule: always top the count back up to 6 trays.
 - **Batch** — one mixer run of dough = 11 trays.
 - **Bible** — the lookup table mapping a sales figure to dough needed per size. Regular bible Sept 1 – June 30; **peach bible July 1 – Aug 31** (peach season), chosen by the record's date.
@@ -171,4 +172,6 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
 2. Night temps slot stays "after 17:00".
 3. Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.
-4. Sicilian EON shortfalls report at full strength (no clamp, no minimum).
+4. Sicilian EON shortfalls report at full strength (no clamp, no minimum) — that is the
+   end-of-night check against tomorrow, and is deliberately NOT the same as rule 5.
+5. Sicilian never goes negative at 2 PM: no same-day set-out, `left` floors at 0.
