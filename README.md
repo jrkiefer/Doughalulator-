@@ -178,6 +178,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.8.1** | Tidying up: the leftover branch is gone, so `main` is the only one, and the end-of-night page now says "1 ball" instead of "1 balls". |
 | **1.8.0** | A second read-through, aimed at the parts the first one covered least. One real bug: an end-of-night entry on a day with no 2 PM record was filed under the wrong dough bible during peach season. |
 | **1.7.0** | A full read-through of every line, and the four real bugs it turned up: the Day's Work card claiming "nothing to make" before anything was counted; LOAD FROM SHEET keeping numbers the sheet doesn't have and marking them saved; a mistyped sheet address hanging Test Connection for ever; and the bible mirror never being sent, which could quietly stall the self-building bible. |
 | **1.6.0** | The repo tidied: everything in folders, the finished build's paperwork removed, duplicate code collapsed, this page written. |

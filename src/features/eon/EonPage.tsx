@@ -130,7 +130,7 @@ export function EonPage(props: {
                       <li key={key}>
                         {name} —{' '}
                         {key === 'sic'
-                          ? `${record.traysShort!.sic} ${record.traysShort!.sic === 1 ? 'tray' : 'trays'} (${record.sicBallsShort} balls) short`
+                          ? `${record.traysShort!.sic} ${record.traysShort!.sic === 1 ? 'tray' : 'trays'} (${record.sicBallsShort} ${record.sicBallsShort === 1 ? 'ball' : 'balls'}) short`
                           : `${record.traysShort![key]} ${record.traysShort![key] === 1 ? 'tray' : 'trays'} short`}
                       </li>
                     ))}
