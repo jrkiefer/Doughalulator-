@@ -17,7 +17,7 @@ here holds, and what to do when something looks wrong.
 | Page | What it's for |
 | --- | --- |
 | **2 PM** | The afternoon count. Type today's forecast, what's rung up so far, tomorrow's forecast, and what dough is on hand. It works out what tonight will use, what's left, what tomorrow needs, and how many trays to make — then offers two batch numbers, rounded down and rounded up. **You tap one.** The app never picks for you. |
-| **EON** | End of night. The closing count and the final sales figure. It checks what's on hand against what tomorrow needs, all five sizes, and works out the night's dough use. |
+| **EON** | End of night. The closing count and the final sales figure. The outlook card then lays what's on hand beside what tomorrow needs, size by size, and tells you in trays and balls whether you're over or under. Tomorrow's forecast carries over from the 2 PM save; type in it and yours wins. |
 | **STATION TEMPS** | The eight stations in walking order, three times a day — Morning, 2 PM, Night. The app suggests the right one by the clock. |
 
 **SETTINGS** is the small link at the very bottom.
@@ -181,6 +181,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.9.0** | The end-of-night page got the card you asked for: what you have beside what tomorrow needs, size by size, in trays and balls, with a plain-words verdict at the bottom. PM sales is off the screen (still recorded in the sheet). History now shows the last 3 nights instead of 30. |
 | **1.8.3** | Sicilian never goes negative on the 2 PM page any more. It is never set out and used the same day, so it just runs out — no negative, nothing in the set-out list, and tomorrow makes plainly what tomorrow needs. |
 | **1.8.2** | Checked the app against your real Dough Log for the first time: every tab, every column and every self-building-bible number lines up exactly. Added a test proving "Re-run setup" can never touch a recorded night. |
 | **1.8.1** | Tidying up: the leftover branch is gone, so `main` is the only one, and the end-of-night page now says "1 ball" instead of "1 balls". |

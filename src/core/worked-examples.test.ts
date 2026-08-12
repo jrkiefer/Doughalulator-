@@ -167,8 +167,13 @@ describe('worked example — the EON session', () => {
     expect(record.needSource).toBe('dayRecord');
     expect(record.eonLeft).toEqual({ indi: 8, small: 31, large: 37, sic: -1 });
     expect(record.boliLeft).toBe(0);
-    expect(record.traysShort).toEqual({ indi: 0, small: 0, large: 0, sic: 1 });
-    expect(record.boliTraysShort).toBe(0);
-    expect(record.sicBallsShort).toBe(1);
+    // The outlook the card draws: nearest tray, Sicilian clamped at 0.
+    const r = record.outlook!.rows;
+    expect(r.indi).toMatchObject({ diff: 8, trays: 1 }); // 8/11 = 0.73 → 1
+    expect(r.small).toMatchObject({ diff: 31, trays: 4 }); // 31/8 = 3.875 → 4
+    expect(r.large).toMatchObject({ diff: 37, trays: 6 }); // 37/6 = 6.17 → 6
+    expect(r.sic).toMatchObject({ diff: 0, trays: 0 }); // −1 clamped to 0
+    expect(r.boli).toMatchObject({ diff: 0, trays: 0 });
+    expect(record.outlook!.shortfallBalls).toBe(0);
   });
 });

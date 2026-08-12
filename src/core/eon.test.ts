@@ -57,12 +57,16 @@ describe('runEonCalculation with a day record', () => {
     expect(record.eonLeft).toEqual({ indi: 8, small: 31, large: 37, sic: -1 });
     expect(record.boliNeed).toBe(36);
     expect(record.boliLeft).toBe(0); // exactly six trays on hand
-    expect(record.boliTraysShort).toBe(0);
+    expect(record.outlook!.rows.boli.trays).toBe(0);
   });
 
-  it('reports trays short rounded up per size, with Sic in make-trays of 3 AND as balls', () => {
-    expect(record.traysShort).toEqual({ indi: 0, small: 0, large: 0, sic: 1 });
-    expect(record.sicBallsShort).toBe(1);
+  it('the outlook gives each size the gap in balls and in nearest trays', () => {
+    const r = record.outlook!.rows;
+    expect(r.indi).toMatchObject({ have: 34, need: 26, diff: 8, trays: 1 }); // 8/11 → 1
+    expect(r.small).toMatchObject({ diff: 31, trays: 4 }); // 31/8 = 3.875 → 4
+    expect(r.large).toMatchObject({ diff: 37, trays: 6 }); // 37/6 = 6.17 → 6
+    // Sicilian bottoms out at 0 rather than showing −1.
+    expect(r.sic).toMatchObject({ have: 2, need: 3, diff: 0, trays: 0 });
   });
 
   it('a short Boli count reports trays short toward the target', () => {
@@ -70,9 +74,9 @@ describe('runEonCalculation with a day record', () => {
       { counts: { ...eonCounts, boliTrays: 4, boliSingles: 3 }, finalSalesRaw: 12.4 },
       makeDayRecord(),
     );
-    // 27 balls − 36 target = −9 → 2 trays short (ceil 9/6).
+    // 27 balls − 36 target = −9 → nearest tray is −2 (9/6 = 1.5 → 2).
     expect(short.boliLeft).toBe(-9);
-    expect(short.boliTraysShort).toBe(2);
+    expect(short.outlook!.rows.boli).toMatchObject({ diff: -9, trays: -2 });
   });
 
   it('blank final sales → pmSales stays null', () => {
@@ -88,7 +92,7 @@ describe('runEonCalculation with a day record', () => {
     );
     expect(partial.eonLeft!.small).toBe(31);
     expect(partial.eonLeft!.indi).toBeNull();
-    expect(partial.traysShort!.indi).toBeNull();
+    expect(partial.outlook!.rows.indi).toMatchObject({ have: null, diff: null, trays: null });
     expect(partial.boliLeft).toBeNull();
   });
 });
@@ -117,10 +121,13 @@ describe('runEonCalculation without a day record', () => {
     expect(record.bibleUsed).toBe('peach');
     expect(record.need).toEqual({ indi: 29, small: 179, large: 133, sic: 4 });
     expect(record.eonLeft).toEqual({ indi: -5, small: -19, large: -13, sic: -2 });
-    expect(record.traysShort).toEqual({ indi: 1, small: 3, large: 3, sic: 1 });
-    expect(record.sicBallsShort).toBe(2);
+    const r = record.outlook!.rows;
+    expect(r.indi.trays).toBe(0); // 5/11 = 0.45 → nearest tray is none
+    expect(r.small.trays).toBe(-2); // 19/8 = 2.375 → 2
+    expect(r.large.trays).toBe(-2); // 13/6 = 2.17 → 2
+    expect(r.sic).toMatchObject({ diff: 0, trays: 0 }); // clamped, never −2
     expect(record.boliLeft).toBe(30 - 36);
-    expect(record.boliTraysShort).toBe(1);
+    expect(r.boli.trays).toBe(-1); // 6/6 = 1
   });
 
   it('a manual forecast of 0 means closed tomorrow: zero need everywhere including Boli', () => {
@@ -133,8 +140,7 @@ describe('runEonCalculation without a day record', () => {
     expect(record.need).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
     expect(record.boliNeed).toBe(0);
     expect(record.eonLeft).toEqual({ indi: 34, small: 156, large: 154, sic: 2 });
-    expect(record.traysShort).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
-    expect(record.boliTraysShort).toBe(0);
+    expect(record.outlook!.shortfallBalls).toBe(0);
   });
 
   it('a day record whose tomorrow was 0 carries closed-tomorrow into the EON check', () => {
@@ -152,7 +158,86 @@ describe('runEonCalculation without a day record', () => {
     const record = runEon({ counts: eonCounts, finalSalesRaw: 6.0 }, closedDay);
     expect(record.flags.closedTomorrow).toBe(true);
     expect(record.boliNeed).toBe(0);
-    expect(record.traysShort).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
+    expect(record.outlook!.shortfallBalls).toBe(0);
+  });
+});
+
+describe("the outlook, checked against the owner's own mockup", () => {
+  // Every figure below is read straight off the card the owner sent. If the
+  // port of their app's computeOutlook is faithful, these fall out exactly:
+  //   INDI 55 vs 29 → +2 tr / +26 balls      SM  209 vs 179 → +4 tr / +30 balls
+  //   LG  171 vs 133 → +6 tr / +38 balls     SIC   4 vs 4   → 0 balls
+  //   BOIL 36 vs 36  →  0 tr /  0 balls
+  //   "Dough is good ✓ — ~12 trays leftover (94 balls)."
+  const MOCKUP = [
+    { key: 'indi', have: 55, need: 29, diff: 26, trays: 2 },
+    { key: 'small', have: 209, need: 179, diff: 30, trays: 4 },
+    { key: 'large', have: 171, need: 133, diff: 38, trays: 6 },
+    { key: 'sic', have: 4, need: 4, diff: 0, trays: 0 },
+    { key: 'boli', have: 36, need: 36, diff: 0, trays: 0 },
+  ] as const;
+
+  // 9.5 → 9,500 on the peach bible gives exactly the mockup's needs.
+  const record = runEon({
+    date: '2026-07-15',
+    counts: counts({
+      indiSingles: 55, smallSingles: 209, largeSingles: 171, sicSingles: 4, boliSingles: 36,
+    }),
+    finalSalesRaw: 12.4,
+    manualTomorrowForecastRaw: 9.5,
+  });
+
+  it('reads the needs the mockup shows', () => {
+    expect(record.need).toEqual({ indi: 29, small: 179, large: 133, sic: 4 });
+    expect(record.boliNeed).toBe(36);
+  });
+
+  it.each(MOCKUP)('$key: $have vs $need → $trays tr / $diff balls', (row) => {
+    expect(record.outlook!.rows[row.key]).toEqual({
+      have: row.have,
+      need: row.need,
+      diff: row.diff,
+      trays: row.trays,
+    });
+  });
+
+  it('totals to the mockup\'s "~12 trays leftover (94 balls)"', () => {
+    expect(record.outlook!.surplusTrays).toBe(12);
+    expect(record.outlook!.surplusBalls).toBe(94);
+    expect(record.outlook!.shortfallBalls).toBe(0);
+    expect(record.outlook!.anyCounted).toBe(true);
+  });
+});
+
+describe('the outlook forecast box overrides the 2 PM figure', () => {
+  it('a typed forecast wins, and clearing it hands back to the 2 PM save', () => {
+    const day = makeDayRecord();
+    const fromDay = runEon({ counts: eonCounts, finalSalesRaw: 12.4 }, day);
+    expect(fromDay.needSource).toBe('dayRecord');
+
+    const typed = runEon(
+      { counts: eonCounts, finalSalesRaw: 12.4, manualTomorrowForecastRaw: 20 },
+      day,
+    );
+    expect(typed.needSource).toBe('manualForecast');
+    expect(typed.need).not.toEqual(fromDay.need);
+
+    // Cleared (null) → straight back to the afternoon's figure.
+    const cleared = runEon(
+      { counts: eonCounts, finalSalesRaw: 12.4, manualTomorrowForecastRaw: null },
+      day,
+    );
+    expect(cleared.needSource).toBe('dayRecord');
+    expect(cleared.need).toEqual(fromDay.need);
+  });
+
+  it('a typed 0 still means closed tomorrow, even with a 2 PM forecast set', () => {
+    const record = runEon(
+      { counts: eonCounts, finalSalesRaw: 12.4, manualTomorrowForecastRaw: 0 },
+      makeDayRecord(),
+    );
+    expect(record.flags.closedTomorrow).toBe(true);
+    expect(record.need).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
   });
 });
 

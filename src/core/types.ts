@@ -235,15 +235,39 @@ export interface EonRecord {
   boliNeed: Maybe;
   eonLeft: PerBibleSizeMaybe | null;
   boliLeft: Maybe;
-  /** Per size, trays short rounded up when eonLeft is negative; 0 otherwise. */
-  traysShort: PerBibleSizeMaybe | null;
-  boliTraysShort: Maybe;
-  /** Sicilian shortage also shown as balls. */
-  sicBallsShort: Maybe;
+  /** Everything the outlook card draws; null until tomorrow's need is known. */
+  outlook: EonOutlook | null;
   flags: {
     tomorrowCheckAvailable: boolean;
     closedTomorrow: boolean;
   };
+}
+
+/**
+ * The end-of-night outlook: what is on hand against what tomorrow needs, per
+ * size, in balls (`diff`) and in trays (`trays`, signed — negative is short).
+ * Trays are the NEAREST tray, so the headline figure reads the way a person
+ * would say it; the exact balls sit underneath. Sicilian's diff bottoms out at
+ * 0, because being short of tomorrow cannot mean dipping into same-day dough.
+ */
+export interface EonOutlookRow {
+  have: Maybe;
+  need: Maybe;
+  /** have − need, in balls. Sicilian is clamped at 0. */
+  diff: Maybe;
+  /** The same gap as whole trays, signed and rounded to the nearest. */
+  trays: Maybe;
+}
+
+export interface EonOutlook {
+  rows: Record<SizeKey, EonOutlookRow>;
+  /** Totals across the counted sizes — the two halves never both run. */
+  surplusBalls: number;
+  surplusTrays: number;
+  shortfallBalls: number;
+  shortTrays: number;
+  /** False when not one size was counted, so the summary stays quiet. */
+  anyCounted: boolean;
 }
 
 /** Dough used before 2 PM: yesterday's close − this afternoon's count. */

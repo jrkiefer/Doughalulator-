@@ -6,6 +6,9 @@ import { loadSettings } from '../../services/settings';
 import { Collapsible } from '../shared/Collapsible';
 import { fmt } from '../shared/counts';
 
+/** How many nights the card shows — the owner asked for just the last few. */
+const RECENT_NIGHTS = 3;
+
 function line(row: HistorySummary): string {
   const sales = row.finalSales !== '' ? `$${fmt(Number(row.finalSales))}` : '—';
   const batches = row.batchesMade !== '' ? `${row.batchesMade} batches` : 'no batch tapped';
@@ -19,7 +22,7 @@ export function HistoryCard(props: { onPick: (date: string) => void }) {
 
   useEffect(() => {
     let alive = true;
-    fetchHistory(loadSettings()).then((result) => {
+    fetchHistory(loadSettings(), RECENT_NIGHTS).then((result) => {
       if (!alive) return;
       setRows(result.summaries);
       setNote(result.source === 'phone' ? 'showing the phone copy — sheet unreachable' : '');

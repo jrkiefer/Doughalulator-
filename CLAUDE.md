@@ -56,14 +56,16 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **Ball** — one lump of dough, ready to become one pizza.
 - **Tray** — a tray of dough balls. Balls per tray: Indi 11, Small 8, Large 6, Boli 6.
 - **Singles** — loose balls not on a full tray. **Sicilian is counted as singles only** (no trays in inventory); its *make*-tray holds 3 balls and it is always *displayed* as balls.
-- **Sicilian never goes negative same-day** (owner's rule, Aug 2026): it is never set out and used the same day, so it simply runs out. Its `left` floors at 0, it is never in `setOutTrays`/`shortageSizes`, and tomorrow's make is the plain need — NOT the need plus a shortfall that was never covered. Every other size still sets out and still replaces its shortfall. This is the 2 PM path only; the EON tomorrow-check still reports Sicilian shortfalls at full strength (owner default 4 below).
+- **Sicilian never goes negative same-day** (owner's rule, Aug 2026): it is never set out and used the same day, so it simply runs out. Its `left` floors at 0, it is never in `setOutTrays`/`shortageSizes`, and tomorrow's make is the plain need — NOT the need plus a shortfall that was never covered. Every other size still sets out and still replaces its shortfall. The EON outlook clamps it the same way, for the same reason — being short of TOMORROW cannot mean dipping into same-day dough, which is what its summary line describes.
 - **Boli** — special dough, never in the bible. Rule: always top the count back up to 6 trays.
 - **Batch** — one mixer run of dough = 11 trays.
 - **Bible** — the lookup table mapping a sales figure to dough needed per size. Regular bible Sept 1 – June 30; **peach bible July 1 – Aug 31** (peach season), chosen by the record's date.
 - **Shorthand sales** — sales typed small mean thousands: an entry ≤ 50 is multiplied by 1,000 (2.2 → 2,200; 50 → 50,000); above 50 is literal; 0 stays 0.
 - **2 PM session** — the afternoon count + calculation: what we have, what tonight will use, what tomorrow needs, what to make, and the two batch choices (round down / round up — the owner taps one; the engine never picks).
 - **salesLeft** — today's forecast − current sales: the selling still to come tonight.
-- **EON session** — End Of Night: final count + final sales, and the check against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
+- **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
+- **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. **PM sales is still computed and still written to the sheet, it is just not drawn** — the owner asked for the display gone, not the number.
+- **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure until something is typed; a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back.
 - **PM use** — dough used since 2 PM = the chosen option's final dough − EON count. Computed by the app (`pmUse` on `EonRecord`); a count that ROSE reads blank, not negative — that means a miscount.
 - **AM use** — dough used before 2 PM = yesterday's EON count − this morning's count, via `computeAmUse`. Blank when yesterday has no EON record (a closed day).
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
@@ -172,6 +174,7 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
 2. Night temps slot stays "after 17:00".
 3. Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.
-4. Sicilian EON shortfalls report at full strength (no clamp, no minimum) — that is the
-   end-of-night check against tomorrow, and is deliberately NOT the same as rule 5.
-5. Sicilian never goes negative at 2 PM: no same-day set-out, `left` floors at 0.
+4. Sicilian never goes negative anywhere: no same-day set-out at 2 PM (`left` floors at 0) and its
+   outlook diff clamps at 0 too. This REPLACED an earlier default that had EON Sicilian shortfalls
+   reporting at full strength — superseded Aug 2026 by the owner's rule and by their other app,
+   which clamps it identically.

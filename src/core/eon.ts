@@ -5,18 +5,15 @@ import { normalizeSales } from './sales';
 import type {
   AmUse,
   Bibles,
+  EonOutlook,
   DoughDayRecord,
   EonInputs,
   EonRecord,
   Maybe,
   PerBibleSizeMaybe,
   PerSizeMaybe,
+  SizeKey,
 } from './types';
-
-/** Trays short, rounded up, for one size's shortfall (a non-negative number of balls). */
-function traysShortFor(shortBalls: number, perTray: number): number {
-  return Math.ceil(shortBalls / perTray);
-}
 
 /**
  * The end-of-night calculation. Works with or without the day's 2 PM record:
@@ -61,7 +58,10 @@ export function runEonCalculation(
       }
     : null;
 
-  // Where tomorrow's need comes from: the day record, or a manual forecast lookup.
+  // Where tomorrow's need comes from. A figure typed here WINS over the 2 PM
+  // one: the box on the EON page shows the afternoon's forecast, and the whole
+  // point of being able to type in it is to say "actually, tomorrow looks
+  // different from what we thought". Clear it and the 2 PM figure comes back.
   let needSource: EonRecord['needSource'] = null;
   let need: PerBibleSizeMaybe | null = null;
   let closedTomorrow = false;
@@ -71,11 +71,7 @@ export function runEonCalculation(
   let bibleName: string | null = null;
   let tomorrowRowMatched: EonRecord['tomorrowRowMatched'] = null;
 
-  if (dayRecord && dayRecord.tomorrowForecast !== null) {
-    needSource = 'dayRecord';
-    need = dayRecord.need;
-    closedTomorrow = dayRecord.flags.closedTomorrow;
-  } else if (manualRaw !== null) {
+  if (manualRaw !== null) {
     needSource = 'manualForecast';
     manualTomorrowForecast = norm(manualRaw);
     closedTomorrow = manualTomorrowForecast === 0;
@@ -91,6 +87,10 @@ export function runEonCalculation(
       );
       need = rowToNeeds(tomorrowRowMatched);
     }
+  } else if (dayRecord && dayRecord.tomorrowForecast !== null) {
+    needSource = 'dayRecord';
+    need = dayRecord.need;
+    closedTomorrow = dayRecord.flags.closedTomorrow;
   }
 
   // The check — all five sizes; Boli against 36 balls (0 when closed tomorrow).
@@ -98,10 +98,8 @@ export function runEonCalculation(
   const boliNeed: Maybe = checkAvailable ? (closedTomorrow ? 0 : config.boliTargetTrays * bpt.boli) : null;
 
   let eonLeft: PerBibleSizeMaybe | null = null;
-  let traysShort: PerBibleSizeMaybe | null = null;
-  let sicBallsShort: Maybe = null;
   let boliLeft: Maybe = null;
-  let boliTraysShort: Maybe = null;
+  let outlook: EonOutlook | null = null;
   if (need) {
     const leftFor = (haveVal: Maybe, needVal: Maybe): Maybe =>
       haveVal === null || needVal === null ? null : haveVal - needVal;
@@ -111,17 +109,41 @@ export function runEonCalculation(
       large: leftFor(eonHave.large, need.large),
       sic: leftFor(eonHave.sic, need.sic),
     };
-    const shortFor = (leftVal: Maybe, perTray: number): Maybe =>
-      leftVal === null ? null : leftVal < 0 ? traysShortFor(-leftVal, perTray) : 0;
-    traysShort = {
-      indi: shortFor(eonLeft.indi, bpt.indi),
-      small: shortFor(eonLeft.small, bpt.small),
-      large: shortFor(eonLeft.large, bpt.large),
-      sic: shortFor(eonLeft.sic, config.sicMakeTraySize),
+    boliLeft = leftFor(eonHave.boli, boliNeed);
+
+    // What the outlook card draws: the gap per size, in balls and in trays.
+    const rows = {} as EonOutlook['rows'];
+    let surplusBalls = 0;
+    let surplusTrays = 0;
+    let shortfallBalls = 0;
+    let shortTrays = 0;
+    let anyCounted = false;
+    const add = (key: SizeKey, haveVal: Maybe, needVal: Maybe, perTray: number) => {
+      if (haveVal !== null) anyCounted = true;
+      let diff = leftFor(haveVal, needVal);
+      // Sicilian bottoms out at 0: it is never set out and used the same day,
+      // so being "short" of tomorrow cannot mean dipping into tonight's dough.
+      if (key === 'sic' && diff !== null) diff = Math.max(0, diff);
+      // `|| 0` normalises the -0 that Math.sign gives on a sub-tray shortage.
+      const trays: Maybe =
+        diff === null ? null : Math.sign(diff) * Math.round(Math.abs(diff) / perTray) || 0;
+      if (diff !== null) {
+        if (diff >= 0) {
+          surplusBalls += diff;
+          surplusTrays += trays!;
+        } else {
+          shortfallBalls += -diff;
+          shortTrays += -trays!;
+        }
+      }
+      rows[key] = { have: haveVal, need: needVal, diff, trays };
     };
-    sicBallsShort = eonLeft.sic === null ? null : eonLeft.sic < 0 ? -eonLeft.sic : 0;
-    boliLeft = eonHave.boli === null || boliNeed === null ? null : eonHave.boli - boliNeed;
-    boliTraysShort = shortFor(boliLeft, bpt.boli);
+    add('indi', eonHave.indi, need.indi, bpt.indi);
+    add('small', eonHave.small, need.small, bpt.small);
+    add('large', eonHave.large, need.large, bpt.large);
+    add('sic', eonHave.sic, need.sic, config.sicMakeTraySize);
+    add('boli', eonHave.boli, boliNeed, bpt.boli);
+    outlook = { rows, surplusBalls, surplusTrays, shortfallBalls, shortTrays, anyCounted };
   }
 
   return {
@@ -143,9 +165,7 @@ export function runEonCalculation(
     boliNeed,
     eonLeft,
     boliLeft,
-    traysShort,
-    boliTraysShort,
-    sicBallsShort,
+    outlook,
     flags: {
       tomorrowCheckAvailable: checkAvailable,
       closedTomorrow,

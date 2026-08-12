@@ -758,7 +758,7 @@ button:focus-visible {
   border-top: 1px dashed var(--rule);
 }
 
-.bysize .size-name {
+.size-name {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
@@ -771,7 +771,7 @@ button:focus-visible {
   text-align: left;
 }
 
-.bysize .size-name .dot {
+.size-name .dot {
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -859,6 +859,114 @@ button:focus-visible {
 }
 
 /* ————— eon outlook ————— */
+.outlook-card {
+  padding: 4px 12px 8px;
+}
+
+.outlook-forecast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.outlook-forecast .input-wrap {
+  width: 118px;
+}
+
+.outlook-source {
+  display: block;
+  min-height: 14px;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--rule-soft);
+}
+
+.outlook-row:last-of-type {
+  border-bottom: none;
+}
+
+.outlook-row .size-name {
+  width: 60px;
+  flex: none;
+}
+
+.outlook-have {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-need {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-diff {
+  margin-left: auto;
+  text-align: right;
+}
+
+.outlook-diff-trays {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-diff-trays.pos {
+  color: var(--good);
+}
+
+.outlook-diff-trays.neg {
+  color: var(--neg);
+}
+
+.outlook-diff-trays.none {
+  color: var(--ink-mute);
+}
+
+.outlook-diff-balls {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-summary {
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--rule-soft);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.outlook-summary.good {
+  color: var(--good);
+}
+
+.outlook-empty {
+  padding: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
 .verdict {
   font-family: var(--font-display);
   font-size: 24px;
