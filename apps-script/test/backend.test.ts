@@ -61,6 +61,39 @@ describe('dough script — lock (§7)', () => {
   });
 });
 
+/** Every cell of every tab, straight from the fake grid. */
+function allCells(script: LoadedScript): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [name, sheet] of script.world.ss.sheets) {
+    const cells: Record<string, string> = {};
+    for (const [key, value] of sheet.grid) {
+      cells[key] = value instanceof Date ? `D:${value.toISOString().slice(0, 10)}` : String(value);
+    }
+    out[name] = cells;
+  }
+  return out;
+}
+
+describe('setup() on a notebook that already holds real records', () => {
+  // The owner clicks Dough Tools -> Re-run setup after pasting a new version of
+  // this script, on a log holding months of real nights. Nothing it does may
+  // touch a single recorded cell.
+  it('re-running it changes nothing at all', () => {
+    const script = freshDough();
+    for (const date of ['2026-05-13', '2026-06-11', '2026-07-10']) {
+      expect(post(script, dayPayload(date)).ok).toBe(true);
+      expect(post(script, {
+        type: 'eon', date,
+        tabs: [{ tab: 'EON Dough Count', row: { Date: date, 'EON Sales': 11622, 'EON Indi Count': 63 } }],
+      }).ok).toBe(true);
+    }
+
+    const before = allCells(script);
+    script.fns.setup();
+    expect(allCells(script)).toEqual(before);
+  });
+});
+
 describe('dough script — validation', () => {
   it('erasing is NOT reachable over the web — with no key it would be a public delete button', () => {
     const script = freshDough();
