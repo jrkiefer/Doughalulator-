@@ -201,7 +201,9 @@ export function eonRecordToTabWrites(
 
   // Tonight's line on the bible this date used — the history the suggested
   // bible is fitted from. Total use is the morning's plus the night's.
-  const season = bible === 'peach' ? 'peach' : 'regular';
+  // The same fallback as the row above: on a night with no 2 PM record there is
+  // no day-record bible, and only the EON record knows which one applied.
+  const season = (bible ?? record.bibleUsed) === 'peach' ? 'peach' : 'regular';
   const nightly = (size: 'indi' | 'small' | 'large' | 'sic') => {
     const am = amUse?.use[size] ?? null;
     const pm = record.pmUse?.[size] ?? null;

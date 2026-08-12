@@ -291,6 +291,29 @@ describe("the night's line on the self-building bible", () => {
     expect(writes.map((w) => w.tab)).not.toContain('New Bieblerb');
   });
 
+  it('a peach night with NO 2 PM record still builds the peach bible', () => {
+    // The path the app actually takes when the owner does an end-of-night
+    // entry on a day they never filled in at 2 PM: engine.ts passes
+    // `dayRecord?.bibleUsed`, which is undefined, so the only thing that knows
+    // it is peach season is the EON record itself. Every other test here hands
+    // the bible in explicitly, which is exactly how this got missed.
+    const eonOnly = runEonCalculation(
+      {
+        date: '2026-07-15', // peach season: July 1 – Aug 31
+        counts: counts({ indiSingles: 20, smallSingles: 40, largeSingles: 30, sicSingles: 2 }),
+        finalSalesRaw: 7.9,
+        manualTomorrowForecastRaw: 8.2,
+      },
+      null,
+      bibles,
+      defaultConfig,
+    );
+    expect(eonOnly.bibleUsed).toBe('peach');
+    const tabs = eonRecordToTabWrites(eonOnly, undefined, null).map((w) => w.tab);
+    expect(tabs).toContain('New Peach Bieblerb');
+    expect(tabs).not.toContain('New Bieblerb');
+  });
+
   it('a night with no final sales adds nothing to the history', () => {
     const noSales = { ...eonRecord, finalSales: null };
     expect(eonRecordToTabWrites(noSales, 'regular', null).map((w) => w.tab))

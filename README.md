@@ -125,6 +125,9 @@ calculation engine, so past dates are filled in. Things worth knowing:
 - The **◀ ▶** arrows step a day at a time, and the date itself opens a calendar.
 - **Don't rename** the spreadsheets' tabs, their column headers, or the station tabs. The app finds
   everything by those exact names.
+- **Don't reformat the number columns** either — no commas, no dollar signs. The app reads a cell
+  the way it looks, so `$11,000` comes back as words rather than a number and that day would load
+  blank. Leave the numbers plain and everything stays readable to it.
 - The bibles the app calculates from live in this repo (`src/data/`). The bible tabs in the
   spreadsheet are a read-only mirror.
 
@@ -175,6 +178,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.8.0** | A second read-through, aimed at the parts the first one covered least. One real bug: an end-of-night entry on a day with no 2 PM record was filed under the wrong dough bible during peach season. |
 | **1.7.0** | A full read-through of every line, and the four real bugs it turned up: the Day's Work card claiming "nothing to make" before anything was counted; LOAD FROM SHEET keeping numbers the sheet doesn't have and marking them saved; a mistyped sheet address hanging Test Connection for ever; and the bible mirror never being sent, which could quietly stall the self-building bible. |
 | **1.6.0** | The repo tidied: everything in folders, the finished build's paperwork removed, duplicate code collapsed, this page written. |
 | **1.5.0** | The look — the Mise en Place design ported in, on one flat background that a phone's dark mode can't invert. |

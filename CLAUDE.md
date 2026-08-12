@@ -123,11 +123,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **`mirrorBibles()` runs at boot for a reason.** `refreshBibleBuild()` gives up silently when a
   bible mirror tab is empty, so without a re-send the self-building bible would just stop after an
   Erase all data. The script no-ops on an unchanged hash.
+- **A fetch's bible must fall back to the EON record's own.** On a night with no 2 PM record there
+  is no day-record bible, and `eonRecordToTabWrites` picks the self-building bible tab from it —
+  getting that wrong files a peach night under the regular bible, silently. Every test but one
+  passes the bible explicitly, so the undefined path needs its own.
 - **Setup mistakes must be told, not retried.** A typo'd address, a 404, or an HTML page instead of
   JSON are all `rejected` with plain-words reasons — retrying those forever just shows
   OFFLINE — WILL RETRY and teaches the owner nothing.
 
-## Two Google rules learned the hard way — do not relearn them
+## Three Google rules learned the hard way — do not relearn them
 
 1. **A tab name is capped at 31 characters.** Google truncates longer ones, and two names that
    truncate alike collide silently: the second tab quietly becomes `Sheet2` and everything written
@@ -137,6 +141,13 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
    written. Anything matching rows by date must go through `normalizeDate`, which handles all three
    shapes — matching on the raw value silently appends a duplicate row on every save instead of
    merging. The test harness models this quirk deliberately, so the bug fails loudly.
+3. **The read path uses `getDisplayValues()`** — what a cell LOOKS like, not what it holds. Nothing
+   in either notebook is formatted today (setup only sets a date format on column A), so this costs
+   nothing, but a number column given a comma or a currency symbol would come back as `"$11,000"`
+   and load as blank. The guard is a line in README telling the owner not to format those columns,
+   deliberately in place of code: a converter would be a new function and a new code path for
+   something that has never happened. If it ever DOES happen, strip the symbols in `cell()` in
+   `services/mapping.ts` — do not reach for it before then.
 
 ## Engine facts worth remembering
 
