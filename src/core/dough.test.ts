@@ -257,11 +257,32 @@ describe('batch options (§1e)', () => {
   });
 });
 
-describe('splitTrayDelta (40/60 between Small and Large)', () => {
+describe('splitTrayDelta (lean-large: LG = ceil(0.6 × n), SM takes the rest)', () => {
   it('splits between both when both are counted', () => {
     expect(splitTrayDelta(10, defaultConfig)).toEqual({ smallTrayDelta: 4, largeTrayDelta: 6 });
     expect(splitTrayDelta(-10, defaultConfig)).toEqual({ smallTrayDelta: -4, largeTrayDelta: -6 });
-    expect(splitTrayDelta(-7, defaultConfig)).toEqual({ smallTrayDelta: -3, largeTrayDelta: -4 });
+    expect(splitTrayDelta(-7, defaultConfig)).toEqual({ smallTrayDelta: -2, largeTrayDelta: -5 });
+  });
+
+  it('Large is STRICTLY ahead at every delta — the point of leaning large', () => {
+    for (let n = 1; n <= 12; n++) {
+      const { smallTrayDelta, largeTrayDelta } = splitTrayDelta(n, defaultConfig);
+      expect(smallTrayDelta + largeTrayDelta).toBe(n);
+      expect(largeTrayDelta).toBeGreaterThan(smallTrayDelta);
+    }
+  });
+
+  it('the deltas where leaning large differs from an even 40/60 split', () => {
+    // These four are exactly where the old app and a rounded 0.4 share part ways.
+    expect(splitTrayDelta(2, defaultConfig)).toEqual({ smallTrayDelta: 0, largeTrayDelta: 2 });
+    expect(splitTrayDelta(4, defaultConfig)).toEqual({ smallTrayDelta: 1, largeTrayDelta: 3 });
+    expect(splitTrayDelta(7, defaultConfig)).toEqual({ smallTrayDelta: 2, largeTrayDelta: 5 });
+    expect(splitTrayDelta(9, defaultConfig)).toEqual({ smallTrayDelta: 3, largeTrayDelta: 6 });
+  });
+
+  it('a round-down mirrors the same lean (Large gives up the most)', () => {
+    expect(splitTrayDelta(-4, defaultConfig)).toEqual({ smallTrayDelta: -1, largeTrayDelta: -3 });
+    expect(splitTrayDelta(-2, defaultConfig)).toEqual({ smallTrayDelta: 0, largeTrayDelta: -2 });
   });
 
   it('gives the whole delta to the only counted one', () => {
@@ -367,5 +388,149 @@ describe('blank vs zero through the calculation (§2)', () => {
     expect(record.trays.indi).toBeNull();
     // but its need is still knowable from the bible
     expect(record.need.indi).toBe(26);
+  });
+});
+
+describe("Sicilian minimum (owner's rule: at least 1 unless 8+ on hand)", () => {
+  // Current sales exactly meet today's forecast, so nothing is used tonight
+  // (left = have) and the only thing that can move the make is the floor.
+  // Tomorrow $16,000 → the 16,250 row → Sicilian need 6.
+  const night = (sicSingles: number | null) =>
+    runDoughCalculation(
+      {
+        date: '2026-03-10',
+        counts: counts({
+          indiTrays: 4, smallTrays: 30, largeTrays: 30,
+          ...(sicSingles === null ? {} : { sicSingles }),
+          boliTrays: 6,
+        }),
+        todayForecastRaw: 18,
+        currentSalesRaw: 18,
+        tomorrowForecastRaw: 16,
+      },
+      bibles,
+      defaultConfig,
+    );
+
+  it('floors the make at 1 when fewer than 8 are on hand', () => {
+    const short = night(7);
+    expect(short.use.sic).toBe(0); // nothing sells tonight
+    expect(short.need.sic).toBe(6);
+    expect(short.left.sic).toBe(7); // already more than tomorrow wants…
+    expect(short.make.sic).toBe(1); // …but the floor still asks for one
+    expect(short.trays.sic).toBe(1);
+  });
+
+  it('waives the floor at exactly 8 on hand', () => {
+    expect(night(8).make.sic).toBe(0);
+    expect(night(20).make.sic).toBe(0);
+  });
+
+  it('never invents a make on a Sicilian nobody counted', () => {
+    const uncounted = night(null);
+    expect(uncounted.countedSizes.sic).toBe(false);
+    expect(uncounted.make.sic).toBeNull();
+    expect(uncounted.trays.sic).toBeNull();
+  });
+
+  it('is moot on a closed tomorrow — nothing gets made at all', () => {
+    const closed = runDoughCalculation(
+      {
+        date: '2026-03-10',
+        counts: counts({ indiTrays: 4, smallTrays: 30, largeTrays: 30, sicSingles: 1, boliTrays: 6 }),
+        todayForecastRaw: 18,
+        currentSalesRaw: 9,
+        tomorrowForecastRaw: 0,
+      },
+      bibles,
+      defaultConfig,
+    );
+    expect(closed.make.sic).toBe(0);
+  });
+
+  it('raises a make that is below the floor, never lowers one above it', () => {
+    // 1 on hand against a need of 6 → a real make of 5, well clear of the floor.
+    expect(night(1).make.sic).toBe(5);
+  });
+});
+
+describe('the batch direction settles itself (a tapped pill still wins)', () => {
+  /**
+   * Drive the tray total with Large alone: counted at zero, with nothing sold
+   * tonight, its make IS tomorrow's need and its trays are ceil(need / 6).
+   * Every forecast below is an EXACT bible row, so the total does not shift
+   * with the rounding direction. Boli adds exactly one more tray when counted
+   * at 30 balls (36 − 30 = 6 → one tray).
+   */
+  const night = (opts: {
+    tomorrow: number;
+    slow: boolean;
+    withBoli?: boolean;
+    batchRound?: 'up' | 'down';
+  }) =>
+    runDoughCalculation(
+      {
+        date: '2026-03-10',
+        counts: counts({
+          largeTrays: 0,
+          largeSingles: 0,
+          ...(opts.withBoli ? { boliSingles: 30 } : {}),
+        }),
+        todayForecastRaw: opts.slow ? 12 : 18,
+        currentSalesRaw: opts.slow ? 12 : 18,
+        tomorrowForecastRaw: opts.tomorrow / 1000,
+        batchRound: opts.batchRound,
+      },
+      bibles,
+      defaultConfig,
+    );
+
+  it('a slow day is BOTH forecasts under $13,000', () => {
+    expect(night({ tomorrow: 5700, slow: true }).rounding.slowDay).toBe(true);
+    expect(night({ tomorrow: 5700, slow: false }).rounding.slowDay).toBe(false);
+  });
+
+  it('1 or 2 trays past a whole batch rounds DOWN on any day', () => {
+    // Large need 72 → 12 trays (1 past 11); +1 Boli tray → 13 (2 past).
+    const one = night({ tomorrow: 5700, slow: false });
+    expect(one.totalTrays).toBe(12);
+    expect(one.chosenBatchOption).toBe('down');
+
+    const two = night({ tomorrow: 5700, slow: false, withBoli: true });
+    expect(two.totalTrays).toBe(13);
+    expect(two.chosenBatchOption).toBe('down');
+  });
+
+  it('3 to 5 past rounds UP on a busy day but DOWN on a slow one', () => {
+    // Large needs 79 / 87 / 94 → 14 / 15 / 16 trays → 3, 4, 5 past a batch.
+    for (const [tomorrow, total] of [[6300, 14], [6800, 15], [7200, 16]] as const) {
+      expect(night({ tomorrow, slow: false }).totalTrays).toBe(total);
+      expect(night({ tomorrow, slow: false }).chosenBatchOption).toBe('up');
+      expect(night({ tomorrow, slow: true }).chosenBatchOption).toBe('down');
+    }
+  });
+
+  it('6 past rounds UP even on a slow day', () => {
+    // Large need 99 → 17 trays, 6 past a whole batch.
+    const six = night({ tomorrow: 7800, slow: true });
+    expect(six.totalTrays).toBe(17);
+    expect(six.chosenBatchOption).toBe('up');
+  });
+
+  it('a tapped pill wins over the rule, and says it was not auto', () => {
+    const auto = night({ tomorrow: 5700, slow: false });
+    expect(auto.chosenBatchOption).toBe('down');
+    expect(auto.rounding.batchesAuto).toBe(true);
+
+    const tapped = night({ tomorrow: 5700, slow: false, batchRound: 'up' });
+    expect(tapped.chosenBatchOption).toBe('up');
+    expect(tapped.rounding.batchesAuto).toBe(false);
+    expect(tapped.batchUp!.batches).toBe(2);
+  });
+
+  it('both options stay built, so either pill can be tapped', () => {
+    const n = night({ tomorrow: 6300, slow: false });
+    expect(n.batchDown!.batches).toBe(1);
+    expect(n.batchUp!.batches).toBe(2);
   });
 });

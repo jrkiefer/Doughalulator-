@@ -13,16 +13,30 @@ export interface BallsPerTray {
 }
 
 export interface SalesShorthandRule {
-  /** Entered values at or below this are treated as thousands. */
-  maxShorthand: number;
+  /** Entered values BELOW this are treated as thousands (100 stays $100). */
+  under: number;
   multiplier: number;
 }
 
 export interface BibleRoundingRule {
-  /** Sales at/above this use `atOrAbove`; below it use `below`. */
-  threshold: number;
-  below: RoundDirection;
-  atOrAbove: RoundDirection;
+  /** A slow day is both forecasts entered and both strictly under this. */
+  slowDayUnder: number;
+  /** On a slow day, never round a lookup down by more than this many dollars. */
+  maxRoundDownGap: number;
+}
+
+export interface BatchRoundingRule {
+  /** Trays past a whole batch that round DOWN on any day. */
+  downMaxOverAnyDay: number;
+  /** …widened to this on a slow day. */
+  downMaxOverSlowDay: number;
+}
+
+export interface SicMinimumRule {
+  /** Never make fewer than this many Sicilian… */
+  make: number;
+  /** …unless this many are already on hand. */
+  waiverAt: number;
 }
 
 export interface SeasonWindow {
@@ -32,8 +46,8 @@ export interface SeasonWindow {
 }
 
 export interface BatchAdjustSplit {
-  small: number;
-  large: number;
+  /** Large's share of a tray adjustment, rounded UP so Large is always ahead. */
+  largeShare: number;
 }
 
 export interface TempSlotRules {
@@ -53,6 +67,8 @@ export interface AppConfig {
   traysPerBatch: number;
   salesShorthand: SalesShorthandRule;
   bibleRounding: BibleRoundingRule;
+  batchRounding: BatchRoundingRule;
+  sicMinimum: SicMinimumRule;
   peachSeason: SeasonWindow;
   batchAdjustSplit: BatchAdjustSplit;
   bibleDisplayNames: Record<BibleId, string>;
@@ -67,10 +83,12 @@ export const defaultConfig: AppConfig = {
   sicMakeTraySize: 3,
   boliTargetTrays: 6,
   traysPerBatch: 11,
-  salesShorthand: { maxShorthand: 50, multiplier: 1000 },
-  bibleRounding: { threshold: 10000, below: 'down', atOrAbove: 'up' },
+  salesShorthand: { under: 100, multiplier: 1000 },
+  bibleRounding: { slowDayUnder: 13000, maxRoundDownGap: 400 },
+  batchRounding: { downMaxOverAnyDay: 2, downMaxOverSlowDay: 5 },
+  sicMinimum: { make: 1, waiverAt: 8 },
   peachSeason: { start: '07-01', end: '08-31' },
-  batchAdjustSplit: { small: 0.4, large: 0.6 },
+  batchAdjustSplit: { largeShare: 0.6 },
   bibleDisplayNames: { regular: "Bible '26", peach: "Peach '24" },
   stations: [
     'Pizza 1',

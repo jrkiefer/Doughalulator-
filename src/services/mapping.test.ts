@@ -12,6 +12,7 @@ import {
   salesRowToBible,
   salesRowToFields,
   summaryRowsToHistory,
+  summaryRowToForecastRounding,
   summaryRowToRounding,
   tempsLogRows,
   tempsOverviewRows,
@@ -19,22 +20,24 @@ import {
   tempsToPayload,
 } from './mapping';
 
-/** The worked example: Jan 15, regular bible, owner tapped UP. */
-const baseRecord = runDoughCalculation(
-  {
-    date: '2026-01-15',
-    counts: counts({
-      indiTrays: 1, indiSingles: 4, smallTrays: 5, smallSingles: 3,
-      largeTrays: 4, largeSingles: 2, sicSingles: 1, boliTrays: 2, boliSingles: 1,
-    }),
-    todayForecastRaw: 7.2,
-    currentSalesRaw: 4.5,
-    tomorrowForecastRaw: 9.1,
-  },
-  bibles,
-  defaultConfig,
-);
-const dayRecord = { ...baseRecord, chosenBatchOption: 'up' as const };
+/**
+ * The worked example: Jan 15, regular bible, owner tapped the batch pill UP.
+ * The tap goes in as an INPUT — a record whose stamp and resolved direction
+ * disagree could never come out of the engine, and the sheet columns are
+ * written from the stamp.
+ */
+const pmInputs = {
+  date: '2026-01-15',
+  counts: counts({
+    indiTrays: 1, indiSingles: 4, smallTrays: 5, smallSingles: 3,
+    largeTrays: 4, largeSingles: 2, sicSingles: 1, boliTrays: 2, boliSingles: 1,
+  }),
+  todayForecastRaw: 7.2,
+  currentSalesRaw: 4.5,
+  tomorrowForecastRaw: 9.1,
+  batchRound: 'up' as const,
+};
+const dayRecord = runDoughCalculation(pmInputs, bibles, defaultConfig);
 
 const eonRecord = runEonCalculation(
   {
@@ -79,7 +82,7 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       'Sic Count': 1,
       'Boli Count': 13,
       Bible: 'regular',
-      'Forecast Rounding': 'down', // 2,700 is below the 10,000 threshold
+      'Forecast Rounding': '', // 2,700 is below the 10,000 threshold
       'Batch Rounding': 'up',
     });
 
@@ -241,7 +244,25 @@ describe('reverse mapping (loading)', () => {
       todayForecast: '7200', currentSales: '4500', tomorrowForecast: '9100',
     });
     expect(salesRowToBible(row)).toBe('regular');
+    // Nothing was tapped on this record, so the sheet records "auto" (blank)
+    // and it reads back as auto — the rules stay live on the next load.
+    // The batch pill was tapped, so it round-trips; the forecast was left on
+    // auto, so it records blank and reads back as auto — the rule stays live.
     expect(summaryRowToRounding(row)).toBe('up');
+    expect(summaryRowToForecastRounding(row)).toBeNull();
+  });
+
+  it('a TAPPED rounding round-trips through the sheet as itself', () => {
+    const stamped = runDoughCalculation(
+      { ...pmInputs, forecastRound: 'up', batchRound: 'down' },
+      bibles,
+      defaultConfig,
+    );
+    const row = dayRecordToTabWrites(stamped)[0].row;
+    expect(row['Forecast Rounding']).toBe('up');
+    expect(row['Batch Rounding']).toBe('down');
+    expect(summaryRowToForecastRounding(row)).toBe('up');
+    expect(summaryRowToRounding(row)).toBe('down');
   });
 
   it('an EON row hydrates back through the EON prefix', () => {

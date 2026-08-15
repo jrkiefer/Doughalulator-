@@ -1,6 +1,6 @@
-import type { BibleId, BibleSizeKey, SizeKey } from '../config';
+import type { BibleId, BibleSizeKey, RoundDirection, SizeKey } from '../config';
 
-export type { BibleId, BibleSizeKey, SizeKey };
+export type { BibleId, BibleSizeKey, RoundDirection, SizeKey };
 
 /** A value that may be "not entered / not knowable" — blank is never a zero. */
 export type Maybe = number | null;
@@ -99,6 +99,22 @@ export interface DoughInputs {
   tomorrowForecastRaw: Maybe;
   /** Optional explicit bible choice; otherwise picked by date. */
   bibleOverride?: BibleId;
+  /** Tapped forecast-rounding pill. Null/absent = let the slow-day rule decide. */
+  forecastRound?: RoundDirection | null;
+  /** Tapped batch-rounding pill. Null/absent = let the remainder rule decide. */
+  batchRound?: RoundDirection | null;
+}
+
+/** Which way each rounding resolved tonight, and whether the app chose it. */
+export interface RoundingResolution {
+  /** Both forecasts entered and both under the gate. */
+  slowDay: boolean;
+  forecast: RoundDirection;
+  /** True when nothing was tapped and the slow-day rule decided. */
+  forecastAuto: boolean;
+  /** Null until there is a tray total to judge. */
+  batches: RoundDirection | null;
+  batchesAuto: boolean;
 }
 
 /** One of the two batch choices (round exactBatches down or up). */
@@ -184,8 +200,13 @@ export interface DoughDayRecord {
   /** Null when there is nothing to make (totalTrays 0 or unknown) — no batch choice is offered. */
   batchDown: BatchOption | null;
   batchUp: BatchOption | null;
-  /** Owner taps up or down in the UI; the engine never picks. */
-  chosenBatchOption: 'down' | 'up' | null;
+  /**
+   * The direction in force: the tapped pill, or — since v1.13.0 — the one the
+   * remainder rule resolved. Null only while there is nothing to make.
+   */
+  chosenBatchOption: RoundDirection | null;
+  /** How both roundings resolved, and whether the owner or the rule decided. */
+  rounding: RoundingResolution;
   flags: {
     /** Tomorrow's forecast was explicitly typed as 0: the shop is closed tomorrow. */
     closedTomorrow: boolean;

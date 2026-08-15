@@ -1,5 +1,5 @@
-import type { AppConfig } from '../config';
-import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
+import type { AppConfig, RoundDirection } from '../config';
+import { getBible, isSlowDay, lookupBibleRow, resolveForecastRound, rowToNeeds, selectBibleId } from './bible';
 import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
@@ -18,8 +18,16 @@ import type {
 
 const BIBLE_SIZES: BibleSizeKey[] = ['indi', 'small', 'large', 'sic'];
 
-/** Split a tray delta between Small and Large (40/60 by default). If only one
- * of them was counted, it absorbs the whole delta; if neither, nothing moves. */
+/**
+ * Split a tray adjustment between Small and Large, leaning Large: it takes
+ * `ceil(0.6 × n)` and Small the rest, so Large is strictly ahead for any n ≥ 1
+ * (10 → 6 LG + 4 SM; 2 → 2 LG + 0 SM). Ported from the owner's other app so the
+ * two agree. If only one of the pair was counted it absorbs the whole delta; if
+ * neither, nothing moves.
+ *
+ * A round-DOWN passes a negative delta: `ceil` on a negative leans Large the
+ * same way (−3 → −2 LG, −1 SM), which is the mirror of the top-up.
+ */
 export function splitTrayDelta(
   delta: number,
   config: AppConfig,
@@ -27,8 +35,9 @@ export function splitTrayDelta(
   largeCounted = true,
 ): { smallTrayDelta: number; largeTrayDelta: number } {
   if (smallCounted && largeCounted) {
-    const smallTrayDelta = Math.round(config.batchAdjustSplit.small * delta);
-    return { smallTrayDelta, largeTrayDelta: delta - smallTrayDelta };
+    const sign = delta < 0 ? -1 : 1;
+    const largeTrayDelta = sign * Math.ceil(config.batchAdjustSplit.largeShare * Math.abs(delta));
+    return { smallTrayDelta: delta - largeTrayDelta, largeTrayDelta };
   }
   if (smallCounted) return { smallTrayDelta: delta, largeTrayDelta: 0 };
   if (largeCounted) return { smallTrayDelta: 0, largeTrayDelta: delta };
@@ -140,12 +149,24 @@ export function runDoughCalculation(
   const countedSizes = computeCountedSizes(inputs.counts);
   const have = computeHave(inputs.counts, config);
 
+  // Which way the bible rounds tonight. Resolved FIRST: it shifts both the use
+  // and the need, and with them every tray the batch rule is later judged on.
+  const slowDay = isSlowDay(todayForecast, tomorrowForecast, config);
+  const forecastRound = resolveForecastRound(
+    inputs.forecastRound,
+    todayForecast,
+    tomorrowForecast,
+    config,
+  );
+
   // Tonight: how much of what we have gets used before close.
   const tonightKnown = todayForecast !== null && currentSales !== null;
   const salesLeft = tonightKnown ? todayForecast! - currentSales! : null;
   const negativeSalesLeft = salesLeft !== null && salesLeft < 0;
   const tonightRowMatched =
-    salesLeft !== null && salesLeft > 0 ? lookupBibleRow(bible, salesLeft, config) : null;
+    salesLeft !== null && salesLeft > 0
+      ? lookupBibleRow(bible, salesLeft, config, forecastRound)
+      : null;
   const tonightUse = tonightRowMatched
     ? rowToNeeds(tonightRowMatched)
     : tonightKnown
@@ -187,7 +208,7 @@ export function runDoughCalculation(
   const closedTomorrow = tomorrowForecast === 0;
   const tomorrowRowMatched =
     tomorrowForecast !== null && !closedTomorrow
-      ? lookupBibleRow(bible, tomorrowForecast, config)
+      ? lookupBibleRow(bible, tomorrowForecast, config, forecastRound)
       : null;
   const tomorrowNeed = closedTomorrow
     ? { indi: 0, small: 0, large: 0, sic: 0 }
@@ -209,6 +230,12 @@ export function runDoughCalculation(
       // Set-out replacement: left may be negative, so tomorrow's make
       // includes tonight's set-out dough. Floor at zero only after that.
       make[size] = Math.max(0, tomorrowNeed[size] - left[size]!);
+      // Sicilian floor: never make fewer than `sicMinimum.make` unless that
+      // many are already on hand. Only when Sicilian was actually COUNTED —
+      // the floor must not invent dough on a size nobody has looked at.
+      if (size === 'sic' && have.sic !== null && have.sic < config.sicMinimum.waiverAt) {
+        make[size] = Math.max(make[size]!, config.sicMinimum.make);
+      }
       trays[size] = Math.ceil(make[size]! / perTray[size]);
     }
   }
@@ -236,6 +263,19 @@ export function runDoughCalculation(
       : BIBLE_SIZES.reduce((sum, size) => sum + (trays[size] ?? 0), 0) + (boliTrays ?? 0);
   }
   const exactBatches = totalTrays === null ? null : totalTrays / config.traysPerBatch;
+
+  // Which way the batch count rounds. A few trays past a whole batch is not
+  // worth a whole extra mixer run, so it rounds down: up to 2 over on any
+  // night, widening to 5 over on a slow one. A tapped pill wins outright.
+  let batchesRound: RoundDirection | null = null;
+  if (totalTrays !== null && totalTrays > 0) {
+    const over = totalTrays % config.traysPerBatch;
+    const rule = config.batchRounding;
+    const autoDown =
+      (over >= 1 && over <= rule.downMaxOverAnyDay) ||
+      (slowDay && over >= 1 && over <= rule.downMaxOverSlowDay);
+    batchesRound = inputs.batchRound ?? (autoDown ? 'down' : 'up');
+  }
 
   let batchDown: BatchOption | null = null;
   let batchUp: BatchOption | null = null;
@@ -284,7 +324,14 @@ export function runDoughCalculation(
     exactBatches,
     batchDown,
     batchUp,
-    chosenBatchOption: null,
+    chosenBatchOption: batchesRound,
+    rounding: {
+      slowDay,
+      forecast: forecastRound,
+      forecastAuto: inputs.forecastRound == null,
+      batches: batchesRound,
+      batchesAuto: inputs.batchRound == null,
+    },
     flags: {
       closedTomorrow,
       negativeSalesLeft,

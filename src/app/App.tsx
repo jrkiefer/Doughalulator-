@@ -43,6 +43,7 @@ export default function App() {
   const [date, setDate] = useState(todayIso());
   const [form, setForm] = useState<TwoPmForm>(emptyTwoPmForm);
   const [rounding, setRounding] = useState<Rounding>(null);
+  const [forecastRound, setForecastRound] = useState<Rounding>(null);
   const [bibleOverride, setBibleOverride] = useState<BibleId | undefined>(undefined);
   const [eonForm, setEonForm] = useState<EonForm>(emptyEonForm);
   const [tempSlot, setTempSlot] = useState<TempSlot>(() => slotForTime(nowHhMm(), cfg));
@@ -57,6 +58,7 @@ export default function App() {
     const entry = engine.getEntry(forDate);
     setForm({ ...emptyTwoPmForm, ...(entry.day?.form ?? {}) });
     setRounding(entry.day?.rounding ?? null);
+    setForecastRound(entry.day?.forecastRound ?? null);
     setBibleOverride(entry.day?.bibleOverride ?? undefined);
     setEonForm({ ...emptyEonForm, ...(entry.eon?.form ?? {}) });
     setTemps(entry.temps?.readings ?? emptyTempReadings);
@@ -130,8 +132,8 @@ export default function App() {
   }, [date, rehydrate]);
 
   const record = useMemo(
-    () => buildDayRecord(date, form, rounding, bibleOverride),
-    [date, form, rounding, bibleOverride],
+    () => buildDayRecord(date, form, rounding, bibleOverride, forecastRound),
+    [date, form, rounding, bibleOverride, forecastRound],
   );
   const status = engine.status(date);
   const synced = status.state === 'synced';
@@ -146,12 +148,25 @@ export default function App() {
     });
   }
 
+  // A rounding tap is a finished decision — it goes at once, no debounce wait.
+  // Tapping the pill already in force hands the night back to the auto rule.
   function editRounding(r: 'down' | 'up') {
-    setRounding(r);
+    const next = rounding === r ? null : r;
+    setRounding(next);
     engine.edit(date, 'day', (rec) => {
-      rec.rounding = r;
+      rec.rounding = next;
     });
-    void engine.flush(); // a tap is a finished decision — no debounce wait
+    void engine.flush();
+  }
+
+  function editForecastRound(r: 'down' | 'up') {
+    // Tapping the pill that is already in force hands the night back to auto.
+    const next = forecastRound === r ? null : r;
+    setForecastRound(next);
+    engine.edit(date, 'day', (rec) => {
+      rec.forecastRound = next;
+    });
+    void engine.flush();
   }
 
   function editBible(id: BibleId) {
@@ -248,8 +263,8 @@ export default function App() {
           record={record}
           form={form}
           onFormChange={editDay}
-          rounding={rounding}
           onRounding={editRounding}
+          onForecastRound={editForecastRound}
           synced={synced}
         />
       )}

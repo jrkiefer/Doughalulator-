@@ -60,8 +60,8 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **Boli** — special dough, never in the bible. Rule: always top the count back up to 6 trays.
 - **Batch** — one mixer run of dough = 11 trays.
 - **Bible** — the lookup table mapping a sales figure to dough needed per size. Regular bible Sept 1 – June 30; **peach bible July 1 – Aug 31** (peach season), chosen by the record's date.
-- **Shorthand sales** — sales typed small mean thousands: an entry ≤ 50 is multiplied by 1,000 (2.2 → 2,200; 50 → 50,000); above 50 is literal; 0 stays 0.
-- **2 PM session** — the afternoon count + calculation: what we have, what tonight will use, what tomorrow needs, what to make, and the two batch choices (round down / round up — the owner taps one; the engine never picks).
+- **Shorthand sales** — sales typed small mean thousands: an entry **under 100** is multiplied by 1,000 (2.2 → 2,200; 99 → 99,000); 100 and above is literal; 0 stays 0. (v1.13.0 — matched to the owner's other app, which has always used this cutoff.)
+- **2 PM session** — the afternoon count + calculation: what we have, what tonight will use, what tomorrow needs, what to make, and the batch count (the remainder rule settles round down / round up on its own; the pills override it).
 - **salesLeft** — today's forecast − current sales: the selling still to come tonight.
 - **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
 - **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. **PM sales is still computed and still written to the sheet, it is just not drawn** — the owner asked for the display gone, not the number.
@@ -178,20 +178,39 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`;
   `computeAmUse(yesterdayEonHave, todayHave, amSales)` → `AmUse`. All pure; bibles and config are
   always passed in; blank inputs are `null` and stay null.
-- Bible lookup: exact row wins; between rows round DOWN below 10,000 and UP at/above (config);
-  outside the range clamp to the nearest end.
+- **Bible lookup** (v1.13.0, ported from the owner's other app): exact row wins; outside the range
+  clamp to the nearest end; between rows the default is **UP**. It rounds **DOWN** only on a SLOW
+  DAY — both forecasts entered and both strictly under `slowDayUnder` ($13,000) — and even then
+  never by more than `maxRoundDownGap` ($400); a wider gap falls back to up, including when the
+  direction was tapped by hand. `isSlowDay`/`resolveForecastRound` in `core/bible.ts` are the two
+  helpers; the direction is resolved ONCE per record, before both lookups, because it shifts the
+  use and the need and with them every tray the batch rule is judged on.
+- **Sicilian minimum** (v1.13.0): `make` floors at `sicMinimum.make` (1) unless `sicMinimum.waiverAt`
+  (8) or more are already on hand — and only when Sicilian was actually counted, so a blank size
+  still makes nothing. Moot on a closed tomorrow.
+- **The batch direction resolves itself** (v1.13.0): `over = totalTrays % 11`; down when `over` is
+  1–2 on any night, widening to 1–5 on a slow day; up otherwise. The pills override it, and tapping
+  the pill already in force hands the night back to the rule. Both `batchDown` and `batchUp` are
+  still built so either pill can be tapped.
+- **Tray adjustment leans LARGE**: `LG = ceil(0.6 × n)`, Small takes the rest, so Large is strictly
+  ahead at every delta (2 → 0 SM / 2 LG; 4 → 1/3; 7 → 2/5). A round-down mirrors it.
 - Tomorrow forecast typed 0 = **closed tomorrow**: zero need/make everywhere including Boli, no
   batch choice. Blank tomorrow = unknown, not zero.
 - `left` keeps raw negatives; the shortfall is a per-size **set-out** (whole trays) and tomorrow's
   make = need − left replaces it (dough conserves). salesLeft 0 → use 0; negative → use 0 +
   `negativeSalesLeft`.
 - Boli top-up counts trays AND singles toward 36 balls; the EON check includes Boli vs that target.
-- Batch round-down floors at 1 batch when there is dough to make; 40/60 Small/Large adjustment,
-  never below 0, whole delta to the only counted one of the pair.
+- Batch round-down floors at 1 batch when there is dough to make; the tray adjustment leans LARGE
+  (`LG = ceil(0.6 × n)`), never below 0, whole delta to the only counted one of the pair.
 - `npm run dev` starts the preview. The four gates are wired into CI.
 
 **Owner-chosen defaults (don't change without asking):**
 1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
+7. **The app resolves the batch direction; the pills override it** (Aug 2026). This REPLACED
+   "the owner taps one, the engine never picks" — the owner re-chose the other app's behaviour,
+   twice, in writing. A consequence they accepted: `Final Make Amount`, `Estimated Dough After
+   Gang` and `PM Dough Use` now fill without a tap, because a direction always exists. That
+   supersedes the old default #3 below.
 2. Night temps slot stays "after 17:00".
 5. **Temps are typed, never copied forward** (Aug 2026). LOAD LAST TEMPS was removed: it wrote the
    previous readings straight into the current slot with the current clock time, i.e. it filed
@@ -202,8 +221,11 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
    and `PM Dough Use` no Boli use, so the EON Boli count is screen-only: it feeds the outlook and
    the phone, and reloading that date brings it back blank. The owner chose to keep the Dough Log's
    layout untouched over recording it. Written down in README so it can't surprise anyone.
-3. Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.
+3. ~~Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.~~
+   SUPERSEDED by #7 — a direction always resolves now, so those columns always fill. What DOES
+   stay blank is the two **Rounding** columns: they carry the owner's TAP (blank = auto), never the
+   resolved direction, or a reloaded night would freeze tonight's answer and stop re-resolving.
 4. Sicilian never goes negative anywhere: no same-day set-out at 2 PM (`left` floors at 0) and its
-   outlook diff clamps at 0 too. This REPLACED an earlier default that had EON Sicilian shortfalls
+   outlook diff clamps at 0 too. Separate from the v1.13.0 minimum, which floors the MAKE at 1. This REPLACED an earlier default that had EON Sicilian shortfalls
    reporting at full strength — superseded Aug 2026 by the owner's rule and by their other app,
    which clamps it identically.

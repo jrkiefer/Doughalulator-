@@ -107,7 +107,8 @@ describe('runEonCalculation without a day record', () => {
   });
 
   it('a manual forecast brings the check back (auto bible by date)', () => {
-    // July date → peach. 9.7 → 9,700 → DOWN → the 9,500 peach row: 29/179/133/4.
+    // July date → peach. 9.7 → 9,700. With no 2 PM record there is no slow-day
+    // gate to read, so it rounds UP → the 10,000 peach row: 30/188/137/4.
     const record = runEon({
       date: '2026-07-15',
       counts: counts({
@@ -119,12 +120,13 @@ describe('runEonCalculation without a day record', () => {
     });
     expect(record.needSource).toBe('manualForecast');
     expect(record.bibleUsed).toBe('peach');
-    expect(record.need).toEqual({ indi: 29, small: 179, large: 133, sic: 4 });
-    expect(record.eonLeft).toEqual({ indi: -5, small: -19, large: -13, sic: -2 });
+    expect(record.need).toEqual({ indi: 30, small: 188, large: 137, sic: 4 });
+    // have 24 / 160 / 120 / 2 against that need
+    expect(record.eonLeft).toEqual({ indi: -6, small: -28, large: -17, sic: -2 });
     const r = record.outlook!.rows;
-    expect(r.indi.trays).toBe(0); // 5/11 = 0.45 → nearest tray is none
-    expect(r.small.trays).toBe(-2); // 19/8 = 2.375 → 2
-    expect(r.large.trays).toBe(-2); // 13/6 = 2.17 → 2
+    expect(r.indi.trays).toBe(-1); // 6/11 = 0.55 → 1
+    expect(r.small.trays).toBe(-4); // 28/8 = 3.5 → 4
+    expect(r.large.trays).toBe(-3); // 17/6 = 2.83 → 3
     expect(r.sic).toMatchObject({ diff: 0, trays: 0 }); // clamped, never −2
     expect(record.boliLeft).toBe(30 - 36);
     expect(r.boli.trays).toBe(-1); // 6/6 = 1

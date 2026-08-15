@@ -40,7 +40,10 @@ export interface SyncMeta {
 
 export interface DayEntry extends SyncMeta {
   form: Record<string, string>;
+  /** The tapped BATCH-rounding pill. Null = let the remainder rule decide. */
   rounding: 'down' | 'up' | null;
+  /** The tapped FORECAST-rounding pill. Null = let the slow-day rule decide. */
+  forecastRound?: 'down' | 'up' | null;
   bibleOverride: BibleId | null;
 }
 

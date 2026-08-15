@@ -9,12 +9,16 @@ describe('normalizeSales (shorthand entry)', () => {
     expect(normalizeSales(2.2, rule)).toBe(2200);
   });
 
-  it('expands 50 (the shorthand ceiling) to 50,000', () => {
+  it('expands 50 to 50,000', () => {
     expect(normalizeSales(50, rule)).toBe(50000);
   });
 
-  it('leaves 51 literal — just above the ceiling', () => {
-    expect(normalizeSales(51, rule)).toBe(51);
+  it('expands 99 — still below the ceiling — to 99,000', () => {
+    expect(normalizeSales(99, rule)).toBe(99000);
+  });
+
+  it('leaves 100 literal — the ceiling itself is a real dollar amount', () => {
+    expect(normalizeSales(100, rule)).toBe(100);
   });
 
   it('keeps 0 as 0', () => {

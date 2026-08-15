@@ -13,6 +13,7 @@ import {
   salesRowToBible,
   salesRowToFields,
   summaryRowsToHistory,
+  summaryRowToForecastRounding,
   summaryRowToRounding,
   type HistorySummary,
 } from './mapping';
@@ -32,7 +33,10 @@ type SheetRow = Record<string, string | number>;
 export interface FetchedDay {
   sales: { todayForecast: string; currentSales: string; tomorrowForecast: string } | null;
   counts: Record<string, string> | null;
+  /** The tapped BATCH-rounding pill; null = auto. */
   rounding: 'down' | 'up' | null;
+  /** The tapped FORECAST-rounding pill; null = auto. */
+  forecastRound: 'down' | 'up' | null;
   bible: 'regular' | 'peach' | null;
   eonCounts: Record<string, string> | null;
   finalSales: string | null;
@@ -63,6 +67,7 @@ export async function fetchDate(date: string): Promise<FetchDayResult> {
       sales: day ? salesRowToFields(day) : null,
       counts: day ? countsRowToFields(day) : null,
       rounding: day ? summaryRowToRounding(day) : null,
+      forecastRound: day ? summaryRowToForecastRounding(day) : null,
       bible: day ? salesRowToBible(day) : null,
       eonCounts: eon ? countsRowToFields(eon, 'EON ') : null,
       finalSales: eon ? eonCountRowToFinalSales(eon) : null,

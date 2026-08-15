@@ -16,7 +16,7 @@ here holds, and what to do when something looks wrong.
 
 | Page | What it's for |
 | --- | --- |
-| **2 PM** | The afternoon count. Type today's forecast, what's rung up so far, tomorrow's forecast, and what dough is on hand. It works out what tonight will use, what's left, what tomorrow needs, and how many trays to make — then offers two batch numbers, rounded down and rounded up. **You tap one.** The app never picks for you. |
+| **2 PM** | The afternoon count. Type today's forecast, what's rung up so far, tomorrow's forecast, and what dough is on hand. It works out what tonight will use, what's left, what tomorrow needs, and how many trays to make — then settles on a batch count. **Round up / Round down is always there if you disagree.** |
 | **EON** | End of night. The closing count and the final sales figure. The outlook card then lays what's on hand beside what tomorrow needs, size by size, and tells you in trays and balls whether you're over or under. Tomorrow's forecast carries over from the 2 PM save; type in it and yours wins. |
 | **STATION TEMPS** | The eight stations in walking order, three times a day — Morning, 2 PM, Night. The app suggests the right one by the clock. |
 
@@ -28,8 +28,8 @@ built in, so any phone that opens the page is already working.
 1. **The bible.** A bible is a lookup table: a sales figure in, dough needed per size out. There
    are two — the regular one, and a peach-season one used July 1 through August 31. The app picks
    by the date; in peach season a toggle appears if you want to force the other one.
-2. **Sales typed small mean thousands.** Type `11` and it reads $11,000. Anything over 50 is taken
-   literally. `0` stays `0`.
+2. **Sales typed small mean thousands.** Type `11` and it reads $11,000. From 100 upward it is
+   taken literally, so `100` is one hundred dollars. `0` stays `0`.
 3. **Tonight's use** comes from the selling still to come — today's forecast minus what's rung up.
    **Tomorrow's need** comes from tomorrow's forecast. Both go through the bible.
 4. **What to make** = what tomorrow needs, minus what will be left after tonight. If tonight is
@@ -38,9 +38,17 @@ built in, so any phone that opens the page is already working.
 5. **Sicilian is the exception.** It is never set out and used the same day, so it just runs out:
    it never shows a negative, it is never in the set-out list, and tomorrow simply makes what
    tomorrow needs.
-6. **Trays into batches.** One mixer run is 11 trays. The app shows the exact number of batches and
-   offers it rounded both ways; the tray difference is absorbed by Small and Large, 40/60.
-7. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
+6. **Trays into batches.** One mixer run is 11 trays. The app settles on a batch count itself — a
+   couple of trays past a whole batch rounds down rather than firing up the mixer again, and on a
+   quiet day it will shed up to five. **Round up / Round down is always there to overrule it**, and
+   tapping the one already chosen hands it back to the app. The tray difference is absorbed by Small
+   and Large, leaning Large.
+7. **Quiet days round down.** When both forecasts are under $13,000 the bible rounds down to the row
+   below rather than up — but never by more than $400, because that is more dough than one step
+   should ever shed. Every other night rounds up. There is a **Forecast rounding** pair of buttons
+   on the sales card to overrule that too.
+8. **Sicilian never drops to nothing.** If fewer than 8 are on hand, at least 1 gets made.
+9. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
 
 Typing `0` for tomorrow's forecast means **closed tomorrow** — nothing to make. Leaving it blank
 means *unknown*, which is not the same thing, and the app treats it that way throughout.
@@ -197,6 +205,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.13.0** | The maths now matches your other app, night for night. The bible rounds **up** between rows as it always did there — except on a quiet day (both forecasts under $13,000), when it rounds down to the row below, but never shedding more than $400. **Sicilian never drops to nothing:** under 8 on hand and at least 1 gets made. The app now **picks the batch count itself** — a couple of trays past a whole batch rounds down instead of firing up the mixer again, up to five on a quiet day — with Round up / Round down always there to overrule it, plus a new pair for the forecast rounding. Extra trays lean to Large. And sales typed small mean thousands up to 99, not 50, so 75 reads as $75,000. |
 | **1.12.0** | The two spreadsheet addresses are now built into the app, and the SETTINGS page is gone. Your phone had stopped working because those addresses were kept on each device separately, and the phone's had been lost — so it said it couldn't reach the spreadsheet while the laptop was fine. Now any phone that opens the app is already connected, with nothing to set up. The trade, chosen knowingly: the addresses are readable in the app's published code, so someone who went looking could read your recorded nights or write junk rows. Nobody can erase anything — that is still a menu item inside the spreadsheet. |
 | **1.11.1** | A fix for something 1.11.0 introduced: typing a sheet address into Settings by hand (rather than pasting it) turned the dot red saying the address was wrong — moments after it had been typed correctly — and it stayed red until you touched a dough number. The app no longer tries to save while you are still typing an address. |
 | **1.11.0** | LOAD LAST TEMPS is gone. Tapping it didn't just show you the last readings — it filed them as today's, with the current time on them, about a second later. A temperature log has to be measurements actually taken, so every reading is now typed. Also: a mistyped sheet address is told to you in plain words instead of being retried for ever, and the README now says which hand-corrections in the notebook stick (counts and sales) and which get overwritten (the worked-out results). |

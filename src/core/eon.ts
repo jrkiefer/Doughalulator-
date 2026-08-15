@@ -1,4 +1,4 @@
-import type { AppConfig } from '../config';
+import type { AppConfig, RoundDirection } from '../config';
 import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
 import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
@@ -80,10 +80,15 @@ export function runEonCalculation(
     if (closedTomorrow) {
       need = { indi: 0, small: 0, large: 0, sic: 0 };
     } else {
+      // The night's own rounding, which the 2 PM forecasts decided — never the
+      // figure typed here. Without a 2 PM record there is no slow-day gate to
+      // read, so it rounds up like any ordinary night.
+      const round: RoundDirection = dayRecord?.rounding.forecast ?? 'up';
       tomorrowRowMatched = lookupBibleRow(
         getBible(bibles, bibleUsed),
         manualTomorrowForecast!,
         config,
+        round,
       );
       need = rowToNeeds(tomorrowRowMatched);
     }

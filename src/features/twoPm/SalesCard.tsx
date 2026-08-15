@@ -1,10 +1,11 @@
 import { defaultConfig } from '../../config';
 import { normalizeSales } from '../../core';
-import type { Maybe } from '../../core/types';
+import type { Maybe, RoundDirection } from '../../core/types';
 import { fmt, toNumOrNull } from '../shared/counts';
 import { numericChangeHandler } from '../shared/inputs';
 import { SectionHead } from '../shell/SectionHead';
 import type { TwoPmForm } from './formState';
+import { RoundingPills } from './RoundingPills';
 
 /** Live "10 → $10,000" echo under a sales field. */
 export function DollarEcho(props: { raw: string }) {
@@ -23,6 +24,11 @@ export function SalesCard(props: {
   onChange: (patch: Partial<TwoPmForm>) => void;
   salesLeft: Maybe;
   negativeSalesLeft: boolean;
+  /** The direction the bible lookups are using tonight. */
+  forecastRound: RoundDirection;
+  forecastAuto: boolean;
+  slowDay: boolean;
+  onForecastRound: (direction: RoundDirection) => void;
   synced: boolean;
 }) {
   const { form, onChange } = props;
@@ -60,6 +66,20 @@ export function SalesCard(props: {
           </div>
         )}
         {field("TOMORROW'S FORECAST", 'tomorrowForecast')}
+
+        <hr className="dashed-divider" />
+
+        <RoundingPills
+          label="FORECAST ROUNDING"
+          active={props.forecastRound}
+          isAuto={props.forecastAuto}
+          onPick={props.onForecastRound}
+        />
+        <p className="days-work-note">
+          {props.slowDay
+            ? 'Quiet day — the bible rounds down where it can.'
+            : 'The bible rounds up between rows.'}
+        </p>
       </div>
     </>
   );

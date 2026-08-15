@@ -39,14 +39,19 @@ export function formHasContent(form: Record<string, string>): boolean {
   return Object.values(form).some((v) => v.trim() !== '');
 }
 
-/** The day record for a date, straight from form state (pure, blank-aware). */
+/**
+ * The day record for a date, straight from form state (pure, blank-aware).
+ * The two roundings go in as the owner's RAW taps — the engine resolves them,
+ * so a night nobody tapped keeps re-resolving as the numbers change.
+ */
 export function buildDayRecord(
   date: string,
   form: TwoPmForm,
   rounding: Rounding,
   bibleOverride: BibleId | undefined,
+  forecastRound: Rounding = null,
 ): DoughDayRecord {
-  const record = runDoughCalculation(
+  return runDoughCalculation(
     {
       date,
       counts: parseCounts(form),
@@ -54,11 +59,12 @@ export function buildDayRecord(
       currentSalesRaw: toNumOrNull(form.currentSales),
       tomorrowForecastRaw: toNumOrNull(form.tomorrowForecast),
       bibleOverride,
+      forecastRound,
+      batchRound: rounding,
     },
     bibles,
     cfg,
   );
-  return { ...record, chosenBatchOption: rounding };
 }
 
 /**
@@ -79,10 +85,11 @@ export function applyFetchedToEntry(entry: DateEntry, fetched: FetchedDay, date:
   const now = Date.now();
   const overrideFrom = (bible: FetchedDay['bible']) =>
     bible && bible !== selectBibleId(date, cfg) ? bible : null;
-  if (fetched.sales || fetched.counts || fetched.rounding) {
+  if (fetched.sales || fetched.counts || fetched.rounding || fetched.forecastRound) {
     entry.day = {
       form: { ...emptyTwoPmForm, ...(fetched.counts ?? {}), ...(fetched.sales ?? {}) },
       rounding: fetched.rounding,
+      forecastRound: fetched.forecastRound,
       bibleOverride: overrideFrom(fetched.bible),
       ...freshMeta(now),
     };
@@ -106,7 +113,7 @@ export const engine = createSyncEngine({
       const day = entry.day;
       if (!day || (!formHasContent(day.form) && day.rounding === null)) return null;
       const form = { ...emptyTwoPmForm, ...day.form };
-      const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined);
+      const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null);
       return { type: 'day', date, tabs: dayRecordToTabWrites(record, amUseFor(date, record)) };
     }
     if (type === 'eon') {
@@ -116,7 +123,7 @@ export const engine = createSyncEngine({
       const day = entry.day;
       const dayRecord =
         day && (formHasContent(day.form) || day.rounding !== null)
-          ? buildDayRecord(date, { ...emptyTwoPmForm, ...day.form }, day.rounding, day.bibleOverride ?? undefined)
+          ? buildDayRecord(date, { ...emptyTwoPmForm, ...day.form }, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null)
           : null;
       const record = runEonCalculation(
         {

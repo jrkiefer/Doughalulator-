@@ -1,6 +1,7 @@
 import { defaultConfig } from '../../config';
-import type { BatchOption, DoughDayRecord, Maybe } from '../../core/types';
+import type { BatchOption, DoughDayRecord, Maybe, RoundDirection } from '../../core/types';
 import { SectionHead } from '../shell/SectionHead';
+import { RoundingPills } from './RoundingPills';
 
 export type Rounding = 'down' | 'up' | null;
 
@@ -21,14 +22,43 @@ function pillValue(value: Maybe, suffix = ''): string {
   return value === null ? '—' : `${value}${suffix}`;
 }
 
+const SIZE_NAMES: Record<string, string> = {
+  indi: 'Indi',
+  small: 'Small',
+  large: 'Large',
+  sic: 'Sicilian',
+  boli: 'Boli',
+};
+
+/** "Small and Large" / "Indi, Small and Large" — for naming what's missing. */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Which sizes are missing from the batch total. A size nobody has counted is
+ * excluded from the maths rather than assumed to be zero — so the number on
+ * screen is only about the sizes named here.
+ */
+function uncountedNames(record: DoughDayRecord): string[] {
+  return (Object.keys(SIZE_NAMES) as (keyof typeof record.countedSizes)[])
+    .filter((key) => !record.countedSizes[key])
+    .map((key) => SIZE_NAMES[key]);
+}
+
 export function DaysWork(props: {
   record: DoughDayRecord;
-  rounding: Rounding;
-  onRounding: (r: 'down' | 'up') => void;
+  onRounding: (direction: RoundDirection) => void;
 }) {
-  const { record, rounding } = props;
+  const { record } = props;
+  // The direction in force — tapped, or worked out by the remainder rule.
   const chosen: BatchOption | null =
-    rounding === null ? null : rounding === 'down' ? record.batchDown : record.batchUp;
+    record.chosenBatchOption === null
+      ? null
+      : record.chosenBatchOption === 'down'
+        ? record.batchDown
+        : record.batchUp;
   const trays = chosen ? chosen.finalTraysToMake : { ...record.trays, boli: record.boliTrays };
   const closed = record.flags.closedTomorrow;
   const ready = record.totalTrays !== null;
@@ -36,6 +66,7 @@ export function DaysWork(props: {
   // nothing: the sales card comes first on the page, so between filling it in
   // and counting the dough it is the COUNTS that are missing, not the sales.
   const salesKnown = record.salesLeft !== null && record.tomorrowForecast !== null;
+  const missing = uncountedNames(record);
 
   return (
     <>
@@ -49,8 +80,11 @@ export function DaysWork(props: {
           <TrayPill name="SIC" color="var(--sic)" value={pillValue(record.sicBalls, ' BALLS')} />
           <TrayPill name="BOLI" color="var(--boli)" value={pillValue(record.boliTrays)} />
         </div>
-        {record.flags.boliNotCounted && (
-          <p className="days-work-note">Boli wasn't counted — it's left out of tonight's batch.</p>
+        {missing.length > 0 && missing.length < 5 && (
+          <p className="days-work-note">
+            {listNames(missing)} {missing.length === 1 ? "isn't" : "aren't"} counted — left out of
+            tonight's batch.
+          </p>
         )}
 
         <hr className="dashed-divider" />
@@ -73,16 +107,6 @@ export function DaysWork(props: {
           <p className="days-work-note">Nothing to make — tomorrow is covered by what's left.</p>
         )}
 
-        {!closed && ready && record.totalTrays! > 0 && !chosen && (
-          <p className="days-work-note">
-            <strong className="lede">
-              {batchesText(record.exactBatches!)} batches · {record.totalTrays} trays
-            </strong>
-            <br />
-            Tap Round up or Round down.
-          </p>
-        )}
-
         {!closed && ready && chosen && (
           <div className="batch-hero">
             <div className="numeral">{chosen.batches}</div>
@@ -93,7 +117,9 @@ export function DaysWork(props: {
               </h3>
               <div className="kv">
                 <span className="micro">PLANNED</span>
-                <strong>{record.totalTrays} trays</strong>
+                <strong>
+                  {record.totalTrays} trays · {batchesText(record.exactBatches!)} batches
+                </strong>
               </div>
               <div className="kv">
                 <span className="micro">MAKING</span>
@@ -113,21 +139,12 @@ export function DaysWork(props: {
         )}
 
         {!closed && ready && record.totalTrays! > 0 && (
-          <div className="rounding-row">
-            <span className="label">ROUNDING</span>
-            <button
-              className={`pill pill-sm${rounding === 'up' ? ' active' : ''}`}
-              onClick={() => props.onRounding('up')}
-            >
-              Round up
-            </button>
-            <button
-              className={`pill pill-sm${rounding === 'down' ? ' active' : ''}`}
-              onClick={() => props.onRounding('down')}
-            >
-              Round down
-            </button>
-          </div>
+          <RoundingPills
+            label="BATCH ROUNDING"
+            active={record.rounding.batches}
+            isAuto={record.rounding.batchesAuto}
+            onPick={props.onRounding}
+          />
         )}
       </div>
     </>

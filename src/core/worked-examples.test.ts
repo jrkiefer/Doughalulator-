@@ -84,19 +84,32 @@ describe('worked example — the 2 PM session', () => {
     expect(record.boliTrays).toBe(4);
   });
 
-  it('total 47 trays → 47/11 batches; both choices offered, never auto-picked', () => {
+  it('total 47 trays → 47/11 batches; the slow-day rule settles on DOWN', () => {
     // 2 + 17 + 23 + 1 + 4 = 47 → 4.27…
     expect(record.totalTrays).toBe(47);
     expect(record.exactBatches).toBeCloseTo(47 / 11, 10);
-    expect(record.chosenBatchOption).toBeNull();
+    // Both forecasts (7,200 and 9,100) are under $13,000, so this is a slow
+    // day: 47 is 3 past a whole batch, inside the slow-day window of 5, so it
+    // rounds down on its own. Both options are still built for the pills.
+    expect(record.rounding.slowDay).toBe(true);
+    expect(record.chosenBatchOption).toBe('down');
+    expect(record.rounding.batchesAuto).toBe(true);
+    expect(record.batchDown).not.toBeNull();
+    expect(record.batchUp).not.toBeNull();
   });
 
-  it('round DOWN to 4 batches: drop 3 trays, split 40/60 → Small −1, Large −2', () => {
+  it('a tapped pill overrides the slow-day settlement', () => {
+    const tapped = runDoughCalculation({ ...pmInputs, batchRound: 'up' }, bibles, defaultConfig);
+    expect(tapped.chosenBatchOption).toBe('up');
+    expect(tapped.rounding.batchesAuto).toBe(false);
+  });
+
+  it('round DOWN to 4 batches: drop 3 trays, lean-large → Small −1, Large −2', () => {
     const down = record.batchDown!;
     expect(down.batches).toBe(4);
     expect(down.targetTrays).toBe(44);
     expect(down.trayDelta).toBe(-3);
-    expect(down.smallTrayDelta).toBe(-1); // round(0.4 × −3) = round(−1.2) = −1
+    expect(down.smallTrayDelta).toBe(-1); // LG = −ceil(0.6 × 3) = −2, SM takes the rest
     expect(down.largeTrayDelta).toBe(-2);
     // Small 17−1 = 16 · Large 23−2 = 21. Sum 2+16+21+1+4 = 44 ✓
     expect(down.finalTraysToMake).toEqual({ indi: 2, small: 16, large: 21, sic: 1, boli: 4 });
@@ -110,12 +123,12 @@ describe('worked example — the 2 PM session', () => {
     });
   });
 
-  it('round UP to 5 batches: add 8 trays, split 40/60 → Small +3, Large +5', () => {
+  it('round UP to 5 batches: add 8 trays, lean-large → Small +3, Large +5', () => {
     const up = record.batchUp!;
     expect(up.batches).toBe(5);
     expect(up.targetTrays).toBe(55);
     expect(up.trayDelta).toBe(8);
-    expect(up.smallTrayDelta).toBe(3); // round(0.4 × 8) = round(3.2) = 3
+    expect(up.smallTrayDelta).toBe(3); // LG = ceil(0.6 × 8) = 5, SM takes the rest
     expect(up.largeTrayDelta).toBe(5);
     // Small 17+3 = 20 · Large 23+5 = 28. Sum 2+20+28+1+4 = 55 ✓
     expect(up.finalTraysToMake).toEqual({ indi: 2, small: 20, large: 28, sic: 1, boli: 4 });

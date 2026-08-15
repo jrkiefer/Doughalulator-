@@ -3,14 +3,11 @@
  * engine records into the exact rows each sheet tab expects, and back again
  * for loading. The Apps Script merges each row into its tab by Date, writing
  * ONLY the columns present in the payload. Blanks travel as EMPTY CELLS —
- * never fabricated zeros — and columns that depend on the tapped batch
- * choice stay blank until a choice exists.
+ * never fabricated zeros. The two Rounding columns carry the owner's TAP
+ * (blank = auto), never the direction the night resolved to.
  */
 import type { AppConfig } from '../config';
-import { defaultConfig } from '../config';
 import type { AmUse, Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
-
-const ROUND_UP_AT = defaultConfig.bibleRounding.threshold;
 
 /** One tab's worth of a save: the row is merged into the tab by Date. */
 export interface TabWrite {
@@ -69,8 +66,8 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
         'Sic Count': cellOf(record.have.sic),
         'Boli Count': cellOf(record.have.boli),
         Bible: record.bibleUsed,
-        'Forecast Rounding': roundingFor(record.salesLeft),
-        'Batch Rounding': record.chosenBatchOption ?? '',
+        'Forecast Rounding': stampedForecastRound(record),
+        'Batch Rounding': stampedBatchRound(record),
       },
     },
     {
@@ -78,7 +75,7 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
       row: {
         Date: d,
         Bible: record.bibleUsed,
-        'Forecast Rounding': roundingFor(record.salesLeft),
+        'Forecast Rounding': stampedForecastRound(record),
         'Sales Left': cellOf(record.salesLeft),
         Indi: cellOf(record.use.indi),
         Small: cellOf(record.use.small),
@@ -91,7 +88,7 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
       row: {
         Date: d,
         Bible: record.bibleUsed,
-        'Forecast Rounding': roundingFor(record.tomorrowForecast),
+        'Forecast Rounding': stampedForecastRound(record),
         "Tomorrow's Forecast": cellOf(record.tomorrowForecast),
         Indi: cellOf(record.need.indi),
         Small: cellOf(record.need.small),
@@ -108,14 +105,16 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
         'Large Trays': cellOf(record.trays.large),
         'Sic (balls)': cellOf(record.sicBalls),
         'Boli Trays': cellOf(record.boliTrays),
-        'Batch Rounding': record.chosenBatchOption ?? '',
+        'Batch Rounding': stampedBatchRound(record),
         'Trays Total': cellOf(record.totalTrays),
         Batches: chosen === null ? '' : chosen.batches,
       },
     },
   ];
 
-  // The make and the resulting dough only exist once a choice has been tapped.
+  // The make and the resulting dough exist as soon as there is a batch
+  // direction — since v1.13.0 the remainder rule always resolves one, so these
+  // no longer wait on a tap. They stay absent only when there is nothing to make.
   if (chosen) {
     writes.push(
       {
@@ -228,10 +227,17 @@ export function eonRecordToTabWrites(
   return writes;
 }
 
-/** Which way a bible lookup rounded — the same threshold rule the engine used. */
-function roundingFor(sales: Maybe): string {
-  if (sales === null || sales <= 0) return '';
-  return sales >= ROUND_UP_AT ? 'up' : 'down';
+/**
+ * What the owner TAPPED, not what the night resolved to — blank means "auto".
+ * Writing the resolved direction instead would freeze tonight's answer into the
+ * record, so a reloaded night would stop re-resolving as its inputs change.
+ */
+function stampedForecastRound(record: DoughDayRecord): string {
+  return record.rounding.forecastAuto ? '' : record.rounding.forecast;
+}
+
+function stampedBatchRound(record: DoughDayRecord): string {
+  return record.rounding.batchesAuto ? '' : (record.rounding.batches ?? '');
 }
 
 export function hashString(text: string): string {
@@ -376,9 +382,15 @@ export function salesRowToBible(row: SheetRow): 'regular' | 'peach' | null {
   return v === 'peach' ? 'peach' : v === 'regular' ? 'regular' : null;
 }
 
-/** 2 PM row → the tapped batch-rounding choice. */
+/** 2 PM row → the tapped batch-rounding choice. Blank = auto, so null. */
 export function summaryRowToRounding(row: SheetRow): 'down' | 'up' | null {
   const v = cell(row, 'Batch Rounding').toLowerCase();
+  return v === 'up' ? 'up' : v === 'down' ? 'down' : null;
+}
+
+/** 2 PM row → the tapped forecast-rounding choice. Blank = auto, so null. */
+export function summaryRowToForecastRounding(row: SheetRow): 'down' | 'up' | null {
+  const v = cell(row, 'Forecast Rounding').toLowerCase();
   return v === 'up' ? 'up' : v === 'down' ? 'down' : null;
 }
 
