@@ -6,7 +6,6 @@ import { BibleViewer } from '../features/bibleViewer/BibleViewer';
 import { EonPage } from '../features/eon/EonPage';
 import { emptyEonForm, type EonForm } from '../features/eon/formState';
 import { HistoryCard } from '../features/history/HistoryCard';
-import { SettingsPage } from '../features/settings/SettingsPage';
 import { ActiveDate } from '../features/shell/ActiveDate';
 import { BibleToggle } from '../features/shell/BibleToggle';
 import { Footer } from '../features/shell/Footer';
@@ -18,7 +17,6 @@ import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { TwoPmPage } from '../features/twoPm/TwoPmPage';
 import { addDays, fetchDate } from '../services/doughService';
 import { KEEP_DAYS, pruneOldDates, sweepStaleKeys, type DateEntry } from '../services/local';
-import { loadSettings, type SheetSettings } from '../services/settings';
 import { applyFetchedToEntry, buildDayRecord, DOUGH_SHEET_RECORDS, engine, mirrorBibles } from './engine';
 
 const cfg = defaultConfig;
@@ -42,8 +40,6 @@ function inPeachWindow(date: string): boolean {
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('2pm');
-  const [showSettings, setShowSettings] = useState(false);
-  const [settings, setSettings] = useState<SheetSettings>(loadSettings);
   const [date, setDate] = useState(todayIso());
   const [form, setForm] = useState<TwoPmForm>(emptyTwoPmForm);
   const [rounding, setRounding] = useState<Rounding>(null);
@@ -116,7 +112,7 @@ export default function App() {
     let alive = true;
     const seqBefore = engine.editSeq(date);
     const timer = setTimeout(() => {
-      fetchDate(date, loadSettings()).then((result) => {
+      fetchDate(date).then((result) => {
         if (!alive || result.kind !== 'loaded') return;
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
@@ -192,9 +188,9 @@ export default function App() {
     }
     setLoadArmed(false);
     setLoadMsg('Loading…');
-    const result = await fetchDate(date, loadSettings());
+    const result = await fetchDate(date);
     if (result.kind === 'empty') return setLoadMsg('The sheet has no row for this date.');
-    if (result.kind === 'unreachable') return setLoadMsg("Can't reach the sheet — check Settings or connection.");
+    if (result.kind === 'unreachable') return setLoadMsg("Can't reach the sheet — check your connection.");
     if (result.kind === 'rejected') return setLoadMsg(`Sheet said no: ${result.reason}`);
 
     const probe: DateEntry = {};
@@ -224,27 +220,6 @@ export default function App() {
     engine.reset(date);
     rehydrate(date);
     setLoadMsg('');
-  }
-
-  if (showSettings) {
-    return (
-      <div className="page">
-        <div className="band">
-          <Header status={status} resetArmed={false} onReset={() => undefined} />
-        </div>
-        <SettingsPage
-          settings={settings}
-          // No flush per keystroke. A half-typed address is a REFUSED address
-          // now, and a refusal parks that record red until the next edit — so
-          // typing a sheet URL by hand used to leave the day parked, saying the
-          // address was wrong, moments after it had been typed correctly.
-          // Leaving the field flushes anyway (the focusout handler above).
-          onChange={setSettings}
-          onBack={() => setShowSettings(false)}
-        />
-        <Footer onSettings={() => setShowSettings(true)} />
-      </div>
-    );
   }
 
   return (
@@ -300,7 +275,7 @@ export default function App() {
 
       <HistoryCard onPick={(d) => setDate(d)} />
       {mode !== 'temps' && <BibleViewer bible={bibles[activeBible]} />}
-      <Footer onSettings={() => setShowSettings(true)} />
+      <Footer />
     </div>
   );
 }

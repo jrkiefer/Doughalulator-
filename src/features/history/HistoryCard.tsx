@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { cachedHistory } from '../../services/local';
 import type { HistorySummary } from '../../services/mapping';
 import { fetchHistory } from '../../services/doughService';
-import { loadSettings } from '../../services/settings';
 import { Collapsible } from '../shared/Collapsible';
 import { fmt } from '../shared/counts';
 
@@ -22,7 +21,7 @@ export function HistoryCard(props: { onPick: (date: string) => void }) {
 
   useEffect(() => {
     let alive = true;
-    fetchHistory(loadSettings(), RECENT_NIGHTS).then((result) => {
+    fetchHistory(RECENT_NIGHTS).then((result) => {
       if (!alive) return;
       setRows(result.summaries);
       setNote(result.source === 'phone' ? 'showing the phone copy — sheet unreachable' : '');

@@ -20,7 +20,8 @@ here holds, and what to do when something looks wrong.
 | **EON** | End of night. The closing count and the final sales figure. The outlook card then lays what's on hand beside what tomorrow needs, size by size, and tells you in trays and balls whether you're over or under. Tomorrow's forecast carries over from the 2 PM save; type in it and yours wins. |
 | **STATION TEMPS** | The eight stations in walking order, three times a day — Morning, 2 PM, Night. The app suggests the right one by the clock. |
 
-**SETTINGS** is the small link at the very bottom.
+That's the whole app. There is nothing to set up and nothing to connect — the two notebooks are
+built in, so any phone that opens the page is already working.
 
 ### How the maths works, in ordinary words
 
@@ -58,9 +59,10 @@ Both live in the owner's Google account.
 Each notebook has a small machine inside it: open the sheet → **Extensions → Apps Script**. That
 code comes from the `apps-script/` folder in here.
 
-- **There are no passwords.** The owner chose simplicity over the lock (August 2026), so each
-  notebook is reached by its web address alone. Treat those `/exec` addresses as semi-public:
-  anyone holding one can read or change that notebook.
+- **There are no passwords**, and since August 2026 the two web addresses are **built into the app**
+  rather than typed into it. That is why a new or wiped phone now just works. The trade you chose
+  knowingly: those addresses are published in the app's code, so anyone who goes looking could read
+  your recorded nights or write junk rows into them. Nobody can erase anything — see below.
 - Because of that, **nothing destructive is reachable over the web**. Erasing a log is the
   **Erase all data** item in the spreadsheet's own menu (**Dough Tools** / **Temp Tools**), which
   asks before it acts. A test in this repo checks that the scripts refuse an erase sent over the
@@ -70,13 +72,15 @@ code comes from the `apps-script/` folder in here.
 - The `setup()` function inside each script builds any missing tabs. It is safe to run again
   anytime — for example after adding a station to the temps script's `STATIONS` list.
 
-### Connecting a phone
+### Setting up a phone
 
-Settings are stored **on that phone only**, so a new or wiped phone needs them again:
+Nothing to do. Open the web address, add it to the home screen, and it is connected — the two
+notebooks are built into the app.
 
-1. Open the sheet → Extensions → Apps Script → Deploy → Manage deployments → copy the web app URL.
-2. In the app: **SETTINGS** → paste the URL → **Test Connection** should say "Connected ✓".
-   There is no password to enter.
+**If an address ever changes** — creating a *new* deployment gives a new `/exec` address, while
+updating an existing one keeps the old address — the app has to be told. That is one line in
+`src/services/sheets.ts`; ask a fresh Claude session to change it and push. Until then the app
+would say it can't reach the sheet.
 
 ### What the Dough Log holds
 
@@ -147,8 +151,9 @@ calculation engine, so past dates are filled in. Things worth knowing:
 
 ## If something looks wrong
 
-- **Stuck on "will sync":** open SETTINGS and tap both **Test Connection** buttons. If one fails,
-  re-copy that sheet's URL using the steps above.
+- **Stuck on "will sync":** it is trying by itself and will get through when the connection comes
+  back — nothing is lost in the meantime. If it stays stuck with good signal, the notebook's web
+  address may have changed (see *Setting up a phone* above).
 - **"This app isn't verified"** from Google during a re-setup is normal for personal scripts:
   Advanced → Go to… → Allow.
 - **Anything bigger:** a fresh Claude session should read `CLAUDE.md` in this repo — it holds the
@@ -192,6 +197,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.12.0** | The two spreadsheet addresses are now built into the app, and the SETTINGS page is gone. Your phone had stopped working because those addresses were kept on each device separately, and the phone's had been lost — so it said it couldn't reach the spreadsheet while the laptop was fine. Now any phone that opens the app is already connected, with nothing to set up. The trade, chosen knowingly: the addresses are readable in the app's published code, so someone who went looking could read your recorded nights or write junk rows. Nobody can erase anything — that is still a menu item inside the spreadsheet. |
 | **1.11.1** | A fix for something 1.11.0 introduced: typing a sheet address into Settings by hand (rather than pasting it) turned the dot red saying the address was wrong — moments after it had been typed correctly — and it stayed red until you touched a dough number. The app no longer tries to save while you are still typing an address. |
 | **1.11.0** | LOAD LAST TEMPS is gone. Tapping it didn't just show you the last readings — it filed them as today's, with the current time on them, about a second later. A temperature log has to be measurements actually taken, so every reading is now typed. Also: a mistyped sheet address is told to you in plain words instead of being retried for ever, and the README now says which hand-corrections in the notebook stick (counts and sales) and which get overwritten (the worked-out results). |
 | **1.10.0** | OFFLINE — WILL RETRY now means it. Before, a save that failed while your phone still had signal just sat there until you typed something else — the app only ever tried again when you nudged it. It now keeps trying on its own: ten seconds later, then twenty, then forty, easing off to once every five minutes until it gets through, and it stops the moment one lands. It also has a go the moment you come back to the app. Two smaller things: a temperature that can't save no longer makes the dough side look broken, and dates older than three months are cleared off the phone — but only ones the spreadsheet has already confirmed. |

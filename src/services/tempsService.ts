@@ -4,10 +4,8 @@
  */
 import type { AppConfig } from '../config';
 import type { TempSlot } from '../core';
-import { getJson } from './client';
 import { type TempsEntry } from './local';
 import { tempsToPayload } from './mapping';
-import type { SheetSettings } from './settings';
 
 const SLOTS: TempSlot[] = ['morning', 'midday', 'night'];
 
@@ -38,12 +36,3 @@ export function tempsEntryToPayload(
  * reading is typed. The sheet's script still answers `action: 'latest'` for the
  * Overview tab; nothing in the app asks it any more.
  */
-
-/** Test Connection for the temps sheet. Returns an error message or null when fine. */
-export async function pingTemps(settings: SheetSettings): Promise<string | null> {
-  const outcome = await getJson(settings.tempsUrl, {
-    action: 'ping',
-  });
-  if (outcome.kind === 'ok') return null;
-  return outcome.kind === 'rejected' ? outcome.reason : outcome.error;
-}

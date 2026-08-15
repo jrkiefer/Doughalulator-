@@ -23,6 +23,7 @@ const STALE_PREFIXES = [
   'doughalulator.temps.',
   'doughalulator.queue',
   `${PREFIX}temps.latest`,
+  'doughalulator.settings', // the sheet addresses are built in now
 ];
 
 /** Sync bookkeeping shared by all three record types. */

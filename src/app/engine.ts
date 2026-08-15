@@ -22,7 +22,7 @@ import {
   type DateEntry,
 } from '../services/local';
 import { dayRecordToTabWrites, eonRecordToTabWrites } from '../services/mapping';
-import { loadSettings } from '../services/settings';
+import { DOUGH_URL, TEMPS_URL } from '../services/sheets';
 import { createSyncEngine, type RecordType } from '../services/sync';
 import { tempsEntryToPayload } from '../services/tempsService';
 
@@ -134,14 +134,8 @@ export const engine = createSyncEngine({
     }
     return entry.temps ? tempsEntryToPayload(date, entry.temps, cfg) : null;
   },
-  post: (target, payload, opts) => {
-    const s = loadSettings();
-    const url = target === 'dough' ? s.doughUrl : s.tempsUrl;
-    if (!url.trim()) {
-      return Promise.resolve({ kind: 'retryable' as const, error: 'no sheet connected yet' });
-    }
-    return postJson(url, payload, opts);
-  },
+  post: (target, payload, opts) =>
+    postJson(target === 'dough' ? DOUGH_URL : TEMPS_URL, payload, opts),
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (id) => clearTimeout(id),
 });
@@ -157,5 +151,5 @@ export const engine = createSyncEngine({
  * cost is one small request per start.
  */
 export function mirrorBibles(): void {
-  void syncBibles(bibles, loadSettings());
+  void syncBibles(bibles);
 }

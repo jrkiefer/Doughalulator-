@@ -1,12 +1,6 @@
 import pkg from '../../../package.json';
 
-export function Footer(props: { onSettings: () => void }) {
-  return (
-    <footer className="footer">
-      V{pkg.version.replaceAll('.', '·')}
-      <button className="settings" onClick={props.onSettings}>
-        SETTINGS
-      </button>
-    </footer>
-  );
+/** Just the version now: the sheet addresses are built in, so there is nothing to set. */
+export function Footer() {
+  return <footer className="footer">V{pkg.version.replaceAll('.', '·')}</footer>;
 }

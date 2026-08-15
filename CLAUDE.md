@@ -44,7 +44,7 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   place that loads them. Real data — **never alter a number**.
 - `src/features/<feature>/` — UI, one folder per page or piece.
 - `src/services/` — Google Sheets clients, transport, phone storage, the sync engine, the mapping
-  layer. **Core never imports services.**
+  layer, and `sheets.ts` (the two `/exec` addresses). **Core never imports services.**
 - `apps-script/` — `dough/Code.gs` and `temps/Code.gs` are the real code inside the two
   spreadsheets; `test/` holds the in-process fake Google that runs those exact files.
 - `design/` — the four original screenshots. They are the record of layout and wording only; the
@@ -85,7 +85,7 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   were. No gradients anywhere.
 - One global stylesheet of tokens + component classes; no framework, and **no inline `style=`
   except to pass a `--size` value**. Numbered badges are one global sequence (00 date, 01 sales,
-  02 counts, 03 day's work, 04 by size, 08 EON outlook, 09 temps, 10 settings).
+  02 counts, 03 day's work, 04 by size, 08 EON outlook, 09 temps).
 
 ## Storage & sync facts
 
@@ -114,10 +114,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   here and written into place. The one exception is the self-building bible: the app appends each
   finished night to `New Bieblerb` / `New Peach Bieblerb` and the script refits a Theil–Sen line
   through the whole history after every EON save. Nights with no takings are excluded.
-- **No secrets** (v1.4.0, owner's explicit request). Settings holds one `/exec` URL per notebook via
-  `src/services/settings.ts`. Because of that, `wipe`/`retire` are NOT reachable over HTTP — erasing
-  is the guarded **Erase all data** item in each spreadsheet's own menu. A test asserts the scripts
-  refuse those types over the web. Treat the `/exec` addresses as semi-public.
+- **No secrets** (v1.4.0, owner's explicit request), and since v1.12.0 **no Settings page either**:
+  both `/exec` addresses are constants in `src/services/sheets.ts`. A per-device Settings page meant
+  a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is
+  exactly what happened to the owner's phone in Aug 2026. Built in, every device is already
+  connected. **The addresses are therefore PUBLIC** — public repo, public site — so anyone who finds
+  them can read or write those notebooks. The owner was told this plainly and chose it; do not
+  re-litigate it, and do not treat the addresses as though they were secret. Erasing stays
+  unreachable over HTTP (the guarded **Erase all data** menu item), so the worst case is snooping or
+  mess, not destruction. A test asserts the scripts refuse erase types over the web.
 - Two-phone rules: date navigation paints the phone copy then background-fetches the sheet; dirty
   local wins, clean local is replaced; typing mid-fetch discards the fetch; LOAD FROM SHEET is a
   force-pull with a dirty double-tap; RESET is two-tap and blanks only the open date.
@@ -138,11 +143,6 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   is no day-record bible, and `eonRecordToTabWrites` picks the self-building bible tab from it —
   getting that wrong files a peach night under the regular bible, silently. Every test but one
   passes the bible explicitly, so the undefined path needs its own.
-- **Never flush while the owner is typing a sheet ADDRESS.** A half-typed URL is `rejected`, and a
-  rejection parks that record red until the next edit — so a per-keystroke flush in Settings left
-  the day parked claiming the address was wrong, moments after it had been typed correctly.
-  Settings changes are saved to the phone as typed; the global `focusout` handler flushes when the
-  field is left, which is the right moment and is already covered.
 - **A keepalive flush confirms nothing, and must not be allowed to say otherwise.** It fires into a
   page that is going away and never hears back, so it may not mark a record synced (it already
   didn't), may not clear the offline flags, and may not stand down a pending retry. Any new

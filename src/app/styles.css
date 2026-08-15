@@ -1185,18 +1185,6 @@ button:focus-visible {
   margin-top: auto;
 }
 
-.footer .settings {
-  display: block;
-  margin: 8px auto 0;
-  background: none;
-  border: none;
-  font-family: var(--font-mono);
-  color: var(--ink-mute);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-decoration: underline;
-}
-
 /* ————— fields & the saved chip ————— */
 .input-wrap {
   position: relative;
@@ -1237,15 +1225,6 @@ button:focus-visible {
   text-transform: none;
 }
 
-.settings-field {
-  padding: 8px 0;
-}
-
-.settings-field .micro {
-  display: block;
-  margin-bottom: 6px;
-}
-
 .dollar-echo {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1275,6 +1254,3 @@ button:focus-visible {
   margin-top: 8px;
 }
 
-.save-bar {
-  margin: 18px 0 4px;
-}

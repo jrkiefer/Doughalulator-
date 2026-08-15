@@ -17,7 +17,7 @@ import {
   type HistorySummary,
 } from './mapping';
 import { cacheHistory, cachedHistory } from './local';
-import type { SheetSettings } from './settings';
+import { DOUGH_URL } from './sheets';
 
 /** 'YYYY-MM-DD' ± days, timezone-safe. */
 export function addDays(date: string, delta: number): string {
@@ -45,12 +45,8 @@ export type FetchDayResult =
   | { kind: 'rejected'; reason: string };
 
 /** Fetch one date from the sheet. The caller decides how to merge (§4). */
-export async function fetchDate(
-  date: string,
-  settings: SheetSettings,
-): Promise<FetchDayResult> {
-  if (!settings.doughUrl.trim()) return { kind: 'unreachable' };
-  const outcome = await getJson(settings.doughUrl, {
+export async function fetchDate(date: string): Promise<FetchDayResult> {
+  const outcome = await getJson(DOUGH_URL, {
     action: 'date',
     date,
   });
@@ -76,39 +72,26 @@ export async function fetchDate(
 
 /** History card data: phone cache instantly, sheet refresh when reachable. */
 export async function fetchHistory(
-  settings: SheetSettings,
   days = 30,
 ): Promise<{ summaries: HistorySummary[]; source: 'sheet' | 'phone' }> {
-  if (settings.doughUrl.trim()) {
-    const outcome = await getJson(settings.doughUrl, {
-      action: 'recent',
-      n: String(days),
-    });
-    if (outcome.kind === 'ok') {
-      const dates =
-        (outcome.data as { dates?: Record<string, Record<string, SheetRow | null> | null> })
-          .dates ?? {};
-      const summaries = summaryRowsToHistory(dates);
-      cacheHistory(summaries);
-      return { summaries, source: 'sheet' };
-    }
+  const outcome = await getJson(DOUGH_URL, {
+    action: 'recent',
+    n: String(days),
+  });
+  if (outcome.kind === 'ok') {
+    const dates =
+      (outcome.data as { dates?: Record<string, Record<string, SheetRow | null> | null> })
+        .dates ?? {};
+    const summaries = summaryRowsToHistory(dates);
+    cacheHistory(summaries);
+    return { summaries, source: 'sheet' };
   }
   return { summaries: cachedHistory(), source: 'phone' };
 }
 
 /** Mirror the bible tables to the sheet; the script no-ops when the hash is unchanged. Never throws. */
-export async function syncBibles(bibles: Bibles, settings: SheetSettings): Promise<void> {
-  if (!settings.doughUrl.trim()) return;
-  await postJson(settings.doughUrl, {
+export async function syncBibles(bibles: Bibles): Promise<void> {
+  await postJson(DOUGH_URL, {
     ...biblesToPayload(bibles),
   });
-}
-
-/** Test Connection for the dough sheet. Returns an error message or null when fine. */
-export async function pingDough(settings: SheetSettings): Promise<string | null> {
-  const outcome = await getJson(settings.doughUrl, {
-    action: 'ping',
-  });
-  if (outcome.kind === 'ok') return null;
-  return outcome.kind === 'rejected' ? outcome.reason : outcome.error;
 }
