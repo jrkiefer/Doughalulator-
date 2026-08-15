@@ -234,10 +234,12 @@ export default function App() {
         </div>
         <SettingsPage
           settings={settings}
-          onChange={(next) => {
-            setSettings(next);
-            void engine.flush();
-          }}
+          // No flush per keystroke. A half-typed address is a REFUSED address
+          // now, and a refusal parks that record red until the next edit — so
+          // typing a sheet URL by hand used to leave the day parked, saying the
+          // address was wrong, moments after it had been typed correctly.
+          // Leaving the field flushes anyway (the focusout handler above).
+          onChange={setSettings}
           onBack={() => setShowSettings(false)}
         />
         <Footer onSettings={() => setShowSettings(true)} />

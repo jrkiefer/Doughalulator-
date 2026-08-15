@@ -138,6 +138,11 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   is no day-record bible, and `eonRecordToTabWrites` picks the self-building bible tab from it —
   getting that wrong files a peach night under the regular bible, silently. Every test but one
   passes the bible explicitly, so the undefined path needs its own.
+- **Never flush while the owner is typing a sheet ADDRESS.** A half-typed URL is `rejected`, and a
+  rejection parks that record red until the next edit — so a per-keystroke flush in Settings left
+  the day parked claiming the address was wrong, moments after it had been typed correctly.
+  Settings changes are saved to the phone as typed; the global `focusout` handler flushes when the
+  field is left, which is the right moment and is already covered.
 - **A keepalive flush confirms nothing, and must not be allowed to say otherwise.** It fires into a
   page that is going away and never hears back, so it may not mark a record synced (it already
   didn't), may not clear the offline flags, and may not stand down a pending retry. Any new
