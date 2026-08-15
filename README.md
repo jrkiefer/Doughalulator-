@@ -121,8 +121,10 @@ calculation engine, so past dates are filled in. Things worth knowing:
 - **The app saves by itself.** Every number typed is kept on the phone instantly and sent to Google
   a couple of seconds later. There are no Save buttons.
 - **The coloured dot** at the top left tells the truth: NEW NIGHT (nothing typed) → SAVED ON PHONE →
-  SYNCING → SYNCED. OFFLINE — WILL RETRY means it will send itself when the internet comes back. A
-  red dot means the sheet refused a save, or nothing could be saved anywhere.
+  SYNCING → SYNCED. OFFLINE — WILL RETRY means it is trying by itself — after ten seconds, then
+  twenty, then forty, easing off to once every five minutes until it gets through. It also tries
+  the moment the signal returns and the moment you come back to the app. A red dot means the sheet
+  refused a save, or nothing could be saved anywhere.
 - **LOAD FROM SHEET** brings a saved date back into the form. **LOAD LAST TEMPS** pre-fills the
   previous readings — it never fills anything unless tapped.
 - The **◀ ▶** arrows step a day at a time, and the date itself opens a calendar.
@@ -181,6 +183,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.10.0** | OFFLINE — WILL RETRY now means it. Before, a save that failed while your phone still had signal just sat there until you typed something else — the app only ever tried again when you nudged it. It now keeps trying on its own: ten seconds later, then twenty, then forty, easing off to once every five minutes until it gets through, and it stops the moment one lands. It also has a go the moment you come back to the app. Two smaller things: a temperature that can't save no longer makes the dough side look broken, and dates older than three months are cleared off the phone — but only ones the spreadsheet has already confirmed. |
 | **1.9.0** | The end-of-night page got the card you asked for: what you have beside what tomorrow needs, size by size, in trays and balls, with a plain-words verdict at the bottom. PM sales is off the screen (still recorded in the sheet). History now shows the last 3 nights instead of 30. |
 | **1.8.3** | Sicilian never goes negative on the 2 PM page any more. It is never set out and used the same day, so it just runs out — no negative, nothing in the set-out list, and tomorrow makes plainly what tomorrow needs. |
 | **1.8.2** | Checked the app against your real Dough Log for the first time: every tab, every column and every self-building-bible number lines up exactly. Added a test proving "Re-run setup" can never touch a recorded night. |

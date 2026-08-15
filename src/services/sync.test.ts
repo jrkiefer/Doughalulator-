@@ -82,8 +82,13 @@ function makeWorld(opts: { debounceMs?: number } = {}) {
       await Promise.resolve();
     },
     pendingTimers: () => timers.length,
+    /** The delays currently armed, so a backoff ladder can be read off directly. */
+    timerDelays: () => timers.map((t) => t.ms),
   };
 }
+
+/** Let a flush chain run all the way out (more patient than a microtask or two). */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const D = '2026-08-01';
 
@@ -216,6 +221,80 @@ describe('"sheet said no" vs "no internet" (§3d)', () => {
   });
 });
 
+describe('the retry ladder — "WILL RETRY" with a clock behind it', () => {
+  const retryable: Outcome = { kind: 'retryable', error: 'timeout' };
+
+  it('a failed send arms a retry, and firing it gets the numbers through', async () => {
+    const world = makeWorld();
+    world.setOutcomes([retryable]);
+    typeSales(world);
+    await world.engine.flush();
+    expect(world.engine.status(D).state).toBe('offline');
+    expect(world.timerDelays()).toEqual([10_000]);
+
+    await world.fireTimers();
+    await settle();
+    expect(world.posts).toHaveLength(2);
+    expect(world.engine.status(D).state).toBe('synced');
+  });
+
+  it('each failure waits twice as long, and the climb stops at five minutes', async () => {
+    const world = makeWorld();
+    world.setOutcomes(Array<Outcome>(9).fill(retryable));
+    typeSales(world);
+    await world.engine.flush();
+
+    const ladder: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      ladder.push(world.timerDelays()[0]);
+      await world.fireTimers();
+      await settle();
+    }
+    expect(ladder).toEqual([10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000]);
+  });
+
+  it('a success stands the ladder down and starts it from the bottom next time', async () => {
+    const world = makeWorld();
+    world.setOutcomes([retryable]);
+    typeSales(world);
+    await world.engine.flush();
+    expect(world.timerDelays()).toEqual([10_000]);
+
+    // The retry lands (the queue is empty, so the fake network answers ok).
+    await world.fireTimers();
+    await settle();
+    expect(world.pendingTimers()).toBe(0);
+
+    // A later failure begins at 10s again rather than carrying on up.
+    world.setOutcomes([retryable]);
+    typeSales(world, '9.9');
+    await world.engine.flush();
+    expect(world.timerDelays()).toEqual([10_000]);
+  });
+
+  it('a sheet that REFUSED a save is never retried on a timer', async () => {
+    const world = makeWorld();
+    world.setOutcomes([{ kind: 'rejected', reason: 'unknown tab: Sheet2' }]);
+    typeSales(world);
+    await world.engine.flush();
+    expect(world.engine.status(D).state).toBe('rejected');
+    expect(world.pendingTimers()).toBe(0); // retrying a refusal teaches nobody anything
+  });
+
+  it('a keepalive flush neither arms a retry nor cancels one already waiting', async () => {
+    const world = makeWorld();
+    world.setOutcomes([retryable]);
+    typeSales(world);
+    await world.engine.flush();
+    expect(world.timerDelays()).toEqual([10_000]);
+
+    // The page goes away mid-outage: it confirms nothing, so it must not
+    // pretend the sheet answered and drop the pending attempt.
+    await world.engine.flush({ keepalive: true });
+    expect(world.timerDelays()).toEqual([10_000]);
+  });
+});
+
 describe('the two sheets sync in parallel', () => {
   it('a dough network failure never blocks the temps sheet, and only dough retries', async () => {
     const world = makeWorld();
@@ -234,6 +313,25 @@ describe('the two sheets sync in parallel', () => {
     await world.engine.flush();
     expect(world.posts.map((p) => p.target)).toEqual(['dough', 'temps', 'dough']);
     expect(world.engine.status(D).state).toBe('synced');
+  });
+
+  it('an unreachable TEMP log never makes the dough log look broken', async () => {
+    const world = makeWorld();
+    const D2 = '2026-08-02';
+    world.setOutcomes([
+      { kind: 'ok', data: {} }, // the dough sheet is perfectly fine
+      { kind: 'retryable', error: 'no sheet connected yet' }, // the temps one is not
+    ]);
+    typeSales(world); // a dough record on D
+    world.engine.edit(D2, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    await world.engine.flush();
+    expect(world.engine.status(D2).state).toBe('offline'); // that one really is waiting
+
+    // A fresh dough edit is waiting on a sheet that answered fine a moment ago.
+    typeSales(world, '9.9');
+    expect(world.engine.status(D).state).toBe('saving');
   });
 });
 

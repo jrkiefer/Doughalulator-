@@ -22,12 +22,25 @@ import {
 } from './local';
 
 export type RecordType = 'day' | 'eon' | 'temps';
+/** Which notebook a record belongs to. The two are independent end to end. */
+export type SyncTarget = 'dough' | 'temps';
 const TYPE_ORDER: RecordType[] = ['day', 'eon', 'temps'];
-const TARGET_OF: Record<RecordType, 'dough' | 'temps'> = {
+const TARGET_OF: Record<RecordType, SyncTarget> = {
   day: 'dough',
   eon: 'dough',
   temps: 'temps',
 };
+const TARGETS: readonly SyncTarget[] = ['dough', 'temps'];
+
+/**
+ * The retry ladder. Every other trigger is a tap, a keystroke, or the browser
+ * announcing something — so before this, a sheet that was merely SLOW left the
+ * record dirty under a pill promising a retry that nothing would ever start.
+ * Each failure waits twice as long as the last, and the climb stops at five
+ * minutes: 10s, 20s, 40s, 80s, 160s, then 300s for as long as it takes.
+ */
+const RETRY_BASE_MS = 10_000;
+const RETRY_MAX_MS = 300_000;
 /**
  * Records whose payload is DERIVED from another record's content: the EON
  * check depends on the day record's tomorrow-need. Editing the source
@@ -48,7 +61,7 @@ export interface SyncDeps {
    */
   buildPayload(type: RecordType, date: string, entry: DateEntry): object | null;
   post(
-    target: 'dough' | 'temps',
+    target: SyncTarget,
     payload: object,
     opts?: { keepalive?: boolean },
   ): Promise<Outcome>;
@@ -126,10 +139,14 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
   const memory = new Map<string, DateEntry>();
   const phoneFailed = new Set<string>(); // `${date}` whose last phone write failed
   const editSeqs = new Map<string, number>();
-  let offline = false;
+  /** The sheets whose last attempt hit a network-class failure — per notebook,
+   * so an unreachable temp log can never make the dough log look broken. */
+  const offlineTargets = new Set<SyncTarget>();
   let inFlight = false;
   let rerunAfterFlight = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempt = 0;
   const listeners = new Set<() => void>();
 
   function notify() {
@@ -160,8 +177,36 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     }, debounceMs);
   }
 
+  /** Arm the next attempt after a network-class failure, backing off each time. */
+  function scheduleRetry() {
+    if (retryTimer !== null) deps.clearTimer(retryTimer);
+    const delay = Math.min(RETRY_BASE_MS * 2 ** retryAttempt, RETRY_MAX_MS);
+    retryAttempt++;
+    retryTimer = deps.setTimer(() => {
+      retryTimer = null;
+      void flush();
+    }, delay);
+  }
+
+  /** A sheet answered: stand the ladder down, and start from the bottom next time. */
+  function clearRetry() {
+    if (retryTimer !== null) deps.clearTimer(retryTimer);
+    retryTimer = null;
+    retryAttempt = 0;
+  }
+
   function isDirtyRecord(rec: SyncMeta | undefined): boolean {
     return !!rec && rec.updatedAt > rec.syncedAt && rec.rejectedReason === null;
+  }
+
+  /** Which sheets a date is still waiting on. */
+  function dirtyTargets(entry: DateEntry): SyncTarget[] {
+    const targets = new Set<SyncTarget>();
+    for (const type of TYPE_ORDER) {
+      const rec = metaOf(entry, type);
+      if (rec && rec.updatedAt > rec.syncedAt) targets.add(TARGET_OF[type]);
+    }
+    return [...targets];
   }
 
   /**
@@ -294,9 +339,19 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       const dates = [...new Set<string>([...deps.listDates(), ...memory.keys()])].sort();
       // The two sheets are independent, so they sync at the same time.
       const sawRetryable = await Promise.all(
-        (['dough', 'temps'] as const).map((target) => flushTarget(target, dates, opts)),
+        TARGETS.map((target) => flushTarget(target, dates, opts)),
       );
-      offline = sawRetryable.some(Boolean);
+      // A keepalive flush confirms NOTHING — it fires into a page that is going
+      // away and never hears back. So it must not claim a sheet is reachable,
+      // and must not stand down a retry that is already waiting its turn.
+      if (!opts.keepalive) {
+        TARGETS.forEach((target, i) => {
+          if (sawRetryable[i]) offlineTargets.add(target);
+          else offlineTargets.delete(target);
+        });
+        if (offlineTargets.size > 0) scheduleRetry();
+        else clearRetry();
+      }
     } finally {
       inFlight = false;
       notify();
@@ -376,7 +431,10 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
         return { state: 'unsaved', reason: null, phoneWriteFailed: true };
       }
       if (!hasContent(entry)) return { state: 'new', reason: null, phoneWriteFailed: false };
-      if (dirty && offline) return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
+      const waitingOnOffline = dirtyTargets(entry).some((t) => offlineTargets.has(t));
+      if (dirty && waitingOnOffline) {
+        return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
+      }
       if (dirty && inFlight) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
       if (dirty) return { state: 'saving', reason: null, phoneWriteFailed: failedPhone };
       return { state: 'synced', reason: null, phoneWriteFailed: failedPhone };

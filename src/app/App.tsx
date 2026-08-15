@@ -16,8 +16,15 @@ import { emptyTempReadings, TempsPage, type TempReadings } from '../features/tem
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { TwoPmPage } from '../features/twoPm/TwoPmPage';
-import { fetchDate } from '../services/doughService';
-import { cachedLatestTemps, cacheLatestTemps, sweepStaleKeys, type DateEntry } from '../services/local';
+import { addDays, fetchDate } from '../services/doughService';
+import {
+  cachedLatestTemps,
+  cacheLatestTemps,
+  KEEP_DAYS,
+  pruneOldDates,
+  sweepStaleKeys,
+  type DateEntry,
+} from '../services/local';
 import { loadSettings, type SheetSettings } from '../services/settings';
 import { fetchLatestTemps } from '../services/tempsService';
 import { applyFetchedToEntry, buildDayRecord, DOUGH_SHEET_RECORDS, engine, mirrorBibles } from './engine';
@@ -77,9 +84,11 @@ export default function App() {
     setLoadArmed(false);
   }
 
-  // Boot: sweep pre-rename caches, resend anything dirty, wire the retry triggers.
+  // Boot: sweep pre-rename caches, forget long-finished dates, resend anything
+  // dirty, wire the retry triggers.
   useEffect(() => {
     sweepStaleKeys();
+    pruneOldDates(addDays(todayIso(), -KEEP_DAYS));
     engine.start();
     mirrorBibles();
     const unsubscribe = engine.subscribe(() => setTick((t) => t + 1));
@@ -89,19 +98,22 @@ export default function App() {
     const onFocusOut = (event: FocusEvent) => {
       if (event.target instanceof HTMLInputElement) void engine.flush();
     };
-    const onHide = () => {
+    // Leaving fires and forgets; coming BACK is the likeliest moment of all for
+    // the signal to have returned, so it gets a real flush that can confirm.
+    const onVisibility = () => {
       if (document.visibilityState === 'hidden') void engine.flush({ keepalive: true });
+      else void engine.flush();
     };
     const onPageHide = () => void engine.flush({ keepalive: true });
     window.addEventListener('online', onOnline);
     document.addEventListener('focusout', onFocusOut);
-    document.addEventListener('visibilitychange', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onPageHide);
     return () => {
       unsubscribe();
       window.removeEventListener('online', onOnline);
       document.removeEventListener('focusout', onFocusOut);
-      document.removeEventListener('visibilitychange', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onPageHide);
     };
   }, [rehydrate]);

@@ -117,6 +117,48 @@ export function sweepStaleKeys(): void {
   }
 }
 
+// ————— forgetting long-finished dates —————
+
+/**
+ * How long a finished date stays on the phone. Past this the sheet is the
+ * record: opening an older date fetches it back. Nothing the app reaches for
+ * on its own is anywhere near this far back — the morning's use wants
+ * yesterday, and the History card keeps its own cache.
+ */
+export const KEEP_DAYS = 90;
+
+/**
+ * Which cached dates are safe to forget: older than the cutoff AND fully
+ * confirmed by the sheet. Anything still unsent — or parked with a refusal —
+ * stays, because for those the phone is the only copy there is.
+ *
+ * Pure on purpose: the tests run without a browser, so the decision lives
+ * here where it can be checked and only the storage walk below cannot.
+ */
+export function datesToPrune(
+  entries: { date: string; entry: DateEntry }[],
+  cutoff: string,
+): string[] {
+  return entries
+    .filter(({ date, entry }) => date < cutoff && isFullyConfirmed(entry))
+    .map(({ date }) => date);
+}
+
+function isFullyConfirmed(entry: DateEntry): boolean {
+  return (['day', 'eon', 'temps'] as const).every((type) => {
+    const rec = entry[type];
+    return !rec || (rec.syncedAt >= rec.updatedAt && rec.rejectedReason === null);
+  });
+}
+
+/** Boot housekeeping: drop confirmed dates older than the cutoff. */
+export function pruneOldDates(cutoff: string): void {
+  const entries = listCachedDates()
+    .map((date) => ({ date, entry: loadEntry(date) }))
+    .filter((e): e is { date: string; entry: DateEntry } => e.entry !== null);
+  for (const date of datesToPrune(entries, cutoff)) clearEntry(date);
+}
+
 // ————— history card cache —————
 
 export function cachedHistory(): HistorySummary[] {

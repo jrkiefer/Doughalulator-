@@ -91,9 +91,17 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 
 - **No save buttons.** `src/services/sync.ts` is a local-first autosave engine (dependency-injected,
   fully tested): every edit persists the raw FORM state to the phone (v2-prefixed localStorage via
-  `src/services/local.ts`), a debounce flushes to the sheets, with online / page-hide / boot retry
-  triggers, per-record ack-hash dedupe and single-flight flushes. `src/app/engine.ts` is where it
-  gets its real dependencies.
+  `src/services/local.ts`), a debounce flushes to the sheets, with online / page-hide / page-show /
+  boot retry triggers, per-record ack-hash dedupe and single-flight flushes. `src/app/engine.ts` is
+  where it gets its real dependencies.
+- **A failed send has a clock behind it** (v1.10.0): a network-class failure arms a backoff ladder —
+  10s doubling to a 5-minute ceiling — cleared the moment any send succeeds. A *rejection* never
+  gets one (retrying a refusal teaches nobody anything), and a keepalive flush neither arms nor
+  clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
+  read OFFLINE.
+- **Dates older than `KEEP_DAYS` (90) are dropped from the phone at boot** — but only when every
+  record on them is confirmed and unrejected. `datesToPrune` is pure and tested; only the storage
+  walk around it isn't, because vitest runs in `node` with no localStorage.
 - **Three-outcome transport** (`src/services/client.ts`, never throws): ok · retryable
   (offline/timeout/HTTP/lock-busy) · rejected (script `ok:false` — parks that one record red with
   the reason, never blocks others, cleared by the next edit). Phone-write failures fall back to
@@ -130,6 +138,10 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   is no day-record bible, and `eonRecordToTabWrites` picks the self-building bible tab from it —
   getting that wrong files a peach night under the regular bible, silently. Every test but one
   passes the bible explicitly, so the undefined path needs its own.
+- **A keepalive flush confirms nothing, and must not be allowed to say otherwise.** It fires into a
+  page that is going away and never hears back, so it may not mark a record synced (it already
+  didn't), may not clear the offline flags, and may not stand down a pending retry. Any new
+  post-flush bookkeeping needs the same `if (!opts.keepalive)` guard.
 - **Setup mistakes must be told, not retried.** A typo'd address, a 404, or an HTML page instead of
   JSON are all `rejected` with plain-words reasons — retrying those forever just shows
   OFFLINE — WILL RETRY and teaches the owner nothing.
