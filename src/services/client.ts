@@ -24,7 +24,31 @@ export type Outcome =
  */
 const DEAD_ADDRESS_STATUS = new Set([400, 401, 403, 404, 405, 410]);
 
+/**
+ * A web address that isn't one. `fetch` fails these at the network, which reads
+ * as "try again later" — so before the check the app would retry a typo for
+ * ever, showing OFFLINE and never naming the one thing wrong. (The retry ladder
+ * made that permanent rather than merely quiet.) Google's addresses are always
+ * https; plain http is allowed only against a machine's own localhost, which is
+ * how the app gets tested against a stand-in sheet.
+ */
+function addressProblem(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return "that doesn't look like a web address — it should start with https://";
+  }
+  if (u.protocol === 'https:') return null;
+  if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) {
+    return null;
+  }
+  return `that address starts with "${u.protocol}" — it should start with https://`;
+}
+
 async function run(url: string, init: RequestInit): Promise<Outcome> {
+  const problem = addressProblem(url);
+  if (problem) return { kind: 'rejected', reason: problem };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -77,15 +101,9 @@ export function getJson(url: string, params: Record<string, string>): Promise<Ou
   // new URL() THROWS on a typo'd address. Left unguarded it rejects the promise
   // and Settings sits on "Testing…" for ever with nothing to show for it — the
   // most likely mistake there is, pasting an address out of an email.
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return Promise.resolve({
-      kind: 'rejected',
-      reason: "that doesn't look like a web address — it should start with https://",
-    });
-  }
+  const problem = addressProblem(url);
+  if (problem) return Promise.resolve({ kind: 'rejected', reason: problem });
+  const u = new URL(url);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
   return run(u.toString(), { method: 'GET' });
 }

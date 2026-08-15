@@ -95,11 +95,18 @@ it holds no formulas, so nothing in it can break.
   the recorded nights and rewrites the "New" column beside the current one. Three nights in it
   starts suggesting, and it sharpens from there with nothing to press. A night with no takings is
   left out so it cannot drag the fit.
-- Correcting a number **in the notebook** stays corrected until the app next saves that date. To
-  make it stick, open that date in the app and tap **LOAD FROM SHEET** — the app pulls the
-  correction in and recalculates from it.
+- **Correcting a number by hand: which ones stick.** Fix a **count or a sales figure** on
+  `2PM Dough Count` or `EON Dough Count`, then open that date in the app and tap **LOAD FROM
+  SHEET** — the app takes the correction and works the whole day out again from it. Those two tabs
+  are the only ones it reads. Everything else — the two look-ups, the make, the final make, the
+  dough after gang — are *results*, so a number changed there is simply replaced the next time that
+  date saves. Correct the count, not the answer.
 - A night whose end-of-night sales came in below the 2 PM figure leaves its PM-takings cell blank
   rather than showing a negative.
+- **The closing Boli count is on screen only.** The end-of-night page asks for it and the outlook
+  card uses it, but `EON Dough Count` has no Boli column, so it is never written down and comes
+  back blank if you reload that date. That is deliberate — it keeps your Dough Log's layout exactly
+  as you built it. Say the word and it can be recorded instead.
 
 ### The old tracker's history is in there too
 
@@ -125,8 +132,10 @@ calculation engine, so past dates are filled in. Things worth knowing:
   twenty, then forty, easing off to once every five minutes until it gets through. It also tries
   the moment the signal returns and the moment you come back to the app. A red dot means the sheet
   refused a save, or nothing could be saved anywhere.
-- **LOAD FROM SHEET** brings a saved date back into the form. **LOAD LAST TEMPS** pre-fills the
-  previous readings — it never fills anything unless tapped.
+- **LOAD FROM SHEET** brings a saved date back into the form.
+- **Every temperature gets typed.** There is no way to copy the last readings forward, on purpose:
+  a temperature log is a record of measurements actually taken, and filling one in with yesterday's
+  numbers is the exact thing a health inspector looks for.
 - The **◀ ▶** arrows step a day at a time, and the date itself opens a calendar.
 - **Don't rename** the spreadsheets' tabs, their column headers, or the station tabs. The app finds
   everything by those exact names.
@@ -183,6 +192,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.11.0** | LOAD LAST TEMPS is gone. Tapping it didn't just show you the last readings — it filed them as today's, with the current time on them, about a second later. A temperature log has to be measurements actually taken, so every reading is now typed. Also: a mistyped sheet address is told to you in plain words instead of being retried for ever, and the README now says which hand-corrections in the notebook stick (counts and sales) and which get overwritten (the worked-out results). |
 | **1.10.0** | OFFLINE — WILL RETRY now means it. Before, a save that failed while your phone still had signal just sat there until you typed something else — the app only ever tried again when you nudged it. It now keeps trying on its own: ten seconds later, then twenty, then forty, easing off to once every five minutes until it gets through, and it stops the moment one lands. It also has a go the moment you come back to the app. Two smaller things: a temperature that can't save no longer makes the dough side look broken, and dates older than three months are cleared off the phone — but only ones the spreadsheet has already confirmed. |
 | **1.9.0** | The end-of-night page got the card you asked for: what you have beside what tomorrow needs, size by size, in trays and balls, with a plain-words verdict at the bottom. PM sales is off the screen (still recorded in the sheet). History now shows the last 3 nights instead of 30. |
 | **1.8.3** | Sicilian never goes negative on the 2 PM page any more. It is never set out and used the same day, so it just runs out — no negative, nothing in the set-out list, and tomorrow makes plainly what tomorrow needs. |

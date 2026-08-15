@@ -15,7 +15,7 @@ function line(row: HistorySummary): string {
   return `${sales} · ${batches}`;
 }
 
-/** The last ~30 nights: phone cache paints instantly, the sheet refreshes it. */
+/** The last few nights: phone cache paints instantly, the sheet refreshes it. */
 export function HistoryCard(props: { onPick: (date: string) => void }) {
   const [rows, setRows] = useState<HistorySummary[]>(cachedHistory);
   const [note, setNote] = useState('');
@@ -41,7 +41,6 @@ export function HistoryCard(props: { onPick: (date: string) => void }) {
             <button key={row.date} className="history-row" onClick={() => props.onPick(row.date)}>
               <span className="date">{row.date}</span>
               <span className="detail">{line(row)}</span>
-              {row.shortage && <span className="short-dot" title="had a shortage">●</span>}
             </button>
           ))}
           {note && <div className="coming-note">{note}</div>}

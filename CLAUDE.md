@@ -144,7 +144,10 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   post-flush bookkeeping needs the same `if (!opts.keepalive)` guard.
 - **Setup mistakes must be told, not retried.** A typo'd address, a 404, or an HTML page instead of
   JSON are all `rejected` with plain-words reasons — retrying those forever just shows
-  OFFLINE — WILL RETRY and teaches the owner nothing.
+  OFFLINE — WILL RETRY and teaches the owner nothing. Note `new URL('htps://…')` PARSES: a shape
+  check alone waves a bad scheme through to fail at the network, which reads as network-class and
+  (since v1.10.0) repeats on the ladder for ever. `addressProblem()` in `services/client.ts` guards
+  both verbs — https anywhere, http only against localhost so the app can be tested.
 
 ## Three Google rules learned the hard way — do not relearn them
 
@@ -185,6 +188,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 **Owner-chosen defaults (don't change without asking):**
 1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
 2. Night temps slot stays "after 17:00".
+5. **Temps are typed, never copied forward** (Aug 2026). LOAD LAST TEMPS was removed: it wrote the
+   previous readings straight into the current slot with the current clock time, i.e. it filed
+   measurements nobody took. Pre-filled temperature logs are records falsification and are what an
+   inspector looks for. Do not re-add a "copy last readings" affordance in any form — ghost text,
+   placeholder, autofill — without the owner asking for it explicitly.
+6. **The closing Boli count stays off the sheet** (Aug 2026). `EON Dough Count` has no Boli column
+   and `PM Dough Use` no Boli use, so the EON Boli count is screen-only: it feeds the outlook and
+   the phone, and reloading that date brings it back blank. The owner chose to keep the Dough Log's
+   layout untouched over recording it. Written down in README so it can't surprise anyone.
 3. Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.
 4. Sicilian never goes negative anywhere: no same-day set-out at 2 PM (`left` floors at 0) and its
    outlook diff clamps at 0 too. This REPLACED an earlier default that had EON Sicilian shortfalls

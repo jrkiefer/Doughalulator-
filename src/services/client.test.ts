@@ -40,6 +40,26 @@ describe('setup mistakes get a plain answer, not an endless retry', () => {
     expect(outcome.kind === 'rejected' && outcome.reason).toMatch(/https:\/\//);
   });
 
+  it('an address that PARSES but is not https is refused, not retried for ever', async () => {
+    // The trap: `new URL('htps://…')` is perfectly valid, so the shape check
+    // waves it through, fetch fails at the network, and that reads as a network
+    // problem — which the retry ladder would then repeat every five minutes.
+    const outcome = await getJson('htps://script.google.com/macros/s/abc/exec', { action: 'ping' });
+    expect(outcome.kind).toBe('rejected');
+    expect(outcome.kind === 'rejected' && outcome.reason).toMatch(/https:\/\//);
+  });
+
+  it('a save to a bad address is refused too, not just Test Connection', async () => {
+    const outcome = await postJson('htps://script.google.com/macros/s/abc/exec', { type: 'day' });
+    expect(outcome.kind).toBe('rejected');
+  });
+
+  it('plain http against localhost still works, so the app can be tested', async () => {
+    mockFetch(jsonResponse({ ok: true }));
+    const outcome = await postJson('http://localhost:8787/exec', { type: 'day' });
+    expect(outcome.kind).toBe('ok');
+  });
+
   it('a 404 is a wrong address, not something to retry for ever', async () => {
     mockFetch(jsonResponse({ error: 'not found' }, 404));
     const outcome = await getJson('https://sheet.test/exec', { action: 'ping' });

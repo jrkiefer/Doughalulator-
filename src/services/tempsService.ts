@@ -5,7 +5,7 @@
 import type { AppConfig } from '../config';
 import type { TempSlot } from '../core';
 import { getJson } from './client';
-import { cachedLatestTemps, cacheLatestTemps, type LatestTemps, type TempsEntry } from './local';
+import { type TempsEntry } from './local';
 import { tempsToPayload } from './mapping';
 import type { SheetSettings } from './settings';
 
@@ -31,29 +31,13 @@ export function tempsEntryToPayload(
   return { type: 'temps', date, items };
 }
 
-/** Latest reading per station for LOAD LAST TEMPS. Sheet first, phone cache fallback. */
-export async function fetchLatestTemps(settings: SheetSettings): Promise<LatestTemps | null> {
-  if (settings.tempsUrl.trim()) {
-    const outcome = await getJson(settings.tempsUrl, {
-      action: 'latest',
-    });
-    if (outcome.kind === 'ok') {
-      const stations = (outcome.data as {
-        stations?: Record<string, { temp: string; slot: string; when: string }>;
-      }).stations;
-      if (stations) {
-        const out: LatestTemps = {};
-        for (const [station, r] of Object.entries(stations)) {
-          const temp = Number(r.temp);
-          if (Number.isFinite(temp)) out[station] = { temp, slot: r.slot, when: r.when };
-        }
-        cacheLatestTemps(out);
-        return out;
-      }
-    }
-  }
-  return cachedLatestTemps();
-}
+/**
+ * There is deliberately no "load the last readings" here (owner's choice,
+ * Aug 2026). Copying yesterday's temperatures into today's slot files them as
+ * measurements taken now, which is falsifying a food-safety record. Every
+ * reading is typed. The sheet's script still answers `action: 'latest'` for the
+ * Overview tab; nothing in the app asks it any more.
+ */
 
 /** Test Connection for the temps sheet. Returns an error message or null when fine. */
 export async function pingTemps(settings: SheetSettings): Promise<string | null> {

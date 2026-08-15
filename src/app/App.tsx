@@ -17,16 +17,8 @@ import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { TwoPmPage } from '../features/twoPm/TwoPmPage';
 import { addDays, fetchDate } from '../services/doughService';
-import {
-  cachedLatestTemps,
-  cacheLatestTemps,
-  KEEP_DAYS,
-  pruneOldDates,
-  sweepStaleKeys,
-  type DateEntry,
-} from '../services/local';
+import { KEEP_DAYS, pruneOldDates, sweepStaleKeys, type DateEntry } from '../services/local';
 import { loadSettings, type SheetSettings } from '../services/settings';
-import { fetchLatestTemps } from '../services/tempsService';
 import { applyFetchedToEntry, buildDayRecord, DOUGH_SHEET_RECORDS, engine, mirrorBibles } from './engine';
 
 const cfg = defaultConfig;
@@ -62,7 +54,6 @@ export default function App() {
   const [loadMsg, setLoadMsg] = useState('');
   const [loadArmed, setLoadArmed] = useState(false);
   const [resetArmed, setResetArmed] = useState(false);
-  const [lastTempsNote, setLastTempsNote] = useState('');
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
@@ -189,13 +180,6 @@ export default function App() {
       rec.readings[slot] = { ...rec.readings[slot], [station]: value };
       rec.times = { ...rec.times, [slot]: time };
     });
-    const temp = Number(value);
-    if (value.trim() !== '' && Number.isFinite(temp)) {
-      cacheLatestTemps({
-        ...(cachedLatestTemps() ?? {}),
-        [station]: { temp, slot: cfg.tempSlots.names[slot], when: `${date} ${time}` },
-      });
-    }
   }
 
   // ————— load / reset —————
@@ -240,20 +224,6 @@ export default function App() {
     engine.reset(date);
     rehydrate(date);
     setLoadMsg('');
-  }
-
-  async function handleLoadLastTemps() {
-    setLastTempsNote('Loading…');
-    const latest = await fetchLatestTemps(loadSettings());
-    if (!latest || Object.keys(latest).length === 0) {
-      setLastTempsNote('No previous readings found.');
-      return;
-    }
-    for (const [station, r] of Object.entries(latest)) {
-      editTemp(tempSlot, station, String(r.temp));
-    }
-    const whens = [...new Set(Object.values(latest).map((r) => r.when))].sort();
-    setLastTempsNote(`Readings from ${whens[whens.length - 1]} — whatever is in the fields is what saves.`);
   }
 
   if (showSettings) {
@@ -322,8 +292,6 @@ export default function App() {
           onSlot={setTempSlot}
           readings={temps}
           onReading={editTemp}
-          onLoadLast={handleLoadLastTemps}
-          loadNote={lastTempsNote}
           synced={synced}
         />
       )}

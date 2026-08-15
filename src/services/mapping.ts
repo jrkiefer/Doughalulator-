@@ -392,7 +392,6 @@ export interface HistorySummary {
   date: string;
   finalSales: string;
   batchesMade: string;
-  shortage: boolean;
 }
 
 export function summaryRowsToHistory(
@@ -407,7 +406,6 @@ export function summaryRowsToHistory(
         date,
         finalSales: eon ? cell(eon, 'EON Sales') : '',
         batchesMade: make ? cell(make, 'Batches') : '',
-        shortage: false,
       };
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));

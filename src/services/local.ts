@@ -13,9 +13,17 @@ const STORE_VERSION = 2;
 const PREFIX = `doughalulator.v${STORE_VERSION}.`;
 const DATE_PREFIX = `${PREFIX}date.`;
 const HISTORY_KEY = `${PREFIX}history`;
-const LATEST_TEMPS_KEY = `${PREFIX}temps.latest`;
-/** Old-model keys (pre-rename snapshots + the retired queue) — swept at boot. */
-const STALE_PREFIXES = ['doughalulator.day.', 'doughalulator.temps.', 'doughalulator.queue'];
+/**
+ * Keys no longer read by anything, swept at boot: the pre-rename snapshots, the
+ * retired queue, and the latest-temps cache that LOAD LAST TEMPS used before
+ * that button was removed.
+ */
+const STALE_PREFIXES = [
+  'doughalulator.day.',
+  'doughalulator.temps.',
+  'doughalulator.queue',
+  `${PREFIX}temps.latest`,
+];
 
 /** Sync bookkeeping shared by all three record types. */
 export interface SyncMeta {
@@ -169,14 +177,5 @@ export function cacheHistory(summaries: HistorySummary[]): void {
   write(HISTORY_KEY, summaries);
 }
 
-// ————— latest temps (LOAD LAST TEMPS fallback) —————
-
-export type LatestTemps = Record<string, { temp: number; slot: string; when: string }>;
-
-export function cachedLatestTemps(): LatestTemps | null {
-  return read<LatestTemps>(LATEST_TEMPS_KEY);
-}
-
-export function cacheLatestTemps(latest: LatestTemps): void {
-  write(LATEST_TEMPS_KEY, latest);
-}
+// There is no latest-temps cache any more: the button that read it is gone, so
+// its key is swept off the phone instead (see STALE_PREFIXES above).

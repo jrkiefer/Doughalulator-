@@ -9,13 +9,17 @@ export const emptyTempReadings: TempReadings = { morning: {}, midday: {}, night:
 
 const SLOT_ORDER: TempSlot[] = ['morning', 'midday', 'night'];
 
+/**
+ * Every reading is typed here and nowhere else. There is deliberately no way to
+ * copy previous temperatures forward (owner's choice, Aug 2026): a temperature
+ * log is a record of measurements actually taken, and pre-filling one with
+ * yesterday's numbers is falsifying it — the exact thing an inspector looks for.
+ */
 export function TempsPage(props: {
   slot: TempSlot;
   onSlot: (slot: TempSlot) => void;
   readings: TempReadings;
   onReading: (slot: TempSlot, station: string, value: string) => void;
-  onLoadLast: () => void;
-  loadNote: string;
   synced: boolean;
 }) {
   const cfg = defaultConfig;
@@ -63,11 +67,6 @@ export function TempsPage(props: {
             </div>
           );
         })}
-
-        <button className="pill pill-sm pill-block" onClick={props.onLoadLast}>
-          LOAD LAST TEMPS
-        </button>
-        {props.loadNote && <div className="coming-note">{props.loadNote}</div>}
       </Collapsible>
     </div>
   );
