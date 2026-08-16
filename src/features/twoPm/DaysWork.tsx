@@ -5,8 +5,23 @@ import { RoundingPills } from './RoundingPills';
 
 export type Rounding = 'down' | 'up' | null;
 
-function batchesText(exact: number): string {
-  return Number.isInteger(exact) ? String(exact) : exact.toFixed(1);
+function trayWord(n: number): string {
+  return `${n} ${n === 1 ? 'tray' : 'trays'}`;
+}
+
+/**
+ * "+2 SM, +3 LG" / "−1 SM, −2 LG" — what Small and Large actually absorbed.
+ *
+ * Built from the trays that ended up on the bench, NOT from the requested
+ * delta: a big round-down can ask a size to give up more trays than it has,
+ * and `buildBatchOption` floors it at zero. Reporting the request would
+ * promise a trim that never happened.
+ */
+function splitNote(small: number, large: number): string {
+  const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
+  return [small !== 0 && `${signed(small)} SM`, large !== 0 && `${signed(large)} LG`]
+    .filter(Boolean)
+    .join(', ');
 }
 
 function TrayPill(props: { name: string; color: string; value: string }) {
@@ -62,6 +77,16 @@ export function DaysWork(props: {
   const trays = chosen ? chosen.finalTraysToMake : { ...record.trays, boli: record.boliTrays };
   const closed = record.flags.closedTomorrow;
   const ready = record.totalTrays !== null;
+  // How far the batch count moved off the plain plan, and where those trays
+  // went. Small/Large deltas come from the FINAL trays so a floored round-down
+  // reports what was really trimmed.
+  const note = chosen
+    ? splitNote(
+        (chosen.finalTraysToMake.small ?? 0) - (record.trays.small ?? 0),
+        (chosen.finalTraysToMake.large ?? 0) - (record.trays.large ?? 0),
+      )
+    : '';
+  const tail = note ? ` · ${note}` : '';
   // Not ready splits two ways, and saying the wrong one is worse than saying
   // nothing: the sales card comes first on the page, so between filling it in
   // and counting the dough it is the COUNTS that are missing, not the sales.
@@ -117,22 +142,27 @@ export function DaysWork(props: {
               </h3>
               <div className="kv">
                 <span className="micro">PLANNED</span>
-                <strong>
-                  {record.totalTrays} trays · {batchesText(record.exactBatches!)} batches
-                </strong>
+                <strong>{trayWord(record.totalTrays!)}</strong>
               </div>
               <div className="kv">
                 <span className="micro">MAKING</span>
                 <strong>
-                  {chosen.targetTrays} trays ({chosen.batches} × {defaultConfig.traysPerBatch})
+                  {trayWord(chosen.targetTrays)} ({chosen.batches} ×{' '}
+                  {defaultConfig.traysPerBatch})
                 </strong>
               </div>
-              <span className="status-chip">
-                {chosen.trayDelta === 0
-                  ? `even · ${record.totalTrays} trays = ${chosen.batches} batches`
-                  : chosen.trayDelta > 0
-                    ? `rounded up from ${record.totalTrays}`
-                    : `rounded down from ${record.totalTrays}`}
+              <span
+                className={`status-chip${
+                  chosen.trayDelta > 0 ? ' up' : chosen.trayDelta < 0 ? ' down' : ''
+                }`}
+              >
+                {chosen.trayDelta > 0
+                  ? `▴ rounded up · +${trayWord(chosen.trayDelta)}${tail}`
+                  : chosen.trayDelta < 0
+                    ? `▾ rounded down ${trayWord(-chosen.trayDelta)}${tail}`
+                    : `even · ${trayWord(record.totalTrays!)} = ${chosen.batches} ${
+                        chosen.batches === 1 ? 'batch' : 'batches'
+                      }`}
               </span>
             </div>
           </div>

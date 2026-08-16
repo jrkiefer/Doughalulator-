@@ -3,11 +3,12 @@ import type { BibleSizeKey, DoughDayRecord } from '../../core/types';
 import { fmtMaybe } from '../shared/counts';
 import { SectionHead } from '../shell/SectionHead';
 
-const ROWS: { key: BibleSizeKey; name: string; color: string }[] = [
-  { key: 'indi', name: 'INDI', color: 'var(--indi)' },
-  { key: 'small', name: 'SM', color: 'var(--small)' },
-  { key: 'large', name: 'LG', color: 'var(--large)' },
-  { key: 'sic', name: 'SIC', color: 'var(--sic)' },
+const ROWS: { key: BibleSizeKey; name: string; label: string; color: string }[] = [
+  { key: 'indi', name: 'INDI', label: 'Individual', color: 'var(--indi)' },
+  { key: 'small', name: 'SM', label: 'Small', color: 'var(--small)' },
+  { key: 'large', name: 'LG', label: 'Large', color: 'var(--large)' },
+  // Sicilian is never set out — kept here only so every row has the same shape.
+  { key: 'sic', name: 'SIC', label: 'Sicilian', color: 'var(--sic)' },
 ];
 
 export function BySizeTable(props: { record: DoughDayRecord }) {
@@ -15,6 +16,10 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
   const cfg = defaultConfig;
 
   const setOuts = ROWS.filter(({ key }) => (record.setOutTrays[key] ?? 0) > 0);
+  // Boli's make in balls. The record only carries trays, and whole trays are
+  // all it ever makes, so the balls are exactly trays × 6.
+  const boliMakeBalls =
+    record.boliTrays === null ? null : record.boliTrays * cfg.ballsPerTray.boli;
 
   return (
     <>
@@ -22,22 +27,15 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
       <div className="card bysize">
         {setOuts.length > 0 && (
           <div className="setout">
-            <span className="label">SET OUT TONIGHT</span>
+            <span className="label">Set out now — tonight dips into same-day dough</span>
             <div className="setout-list">
-              {setOuts.map(({ key, name, color }) => (
-                <span key={key} className="tray-pill" style={{ ['--size' as string]: color }}>
-                  <span className="dot" />
-                  {name}{' '}
-                  <strong>
-                    {record.setOutTrays[key]} {record.setOutTrays[key] === 1 ? 'tray' : 'trays'}
-                  </strong>
-                  &nbsp;({record.setOutBalls[key]} balls)
+              {setOuts.map(({ key, label }) => (
+                <span key={key}>
+                  {label}: {record.setOutTrays[key]}{' '}
+                  {record.setOutTrays[key] === 1 ? 'tray' : 'trays'}
                 </span>
               ))}
             </div>
-            <p className="days-work-note">
-              Tonight will run past these counts — set the dough out now; tomorrow's make replaces it.
-            </p>
           </div>
         )}
 
@@ -99,7 +97,12 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
           </span>
           <span className="kv">
             <span className="micro">MAKE</span>
-            <strong>{fmtMaybe(record.boliTrays)}</strong>
+            {/* Balls, like HAVE and TARGET beside it — the trays are the cell
+                on the right, where every other size's trays sit. */}
+            <strong>{fmtMaybe(boliMakeBalls)}</strong>
+          </span>
+          <span className="boli-trays" style={{ ['--size' as string]: 'var(--boli)' }}>
+            {fmtMaybe(record.boliTrays)}
           </span>
           <span className="note">
             {record.flags.boliNotCounted ? 'not counted' : 'whole trays only'}

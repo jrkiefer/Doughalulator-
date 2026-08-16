@@ -692,6 +692,19 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* Rounding up means firing the mixer for trays the plan didn't ask for, so it
+   speaks up in the accent red; rounding down means less work, so it reads
+   green. An even night keeps the quiet default above. */
+.status-chip.up {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.status-chip.down {
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  color: var(--good);
+}
+
 .rounding-row {
   display: flex;
   align-items: center;
@@ -723,6 +736,17 @@ button:focus-visible {
 }
 
 /* ————— by size table ————— */
+
+/* The trays column is pinned to a fixed width so the Boli cell BELOW the table
+   can line up under it — left to size itself it drifts with the digit count.
+   Each cell's colour wash is clipped to its content box, so what the eye sees
+   is the width less the side padding; the Boli cell reproduces that from the
+   same two numbers rather than guessing at them. */
+.bysize {
+  --trays-col: 52px;
+  --cell-pad: 3px;
+}
+
 .bysize table {
   width: 100%;
   border-collapse: collapse;
@@ -737,7 +761,7 @@ button:focus-visible {
   color: var(--ink-mute);
   text-transform: uppercase;
   text-align: right;
-  padding: 10px 3px 4px;
+  padding: 10px var(--cell-pad) 4px;
 }
 
 .bysize th:first-child {
@@ -751,7 +775,7 @@ button:focus-visible {
 
 .bysize td {
   text-align: right;
-  padding: 8px 3px;
+  padding: 8px var(--cell-pad);
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink);
@@ -778,6 +802,13 @@ button:focus-visible {
   border-radius: 99px;
   background: var(--size, var(--ink));
   margin-right: 5px;
+}
+
+/* The trays column is given a fixed width so the Boli cell below the table can
+   line up under it — left to size itself, the column drifts with digit count. */
+.bysize th:last-child,
+.bysize td.trays-cell {
+  width: var(--trays-col);
 }
 
 /* The make-this-many cell: the loud one. A wash of the size's own colour,
@@ -814,7 +845,8 @@ button:focus-visible {
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--boli) 7%, transparent);
   margin-top: 8px;
-  padding: 10px 8px;
+  /* Right padding matches the table cell's so the trays cell below lines up. */
+  padding: 10px var(--cell-pad) 10px 8px;
   font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -824,6 +856,23 @@ button:focus-visible {
   display: block;
   font-size: 8px;
   margin-bottom: 3px;
+}
+
+/* Boli's trays, dressed and placed as the table's TRAYS column above it — so
+   reading straight down that column gives trays for Indi/Small/Large/Boli and
+   balls for Sicilian, the one size counted loose. */
+.bysize .boli-row .boli-trays {
+  margin-left: auto;
+  width: calc(var(--trays-col) - var(--cell-pad) * 2);
+  padding: 3px 0;
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--boli);
+  background: color-mix(in srgb, var(--boli) 12%, transparent);
+  border-radius: var(--radius-sm);
 }
 
 .bysize .boli-row .note {
@@ -850,12 +899,17 @@ button:focus-visible {
 .setout-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  /* Wide column gap so several sizes read as separate items on one line. */
+  gap: 4px 16px;
   margin-top: 6px;
 }
 
-.setout .days-work-note {
-  color: var(--accent-ink);
+.setout-list span {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ————— eon outlook ————— */
