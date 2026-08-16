@@ -609,3 +609,150 @@ describe('the bible mirror cannot go missing behind a stale memory', () => {
       .toBe(bibles.regular.rows.length + 1);
   });
 });
+
+/**
+ * The spreadsheet has its OWN timezone, separate from the Apps Script
+ * project's. A date-only cell is stored as midnight in the SHEET's zone, so a
+ * script asking the Date object for its own getDate() — which answers in the
+ * SCRIPT's zone — reads the wrong day whenever the two disagree.
+ *
+ * The failure that causes is not a wrong date on screen. It is that the
+ * merge-upsert stops recognising its own row: the incoming payload's date is a
+ * string (never shifted), the stored cell is a Date (shifted), so they never
+ * match and every save appends instead of merging. Silently, for ever.
+ */
+describe('dough script — the spreadsheet/script timezone trap', () => {
+  const rowsOn = (script: LoadedScript, tab: string) => {
+    const sheet = script.world.ss.getSheetByName(tab)!;
+    let n = 0;
+    for (let r = 2; r <= sheet.getLastRow(); r++) if (sheet.getCell(r, 1) !== '') n++;
+    return n;
+  };
+
+  it('merges into the SAME row when the sheet runs ahead of the script', () => {
+    const script = freshDough();
+    script.world.ss.tzShiftHours = 13; // sheet's zone well ahead of the script's
+    post(script, dayPayload('2026-08-01'));
+    post(script, dayPayload('2026-08-01'));
+    post(script, dayPayload('2026-08-01'));
+    expect(rowsOn(script, '2PM Dough Count')).toBe(1);
+  });
+
+  it('a sheet running BEHIND the script was always safe — which is why this hid', () => {
+    // Sheet-midnight lands later the same day in the script's zone, so the day
+    // never shifts. Only a sheet ahead of the script breaks — which is what
+    // makes the fault intermittent and easy to miss.
+    const script = freshDough();
+    script.world.ss.tzShiftHours = -11;
+    post(script, dayPayload('2026-08-02'));
+    post(script, dayPayload('2026-08-02'));
+    expect(rowsOn(script, '2PM Dough Count')).toBe(1);
+  });
+
+  it('a shifted date still reads back as the day it was saved under', () => {
+    const script = freshDough();
+    script.world.ss.tzShiftHours = 13;
+    post(script, dayPayload('2026-08-03'));
+    const answer = get(script, { action: 'date', date: '2026-08-03' }) as {
+      ok: boolean; tabs: Record<string, { Date: string } | null>;
+    };
+    expect(answer.ok).toBe(true);
+    expect(answer.tabs['2PM Dough Count']?.Date).toBe('2026-08-03');
+  });
+});
+
+describe('dough script — the columns must be where the app thinks', () => {
+  it('refuses the save when a heading has been renamed, and says which', () => {
+    const script = freshDough();
+    script.world.ss.getSheetByName('2PM Dough Count')!.setCell(1, 6, 'Indi Balls');
+    const answer = post(script, dayPayload('2026-08-01')) as { ok: boolean; error: string };
+    expect(answer.ok).toBe(false);
+    expect(answer.error).toContain('2PM Dough Count');
+    expect(answer.error).toContain('F1');
+    expect(answer.error).toContain('Indi Count');
+  });
+
+  it('refuses rather than writing into a shifted column', () => {
+    const script = freshDough();
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    // Two headings swapped — the classic way values land in the wrong place.
+    sheet.setCell(1, 6, 'Small Count');
+    sheet.setCell(1, 7, 'Indi Count');
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: false });
+    // Nothing was written: no data row exists at all.
+    expect(sheet.getCell(2, 1)).toBe('');
+  });
+
+  it('a healthy tab saves exactly as before', () => {
+    const script = freshDough();
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: true });
+  });
+});
+
+describe('dough script — a stray value cannot push the next night into a gap', () => {
+  it('appends after the last DATED row, not the last row of the whole sheet', () => {
+    const script = freshDough();
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    post(script, dayPayload('2026-08-01')); // lands on row 2
+    sheet.setCell(400, 5, 'a note someone typed'); // far down, unrelated column
+    post(script, dayPayload('2026-08-02'));
+    // Row 3, immediately under the first night — not row 401.
+    expect(sheet.getCell(3, 1)).not.toBe('');
+    // …and it is genuinely the second night, read back through the app's own path.
+    const answer = get(script, { action: 'date', date: '2026-08-02' }) as {
+      tabs: Record<string, { Date: string } | null>;
+    };
+    expect(answer.tabs['2PM Dough Count']?.Date).toBe('2026-08-02');
+  });
+});
+
+describe('dough script — Check the log', () => {
+  const runCheck = (script: LoadedScript) => {
+    (script.fns as unknown as { checkLog(): void }).checkLog();
+    return script.world.alerts[script.world.alerts.length - 1];
+  };
+
+  it('is on the Dough Tools menu', () => {
+    const script = freshDough();
+    script.fns.onOpen();
+    expect(script.world.menu.map((m) => m.fn)).toContain('checkLog');
+  });
+
+  it('says so plainly when the notebook is healthy', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    expect(runCheck(script)).toContain('no day appears twice');
+  });
+
+  it('names a day that appears more than once — the app only reads the first', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    // A duplicate as a hand-paste would make it: same date, one row lower.
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    sheet.setCell(3, 1, '2026-08-01');
+    const report = runCheck(script);
+    expect(report).toContain('2026-08-01');
+    expect(report).toContain('more than one row');
+  });
+
+  it('names a heading that has been moved', () => {
+    const script = freshDough();
+    script.world.ss.getSheetByName('2PM Dough Count')!.setCell(1, 3, 'Sales So Far');
+    expect(runCheck(script)).toContain('Current Sales');
+  });
+
+  it('counts rows whose date cannot be read', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    script.world.ss.getSheetByName('2PM Dough Count')!.setCell(3, 1, 'last tuesday');
+    expect(runCheck(script)).toContain('cannot be read');
+  });
+
+  it('changes nothing it looks at', () => {
+    const script = freshDough();
+    post(script, dayPayload('2026-08-01'));
+    const before = get(script, { action: 'date', date: '2026-08-01' });
+    runCheck(script);
+    expect(get(script, { action: 'date', date: '2026-08-01' })).toEqual(before);
+  });
+});

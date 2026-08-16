@@ -16,13 +16,24 @@ import { fileURLToPath } from 'node:url';
 
 type Cell = string | number | Date;
 
-/** How Sheets renders a stored cell: dates ISO, everything else as text. */
-function display(value: Cell): string {
+const HOUR_MS = 60 * 60 * 1000;
+
+/** Render an instant in the SHEET's zone — `shift` hours ahead of the script's. */
+export function renderInSheetZone(value: Date, shiftHours: number): string {
+  const shifted = new Date(value.getTime() + shiftHours * HOUR_MS);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}`;
+}
+
+/**
+ * How Sheets renders a stored cell: dates ISO in the SPREADSHEET's timezone,
+ * everything else as text. The zone matters — a script asking a Date object
+ * for its own getDate() answers in the SCRIPT project's zone instead, and when
+ * the two differ that is a whole day's disagreement.
+ */
+function display(value: Cell, shiftHours = 0): string {
   if (value === '') return '';
-  if (value instanceof Date) {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-  }
+  if (value instanceof Date) return renderInSheetZone(value, shiftHours);
   return String(value);
 }
 
@@ -58,7 +69,8 @@ class FakeRange {
   }
 
   getDisplayValues(): string[][] {
-    return this.getValues().map((row) => row.map(display));
+    const shift = this.sheet.tzShiftHours();
+    return this.getValues().map((row) => row.map((v) => display(v, shift)));
   }
 
   getDisplayValue(): string {
@@ -127,7 +139,11 @@ export class FakeSheet {
   hidden = false;
   private maxRows = 1000; // a fresh Google sheet's row ceiling
 
-  constructor(public name: string) {}
+  constructor(
+    public name: string,
+    /** How many hours the SHEET's timezone runs ahead of the script's. */
+    public tzShiftHours: () => number = () => 0,
+  ) {}
 
   setCell(row: number, col: number, value: Cell) {
     if (value === '' || value === null || value === undefined) {
@@ -142,7 +158,11 @@ export class FakeSheet {
     if (row === 1 || !this.dateColumns.has(col) || typeof value !== 'string') return value;
     const iso = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (!iso) return value;
-    return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    // Sheets stores midnight IN THE SPREADSHEET'S ZONE. With the sheet ahead of
+    // the script, that instant is the previous day to the script — which is the
+    // entire timezone trap, modelled rather than assumed.
+    const local = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    return new Date(local.getTime() - this.tzShiftHours() * HOUR_MS);
   }
 
   getCell(row: number, col: number): Cell {
@@ -235,13 +255,23 @@ export class FakeSheet {
 export class FakeSpreadsheet {
   sheets = new Map<string, FakeSheet>();
   private name = 'Untitled spreadsheet';
+  /**
+   * Hours the spreadsheet's timezone runs AHEAD of the script project's.
+   * 0 = the two agree (the healthy case). Anything else reproduces the
+   * classic Apps Script off-by-one.
+   */
+  tzShiftHours = 0;
+
+  getSpreadsheetTimeZone() {
+    return 'Fake/SheetZone';
+  }
 
   getSheetByName(name: string) {
     return this.sheets.get(name) ?? null;
   }
 
   insertSheet(name: string) {
-    const sheet = new FakeSheet(name);
+    const sheet = new FakeSheet(name, () => this.tzShiftHours);
     this.sheets.set(name, sheet);
     return sheet;
   }
@@ -263,6 +293,10 @@ export interface FakeWorld {
   ss: FakeSpreadsheet;
   lock: { busy: boolean; acquired: number; released: number };
   props: Map<string, string>;
+  /** Menu items registered by onOpen — so registration can be asserted. */
+  menu: { caption: string; fn: string }[];
+  /** Text passed to Ui.alert — how checkLog reports to the owner. */
+  alerts: string[];
 }
 
 interface RuleBuilder {
@@ -290,10 +324,36 @@ function makeGlobals(world: FakeWorld) {
     },
     getUi() {
       const menu = {
-        addItem: () => menu,
+        addItem: (caption: string, fn: string) => {
+          world.menu.push({ caption, fn });
+          return menu;
+        },
         addToUi: () => undefined,
       };
-      return { createMenu: () => menu };
+      return {
+        createMenu: () => menu,
+        // alert(prompt) | alert(prompt, buttons) | alert(title, prompt, buttons)
+        alert: (...args: string[]) => {
+          world.alerts.push(args.length >= 3 ? args[1] : args[0]);
+          return 'ok';
+        },
+        ButtonSet: { YES_NO: 'YES_NO', OK: 'OK' },
+        Button: { YES: 'YES', NO: 'NO' },
+      };
+    },
+  };
+
+  const Utilities = {
+    /**
+     * Renders in the zone it is GIVEN, unlike Date's own getters which always
+     * answer in the script's zone. Only the one format the scripts use is
+     * supported — an unexpected format should fail loudly, not silently.
+     */
+    formatDate(date: Date, _tz: string, format: string) {
+      if (format !== 'yyyy-MM-dd') {
+        throw new Error('fake Utilities.formatDate only knows yyyy-MM-dd, got: ' + format);
+      }
+      return renderInSheetZone(date, world.ss.tzShiftHours);
     },
   };
 
@@ -326,7 +386,7 @@ function makeGlobals(world: FakeWorld) {
     }),
   };
 
-  return { SpreadsheetApp, LockService, ContentService, PropertiesService };
+  return { SpreadsheetApp, LockService, ContentService, PropertiesService, Utilities };
 }
 
 export interface LoadedScript {
@@ -347,6 +407,8 @@ const EXPORTS = [
   'writeBibles',
   'wipeAllData',
   'removeRetiredTabs',
+  'checkLog',
+  'logProblems',
 ];
 
 /** Evaluate a Code.gs file against a fresh fake world and hand back its functions. */
@@ -359,6 +421,8 @@ export function loadScript(file: 'dough' | 'temps'): LoadedScript {
     ss: new FakeSpreadsheet(),
     lock: { busy: false, acquired: 0, released: 0 },
     props: new Map(),
+    menu: [],
+    alerts: [],
   };
   const globals = makeGlobals(world);
 
@@ -368,6 +432,7 @@ export function loadScript(file: 'dough' | 'temps'): LoadedScript {
     'LockService',
     'ContentService',
     'PropertiesService',
+    'Utilities',
     body,
   );
   const fns = factory(
@@ -375,6 +440,7 @@ export function loadScript(file: 'dough' | 'temps'): LoadedScript {
     globals.LockService,
     globals.ContentService,
     globals.PropertiesService,
+    globals.Utilities,
   ) as LoadedScript['fns'];
 
   return { world, fns };

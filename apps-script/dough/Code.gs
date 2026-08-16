@@ -155,11 +155,85 @@ function writeHeaders(sheet, headers) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Dough Tools')
+    .addItem('Check the log', 'checkLog')
     .addItem('Re-run setup', 'setup')
     .addItem('Refresh new-bible suggestions', 'refreshBibleBuilds')
     .addItem('Remove retired tabs', 'removeRetiredTabs')
     .addItem('Erase all data', 'eraseAllData')
     .addToUi();
+}
+
+/**
+ * Everything about this notebook that would otherwise go unnoticed, in plain
+ * words. Read-only: it writes nothing, changes nothing, adds nothing.
+ *
+ * The app takes the FIRST row it finds for a date and stops, so a second row
+ * for the same day is invisible to it while sitting in plain sight here. Same
+ * for a heading that has been moved and a date cell that cannot be read. None
+ * of those announce themselves, which is the whole reason this exists.
+ */
+function logProblems() {
+  var ss = SpreadsheetApp.getActive();
+  var out = [];
+  Object.keys(TABS).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      out.push('The "' + name + '" page is missing. Run Dough Tools > Re-run setup.');
+      return;
+    }
+    var headers = TABS[name];
+    var last = sheet.getLastRow();
+    if (last < 1) return;
+    var block = sheet.getRange(1, 1, last, headers.length).getValues();
+
+    for (var c = 0; c < headers.length; c++) {
+      var found = String(block[0][c] === undefined || block[0][c] === null ? '' : block[0][c]).trim();
+      if (found !== headers[c]) {
+        out.push('"' + name + '" \u2014 the heading in ' + colLetter(c + 1) + '1 should say "' +
+          headers[c] + '" but says "' + found +
+          '". Nothing can be saved to this page until it is put back.');
+      }
+    }
+
+    var seen = {};
+    var dupes = {};
+    var unreadable = 0;
+    for (var r = 1; r < block.length; r++) {
+      var raw = block[r][0];
+      if (raw === '' || raw === null) continue;
+      var d = normalizeDate(raw);
+      if (!d) { unreadable++; continue; }
+      if (seen[d]) dupes[d] = true;
+      seen[d] = true;
+    }
+    var repeated = Object.keys(dupes).sort();
+    if (repeated.length) {
+      out.push('"' + name + '" has more than one row for ' + repeated.join(', ') +
+        '. The app only ever reads the first one, so the others are invisible to it \u2014 delete them.');
+    }
+    if (unreadable) {
+      out.push('"' + name + '" has ' + unreadable +
+        ' row(s) whose date cannot be read. The app skips those.');
+    }
+  });
+  return out;
+}
+
+/** Menu item: run the checks and say what they found, in plain words. */
+function checkLog() {
+  var problems = logProblems();
+  var ui = SpreadsheetApp.getUi();
+  if (problems.length === 0) {
+    ui.alert(
+      'All good',
+      'Every page has the headings the app expects, every date reads cleanly, and no day appears twice.',
+      ui.ButtonSet.OK);
+    return;
+  }
+  ui.alert(
+    problems.length === 1 ? 'One thing to look at' : problems.length + ' things to look at',
+    problems.join('\n\n'),
+    ui.ButtonSet.OK);
 }
 
 /** Erase every data row, after asking twice. Menu-only — never over the web. */
@@ -270,11 +344,47 @@ function headersFor(tabName) {
   return isBibleBuildTab(tabName) ? BIBLE_BUILD_HEADERS.slice(0, 6) : TABS[tabName];
 }
 
+/** Spreadsheet column letter for a 1-based index (A, B, ... Z, AA). */
+function colLetter(index) {
+  var out = '';
+  while (index > 0) {
+    var rem = (index - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    index = Math.floor((index - 1) / 26);
+  }
+  return out;
+}
+
+/**
+ * Refuse to write when the tab's columns are not where the app thinks.
+ *
+ * Every write maps a column NAME to a POSITION using this script's own header
+ * list. Nothing else ever looks at the sheet's real header row, so a column
+ * inserted, reordered or renamed by hand would send every value into the wrong
+ * cell and report success. Throwing here turns that into a refusal the phone
+ * shows in words. Same failure class as the 31-character tab-name collision:
+ * a structural mismatch that otherwise fails in silence.
+ */
+function assertHeaders(tabName, expected, actual) {
+  for (var i = 0; i < expected.length; i++) {
+    var found = String(actual[i] === undefined || actual[i] === null ? '' : actual[i]).trim();
+    if (found !== expected[i]) {
+      throw new Error(
+        'the "' + tabName + '" tab has moved its columns - ' + colLetter(i + 1) +
+        '1 should say "' + expected[i] + '" but says "' + found +
+        '". Put that heading back, or run Dough Tools > Re-run setup.');
+    }
+  }
+}
+
 /**
  * Merge-upsert one row into a tab by Date. Only the provided columns
  * change (blank = clear): the tab's data block is read ONCE - which yields
- * both the matching row's position and its current values - the payload's
- * columns are overlaid, and the row goes back in ONE ranged write.
+ * the header row, the matching row's position and its current values - the
+ * payload's columns are overlaid, and the row goes back in ONE ranged write.
+ *
+ * The read starts at row 1, not row 2, so the sheet's own headings come along
+ * for free and can be checked before anything is written.
  */
 function upsertRow(tabName, row) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(tabName);
@@ -283,19 +393,26 @@ function upsertRow(tabName, row) {
   var date = normalizeDate(row.Date);
 
   var last = sheet.getLastRow();
-  var block = last >= 2 ? sheet.getRange(2, 1, last - 1, headers.length).getValues() : [];
+  var block = last >= 1 ? sheet.getRange(1, 1, last, headers.length).getValues() : [];
+  assertHeaders(tabName, headers, block.length ? block[0] : []);
+
   var rowIndex = -1;
   var values = null;
-  for (var i = 0; i < block.length; i++) {
+  // getLastRow() counts content in ANY column, so a stray note far down would
+  // push an append past a gap of blank rows. The real end of the data is the
+  // last row with a date in column A, which this scan already passes over.
+  var lastDated = 1;
+  for (var i = 1; i < block.length; i++) {
+    if (block[i][0] === '' || block[i][0] === null) continue;
+    lastDated = i + 1;
     // First match wins, exactly as a top-down scan of column A would.
-    if (normalizeDate(block[i][0]) === date) {
-      rowIndex = i + 2;
+    if (rowIndex === -1 && normalizeDate(block[i][0]) === date) {
+      rowIndex = i + 1;
       values = block[i];
-      break;
     }
   }
   if (rowIndex === -1) {
-    rowIndex = last + 1;
+    rowIndex = lastDated + 1;
     ensureRows(sheet, rowIndex);
     values = headers.map(function () { return ''; });
   }
@@ -329,17 +446,37 @@ function wipeAllData() {
 }
 
 /**
+ * The SPREADSHEET's timezone, which is a different setting from the Apps
+ * Script project's. Cached per execution - it cannot change mid-request.
+ */
+var __ssTz = null;
+function ssTimeZone() {
+  if (!__ssTz) __ssTz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+  return __ssTz;
+}
+
+/**
  * Normalize a date from the app OR a sheet cell to YYYY-MM-DD. Accepts ISO,
  * M/D/YYYY, M/D/YY (2-digit years land in 2000-2099), and the real Date
  * objects getValues() hands back for date-formatted cells (column A is
  * formatted by setup(), so a value written as text comes back as a Date).
  * '' if hopeless.
+ *
+ * A date-only cell holds MIDNIGHT IN THE SPREADSHEET'S ZONE. Asking the Date
+ * object for its own getFullYear/getMonth/getDate answers in the SCRIPT
+ * project's zone instead, and when the sheet's zone runs ahead of the
+ * script's, that instant is still the previous day there - so the cell reads
+ * as the day before. The damage is not a wrong date on screen: the incoming
+ * payload's date is a plain STRING (never shifted) while the stored cell is a
+ * Date (shifted), so upsertRow stops recognising its own row and appends a
+ * fresh one on EVERY save, silently, for ever. Formatting in the sheet's own
+ * zone is the fix, and a test pins it.
  */
 function normalizeDate(value) {
   if (value === null || value === undefined) return '';
   if (Object.prototype.toString.call(value) === '[object Date]') {
     if (isNaN(value.getTime())) return '';
-    return value.getFullYear() + '-' + pad2(value.getMonth() + 1) + '-' + pad2(value.getDate());
+    return Utilities.formatDate(value, ssTimeZone(), 'yyyy-MM-dd');
   }
   var s = String(value).trim();
   var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);

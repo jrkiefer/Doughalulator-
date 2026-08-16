@@ -79,6 +79,10 @@ code comes from the `apps-script/` folder in here.
   and "Access: **Anyone**". That is what produces the two long `/exec` addresses.
 - The `setup()` function inside each script builds any missing tabs. It is safe to run again
   anytime — for example after adding a station to the temps script's `STATIONS` list.
+- **Dough Tools → Check the log** looks the whole notebook over and tells you in plain words if
+  anything is off: a heading that has been moved or renamed, a day that has ended up with two rows
+  (the app only ever reads the first, so the second is invisible to it), or a date cell it can't
+  read. It only looks — it changes nothing. Worth running if a day ever seems not to save.
 
 ### Setting up a phone
 
@@ -205,6 +209,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.14.0** | Housekeeping you'll never see, on the machine inside the Dough Log. Three things that could have gone wrong silently now can't. **The date matching is timezone-proof:** if the spreadsheet's time zone had ever drifted from the script's, every save would have quietly added a *new* row for the same day instead of updating the old one, for ever — that's now impossible. **The app refuses to write if a heading has been moved:** rename or reorder a column and it stops and tells you, instead of putting numbers in the wrong place and reporting success. **A stray note typed far down a page** can no longer push the next night's row into a gap. Plus a new **Check the log** item in the Dough Tools menu that looks the whole notebook over and reports anything odd in plain words. |
 | **1.13.0** | The maths now matches your other app, night for night. The bible rounds **up** between rows as it always did there — except on a quiet day (both forecasts under $13,000), when it rounds down to the row below, but never shedding more than $400. **Sicilian never drops to nothing:** under 8 on hand and at least 1 gets made. The app now **picks the batch count itself** — a couple of trays past a whole batch rounds down instead of firing up the mixer again, up to five on a quiet day — with Round up / Round down always there to overrule it, plus a new pair for the forecast rounding. Extra trays lean to Large. And sales typed small mean thousands up to 99, not 50, so 75 reads as $75,000. |
 | **1.12.0** | The two spreadsheet addresses are now built into the app, and the SETTINGS page is gone. Your phone had stopped working because those addresses were kept on each device separately, and the phone's had been lost — so it said it couldn't reach the spreadsheet while the laptop was fine. Now any phone that opens the app is already connected, with nothing to set up. The trade, chosen knowingly: the addresses are readable in the app's published code, so someone who went looking could read your recorded nights or write junk rows. Nobody can erase anything — that is still a menu item inside the spreadsheet. |
 | **1.11.1** | A fix for something 1.11.0 introduced: typing a sheet address into Settings by hand (rather than pasting it) turned the dot red saying the address was wrong — moments after it had been typed correctly — and it stayed red until you touched a dough number. The app no longer tries to save while you are still typing an address. |

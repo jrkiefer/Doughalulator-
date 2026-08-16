@@ -99,6 +99,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   gets one (retrying a refusal teaches nobody anything), and a keepalive flush neither arms nor
   clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
   read OFFLINE.
+- **`getLastRow()` counts content in ANY column**, so a stray note far down a sheet would push the
+  next append past a gap of blank rows. `upsertRow` appends after the last row with a DATE in
+  column A, worked out from the block it has already read.
+- **`Check the log`** (Dough Tools menu, `checkLog`/`logProblems` in `dough/Code.gs`) reports in
+  plain words what nothing else would notice: a moved heading, a day with more than one row (the app
+  reads only the first, so the rest are invisible to it), and date cells it cannot read. Read-only —
+  it writes nothing and adds no tab. Read-after-write verification was considered here and
+  deliberately skipped: once the date match is timezone-safe and the headings are verified, its
+  extra catch is small and it doubles the Sheets calls on every save.
 - **Dates older than `KEEP_DAYS` (90) are dropped from the phone at boot** — but only when every
   record on them is confirmed and unrejected. `datesToPrune` is pure and tested; only the storage
   walk around it isn't, because vitest runs in `node` with no localStorage.
@@ -154,7 +163,7 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   (since v1.10.0) repeats on the ladder for ever. `addressProblem()` in `services/client.ts` guards
   both verbs — https anywhere, http only against localhost so the app can be tested.
 
-## Three Google rules learned the hard way — do not relearn them
+## Five Google rules learned the hard way — do not relearn them
 
 1. **A tab name is capped at 31 characters.** Google truncates longer ones, and two names that
    truncate alike collide silently: the second tab quietly becomes `Sheet2` and everything written
@@ -164,7 +173,23 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
    written. Anything matching rows by date must go through `normalizeDate`, which handles all three
    shapes — matching on the raw value silently appends a duplicate row on every save instead of
    merging. The test harness models this quirk deliberately, so the bug fails loudly.
-3. **The read path uses `getDisplayValues()`** — what a cell LOOKS like, not what it holds. Nothing
+3. **The spreadsheet's timezone is NOT the script project's** (v1.14.0). A date-only cell holds
+   midnight *in the sheet's* zone; asking the `Date` object for `getFullYear/getMonth/getDate`
+   answers in the *script's* zone, so a sheet running AHEAD of the script reads every date as the
+   day before. The damage is not a wrong date on screen: the incoming payload's date is a plain
+   STRING (never shifted) while the stored cell is a Date (shifted), so `upsertRow` stops
+   recognising its own row and appends a fresh one on EVERY save, in silence. `normalizeDate` in
+   `dough/Code.gs` therefore renders Date objects with `Utilities.formatDate(value, ssTimeZone(),
+   'yyyy-MM-dd')`. A sheet running BEHIND the script is naturally safe, which is exactly why this
+   hides. `temps/Code.gs` needs no such fix and must not be "corrected" into one: it matches dates
+   on `getDisplayValues()`, so it never sees a Date object at all.
+4. **Nothing but `assertHeaders` ever checks the columns are where the app thinks.** Every write maps
+   a column NAME to a POSITION from this script's own header list; `validateSave` compares the
+   payload against that same list, so both sides of that check are the app. `upsertRow` reads its
+   block from **row 1, not row 2** — the same single `getRange`, no extra call — and refuses the
+   save in plain words when a heading has moved. A refusal surfaces on the phone as
+   "SHEET REFUSED: …", so it is told rather than retried.
+5. **The read path uses `getDisplayValues()`** — what a cell LOOKS like, not what it holds. Nothing
    in either notebook is formatted today (setup only sets a date format on column A), so this costs
    nothing, but a number column given a comma or a currency symbol would come back as `"$11,000"`
    and load as blank. The guard is a line in README telling the owner not to format those columns,
