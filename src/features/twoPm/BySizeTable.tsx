@@ -104,9 +104,10 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
           <span className="boli-trays" style={{ ['--size' as string]: 'var(--boli)' }}>
             {fmtMaybe(record.boliTrays)}
           </span>
-          <span className="note">
-            {record.flags.boliNotCounted ? 'not counted' : 'whole trays only'}
-          </span>
+          {/* Only when there is something to say. "Whole trays only" was
+              explaining a rule the row already shows; "not counted" is real
+              news about tonight — it means Boli is out of the batch total. */}
+          {record.flags.boliNotCounted && <span className="note">not counted</span>}
         </div>
       </div>
     </>

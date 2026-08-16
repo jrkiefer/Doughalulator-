@@ -892,8 +892,16 @@ button:focus-visible {
   margin-bottom: 12px;
 }
 
+/* The heading stays on ONE line. Wrapped onto two it stopped reading as a
+   banner and started reading as a paragraph, which is the opposite of what an
+   alert wants. Nowrap plus a size that tracks the viewport holds the line from
+   the narrowest phone up, capped at the ordinary .label size on a wide one. */
 .setout > .label {
   color: var(--accent);
+  display: block;
+  white-space: nowrap;
+  font-size: clamp(8px, 2.4vw, 11px);
+  letter-spacing: 0.06em;
 }
 
 .setout-list {
