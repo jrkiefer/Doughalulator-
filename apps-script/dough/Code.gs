@@ -590,6 +590,61 @@ function refreshBibleBuild(key) {
   });
 }
 
+/**
+ * Both bibles' suggestion blocks, paired for the app's graph: per sales row,
+ * what the bible says today beside what the recorded nights suggest.
+ *
+ * refreshBibleBuild() writes all four size blocks in one pass against the same
+ * mirror thresholds, so they line up row for row and the sales column can be
+ * taken from the first block. One getValues() per tab covers H..V.
+ *
+ * A size with fewer than three usable nights is written as '' up there, and it
+ * has to come back as NULL - Number('') is 0, which would draw a suggestion of
+ * "make none" instead of "nothing to suggest yet".
+ */
+var BIBLE_BUILD_FIRST_COL = 8; // H, the indi block
+var BIBLE_BUILD_WIDTH = 15; // H..V: four 3-column blocks with a gap between each
+
+function readBibleBuilds() {
+  var ss = SpreadsheetApp.getActive();
+  var sizes = Object.keys(BIBLE_BUILD_BLOCK);
+  var out = {};
+  Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
+    var sheet = ss.getSheetByName(BIBLE_BUILD_TABS[key]);
+    var last = sheet ? sheet.getLastRow() : 0;
+    if (!sheet || last < 2) {
+      out[key] = [];
+      return;
+    }
+    var block = sheet
+      .getRange(2, BIBLE_BUILD_FIRST_COL, last - 1, BIBLE_BUILD_WIDTH)
+      .getValues();
+    var rows = [];
+    block.forEach(function (row) {
+      // Offsets are relative to column H, the start of the block we just read.
+      var sales = numOrNull(row[0]);
+      if (sales === null) return; // a row past the end of the thresholds
+      var oldSide = {};
+      var newSide = {};
+      sizes.forEach(function (size) {
+        var at = BIBLE_BUILD_BLOCK[size] - BIBLE_BUILD_FIRST_COL;
+        oldSide[size] = numOrNull(row[at + 1]);
+        newSide[size] = numOrNull(row[at + 2]);
+      });
+      rows.push({ sales: sales, old: oldSide, 'new': newSide });
+    });
+    out[key] = rows;
+  });
+  return out;
+}
+
+/** A cell as a number, or null for blank/unreadable. Never 0 by accident. */
+function numOrNull(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  var n = Number(value);
+  return isFinite(n) ? n : null;
+}
+
 /** Median-of-pairwise-slopes fit - one wild night can't drag the line. */
 function theilSen(points) {
   var slopes = [];
@@ -638,6 +693,9 @@ function doGet(e) {
       var n = Math.max(1, Math.min(60, Number(p.n) || 7));
       var recentIndex = loadTabIndex();
       return jsonOut({ ok: true, dates: readMany(allDates(recentIndex).slice(-n), recentIndex) });
+    }
+    if (p.action === 'bibles') {
+      return jsonOut({ ok: true, bibles: readBibleBuilds() });
     }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {

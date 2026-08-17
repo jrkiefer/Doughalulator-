@@ -13,6 +13,7 @@ const STORE_VERSION = 2;
 const PREFIX = `doughalulator.v${STORE_VERSION}.`;
 const DATE_PREFIX = `${PREFIX}date.`;
 const HISTORY_KEY = `${PREFIX}history`;
+const BIBLE_BUILD_KEY = `${PREFIX}biblebuild`;
 /**
  * Keys no longer read by anything, swept at boot: the pre-rename snapshots, the
  * retired queue, and the latest-temps cache that LOAD LAST TEMPS used before
@@ -179,6 +180,21 @@ export function cachedHistory(): HistorySummary[] {
 
 export function cacheHistory(summaries: HistorySummary[]): void {
   write(HISTORY_KEY, summaries);
+}
+
+// ————— graph cache —————
+
+/**
+ * The last-loaded bible comparison. Kept so the graph draws the moment it is
+ * opened and still draws with no signal — it is a slow-moving picture of
+ * months of nights, not a live figure, so a stale copy is honest enough.
+ */
+export function cachedBibleBuild<T>(): T | null {
+  return read<T>(BIBLE_BUILD_KEY);
+}
+
+export function cacheBibleBuild(build: unknown): void {
+  write(BIBLE_BUILD_KEY, build);
 }
 
 // There is no latest-temps cache any more: the button that read it is gone, so

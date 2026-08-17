@@ -1,4 +1,5 @@
 import type { DoughDayRecord, RoundDirection } from '../../core/types';
+import { GraphsCard } from '../graphs/GraphsCard';
 import { CountCards } from '../shared/CountCards';
 import { BySizeTable } from './BySizeTable';
 import { DaysWork } from './DaysWork';
@@ -42,6 +43,12 @@ export function TwoPmPage(props: {
       <div className="band">
         <DaysWork record={record} onRounding={props.onRounding} />
         <BySizeTable record={record} />
+      </div>
+
+      {/* Last on the page and shut by default: something to look at now and
+          then, never part of the nightly count. */}
+      <div className="band">
+        <GraphsCard />
       </div>
     </>
   );

@@ -2,7 +2,7 @@
  * Sheet reads for the dough log (saves go through the sync engine). All
  * fetches resolve to explicit results — nothing here throws.
  */
-import type { Bibles } from '../core/types';
+import type { BibleSizeKey, Bibles } from '../core/types';
 import { getJson, postJson } from './client';
 import {
   biblesToPayload,
@@ -92,6 +92,44 @@ export async function fetchHistory(
     return { summaries, source: 'sheet' };
   }
   return { summaries: cachedHistory(), source: 'phone' };
+}
+
+// ————— the self-building bible, for the graph —————
+
+/** One threshold: what the bible says today beside what the nights suggest. */
+export interface BibleBuildRow {
+  sales: number;
+  old: Record<BibleSizeKey, number | null>;
+  new: Record<BibleSizeKey, number | null>;
+}
+
+export interface BibleBuild {
+  regular: BibleBuildRow[];
+  peach: BibleBuildRow[];
+}
+
+export type FetchBibleBuildResult =
+  | { kind: 'loaded'; build: BibleBuild }
+  | { kind: 'unreachable' }
+  | { kind: 'rejected'; reason: string };
+
+/**
+ * Pull both bibles' suggestion blocks for the graph.
+ *
+ * The script keys them 'dough'/'peach'; the app has always called the first one
+ * 'regular', so the rename happens here rather than leaking a second name for
+ * the same bible into the screen.
+ *
+ * A script that predates this action answers `unknown action: bibles`, which
+ * arrives as `rejected` — the graph tells the owner their spreadsheet needs
+ * updating instead of retrying something that can never succeed.
+ */
+export async function fetchBibleBuild(): Promise<FetchBibleBuildResult> {
+  const outcome = await getJson(DOUGH_URL, { action: 'bibles' });
+  if (outcome.kind === 'retryable') return { kind: 'unreachable' };
+  if (outcome.kind === 'rejected') return { kind: 'rejected', reason: outcome.reason };
+  const raw = (outcome.data as { bibles?: Record<string, BibleBuildRow[]> }).bibles ?? {};
+  return { kind: 'loaded', build: { regular: raw.dough ?? [], peach: raw.peach ?? [] } };
 }
 
 /** Mirror the bible tables to the sheet; the script no-ops when the hash is unchanged. Never throws. */

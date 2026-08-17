@@ -1159,6 +1159,81 @@ button:focus-visible {
   border-top: 1px solid var(--rule-soft);
 }
 
+/* ————— graphs ————— */
+.graph-controls {
+  padding-top: 12px;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 12px;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: var(--rule-soft);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  fill: var(--ink-mute);
+}
+
+.chart-line {
+  stroke: var(--line, var(--ink));
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The bible as it stands today: present, but not the thing being looked at. */
+.chart-line.muted {
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.chart-dot {
+  fill: var(--line, var(--ink));
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.chart-key .swatch {
+  width: 16px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--line, var(--ink));
+  flex: none;
+}
+
+.chart-axis-note {
+  margin-left: auto;
+}
+
 /* ————— history ————— */
 .history .history-row {
   display: flex;

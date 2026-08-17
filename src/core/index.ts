@@ -8,6 +8,7 @@ export {
   resolveForecastRound,
 } from './bible';
 export { computeHave, computeCountedSizes } from './counting';
+export { traysForNeeds, batchesForNeeds, perTraySizes } from './bibleCompare';
 export { runDoughCalculation, buildBatchOption, splitTrayDelta } from './dough';
 export { runEonCalculation, computeAmUse } from './eon';
 export { slotForTime, type TempSlot } from './tempSlots';

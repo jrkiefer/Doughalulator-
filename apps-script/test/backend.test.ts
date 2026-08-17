@@ -592,6 +592,76 @@ describe('the new bible builds itself as nights accumulate', () => {
   });
 });
 
+describe('the app can read the suggestion back for its graph', () => {
+  type BibleRows = { sales: number; old: Record<string, number | null>; new: Record<string, number | null> }[];
+  const read = (script: LoadedScript) =>
+    (get(script, { action: 'bibles' }).bibles as Record<string, BibleRows>);
+
+  function night(script: LoadedScript, date: string, sales: number, use: number) {
+    post(script, {
+      type: 'eon',
+      date,
+      tabs: [
+        { tab: 'New Bieblerb',
+          row: { Date: date, 'Total Sales': sales, Indi: use, Small: use, Large: use, Sic: use } },
+      ],
+    });
+  }
+
+  it('pairs each threshold with today\'s bible and the suggestion', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    night(script, '2026-08-01', 4000, 40);
+    night(script, '2026-08-02', 6000, 60);
+    night(script, '2026-08-03', 8000, 80);
+
+    const out = read(script);
+    // One row per threshold in that bible — not per recorded night.
+    expect(out.dough).toHaveLength(bibles.regular.rows.length);
+    const first = bibles.regular.rows[0];
+    expect(out.dough[0].sales).toBe(first.sales);
+    expect(out.dough[0].old).toEqual({
+      indi: first.indi, small: first.small, large: first.large, sic: first.sic,
+    });
+    // Use ran at 1% of sales on all four sizes, so the fit says so.
+    expect(out.dough[0].new.indi).toBe(Math.round(first.sales * 0.01));
+    expect(out.dough[0].new.sic).toBe(Math.round(first.sales * 0.01));
+    // The last threshold comes back too, so the graph spans the whole bible.
+    const last = bibles.regular.rows[bibles.regular.rows.length - 1];
+    expect(out.dough[out.dough.length - 1].sales).toBe(last.sales);
+  });
+
+  it('reports "nothing suggested yet" as null, never as a zero', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    night(script, '2026-08-01', 4000, 40);
+    night(script, '2026-08-02', 6000, 60); // two nights: under the three-night gate
+
+    const out = read(script);
+    // Today's bible is known; the suggestion is not. A 0 here would draw a
+    // line along the floor and read as "the new bible says make none".
+    expect(out.dough[0].old.indi).toBe(bibles.regular.rows[0].indi);
+    expect(out.dough[0].new.indi).toBeNull();
+    // No peach nights at all — that bible is simply empty, not zeroed.
+    expect(out.peach.every((row) => row.new.indi === null)).toBe(true);
+  });
+
+  it('answers with an empty list rather than throwing when a tab is missing', () => {
+    const script = freshDough();
+    script.world.ss.deleteSheet(script.world.ss.getSheetByName('New Peach Bieblerb')!);
+    const out = read(script);
+    expect(out.peach).toEqual([]);
+    expect(get(script, { action: 'bibles' }).ok).toBe(true);
+  });
+
+  it('is empty before any bible has been mirrored', () => {
+    const script = freshDough();
+    const out = read(script);
+    expect(out.dough).toEqual([]);
+    expect(out.peach).toEqual([]);
+  });
+});
+
 describe('the bible mirror cannot go missing behind a stale memory', () => {
   it('rewrites the mirrors when they are empty, even though the hash matches', () => {
     const script = freshDough();

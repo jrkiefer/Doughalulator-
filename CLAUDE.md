@@ -42,7 +42,8 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   station list…). Change numbers here, never in core.
 - `src/data/` — the two bibles (`doughBible.json`, `peachBible.json`) plus `bibles.ts`, the single
   place that loads them. Real data — **never alter a number**.
-- `src/features/<feature>/` — UI, one folder per page or piece.
+- `src/features/<feature>/` — UI, one folder per page or piece. `graphs/` is the only one that
+  draws: a hand-rolled SVG, no charting library, no CDN.
 - `src/services/` — Google Sheets clients, transport, phone storage, the sync engine, the mapping
   layer, and `sheets.ts` (the two `/exec` addresses). **Core never imports services.**
 - `apps-script/` — `dough/Code.gs` and `temps/Code.gs` are the real code inside the two
@@ -99,6 +100,13 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   gets one (retrying a refusal teaches nobody anything), and a keepalive flush neither arms nor
   clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
   read OFFLINE.
+- **`action: 'bibles'`** (`readBibleBuilds` in `dough/Code.gs`) is the only read that reaches the
+  `New Bieblerb` tabs — `loadTabIndex()` walks `TABS`, which excludes them and the bible mirrors.
+  It pairs each threshold's current value with its suggestion. A size under the three-night gate
+  is written `''` up there and MUST come back `null`: `Number('')` is 0, which would draw a
+  suggestion of "make none" instead of "nothing to suggest yet". Adding a read action needs the
+  owner to paste the script in and **update the EXISTING deployment** — a new deployment mints a
+  new `/exec` address and the app loses the sheet on the spot.
 - **`getLastRow()` counts content in ANY column**, so a stray note far down a sheet would push the
   next append past a gap of blank rows. `upsertRow` appends after the last row with a DATE in
   column A, worked out from the block it has already read.
@@ -199,6 +207,13 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 
 ## Engine facts worth remembering
 
+- **`bibleCompare.ts` is for the GRAPH, not for a night.** `traysForNeeds`/`batchesForNeeds`
+  divide PLAINLY — need ÷ balls-per-tray, fractions kept — and assume nothing on hand. That is
+  the owner's own definition (Aug 2026) and it is the only footing on which two bibles compare;
+  it is deliberately NOT a night's make, which rounds each size up to a whole tray and subtracts
+  what is left. Peach's `trays`/`batches` JSON columns stay UNUSED: they are binder reference,
+  they disagree with the app's own tray maths (17 where the app says 17.98), and regular has no
+  such columns at all — using them would make the two books incomparable. Don't "fix" this.
 - `runDoughCalculation(inputs, bibles, config)` → `DoughDayRecord`;
   `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`;
   `computeAmUse(yesterdayEonHave, todayHave, amSales)` → `AmUse`. All pure; bibles and config are
