@@ -1,165 +1,231 @@
 /**
- * A small hand-drawn line chart: two series over the same x scale.
+ * Two series over one sales axis, drawn by hand.
  *
- * There is no charting library here on purpose — the project ships no CDN
- * scripts and this is two paths, a pair of axes and some labels. Everything
- * is drawn from the design tokens so it cannot fall out of step with the app.
+ * No charting library: the project ships no CDN scripts, and this is two paths,
+ * a wash between them and a pair of axes. Everything comes from the design
+ * tokens, so it cannot drift from the rest of the app.
+ *
+ * The reference line is near-black rather than grey. That is not taste — with
+ * the old warm grey, three of the five measures fell below the floor at which
+ * two lines can be told apart by someone with ordinary colour vision, and two
+ * fell below the colour-blind floor as well.
  */
+import { useRef } from 'react';
+import {
+  bandPath,
+  nearestIndex,
+  niceMax,
+  smoothPath,
+  snugDomain,
+  ticksFor,
+  type Point,
+} from './chartMath';
 
-export interface Point {
-  x: number;
-  y: number;
-}
+export type { Point };
 
 export interface Series {
   label: string;
   points: Point[];
   color: string;
-  /** The old bible is drawn quieter — the suggestion is what's being looked at. */
-  muted?: boolean;
+  /** The bible as it stands: present, but not the thing being looked at. */
+  reference?: boolean;
 }
 
 const W = 340;
-const H = 210;
-const PAD = { left: 36, right: 10, top: 12, bottom: 24 };
-const PLOT = {
-  x0: PAD.left,
-  x1: W - PAD.right,
-  y0: H - PAD.bottom,
-  y1: PAD.top,
-};
+const H = 218;
+const PAD = { left: 32, right: 46, top: 22, bottom: 36 };
+const PLOT = { x0: PAD.left, x1: W - PAD.right, y0: H - PAD.bottom, y1: PAD.top };
+/** Below this the end labels would sit on top of each other. */
+const LABEL_MIN_GAP = 14;
 
-/**
- * Tangents for a MONOTONE cubic through the points (Fritsch–Carlson).
- *
- * A plain smooth curve overshoots between points: run it through a bible and
- * it draws humps of dough between two thresholds that neither threshold asks
- * for, and can dip below zero at the bottom end. Monotone cannot do either —
- * between two points it stays between their two values, which is the only
- * honest way to draw a lookup table as a curve.
- */
-function monotoneTangents(pts: Point[]): number[] {
-  const n = pts.length;
-  if (n < 2) return new Array(n).fill(0);
-
-  const delta: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    const dx = pts[i + 1].x - pts[i].x;
-    delta.push(dx === 0 ? 0 : (pts[i + 1].y - pts[i].y) / dx);
-  }
-
-  const m: number[] = new Array(n);
-  m[0] = delta[0];
-  m[n - 1] = delta[n - 2];
-  for (let i = 1; i < n - 1; i++) m[i] = (delta[i - 1] + delta[i]) / 2;
-
-  for (let i = 0; i < n - 1; i++) {
-    if (delta[i] === 0) {
-      // A flat run must stay flat, or the curve bulges off a level stretch.
-      m[i] = 0;
-      m[i + 1] = 0;
-      continue;
-    }
-    const a = m[i] / delta[i];
-    const b = m[i + 1] / delta[i];
-    const s = a * a + b * b;
-    if (s > 9) {
-      const t = 3 / Math.sqrt(s);
-      m[i] = t * a * delta[i];
-      m[i + 1] = t * b * delta[i];
-    }
-  }
-  return m;
+function fmtValue(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/0$/, '');
 }
 
-/** The points as one cubic path, smoothed but never overshooting. */
-function smoothPath(pts: Point[]): string {
-  if (pts.length === 0) return '';
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
-  const m = monotoneTangents(pts);
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const h = (pts[i + 1].x - pts[i].x) / 3;
-    d +=
-      ` C ${pts[i].x + h} ${pts[i].y + m[i] * h}` +
-      ` ${pts[i + 1].x - h} ${pts[i + 1].y - m[i + 1] * h}` +
-      ` ${pts[i + 1].x} ${pts[i + 1].y}`;
-  }
-  return d;
-}
-
-/** Round the top of the scale up to something a person would say. */
-function niceMax(value: number): number {
-  if (value <= 0) return 1;
-  const pow = 10 ** Math.floor(Math.log10(value));
-  for (const step of [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]) {
-    if (value <= step * pow) return step * pow;
-  }
-  return 10 * pow;
-}
-
-function tickLabel(value: number): string {
-  if (value >= 1000) return `${value / 1000}k`;
-  // Batch figures are fractional; ball counts never are.
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+function fmtSales(value: number): string {
+  return value >= 1000 ? `${Math.round(value / 100) / 10}k` : String(value);
 }
 
 export function LineChart(props: {
   series: Series[];
-  xMax: number;
-  /** Ticks along the bottom, in data units. */
-  xTicks: number[];
+  /** Which datum the crosshair is on, or null for none. */
+  activeIndex: number | null;
+  onActive: (index: number | null) => void;
+  /** Unit for the value axis — "BALLS" or "BATCHES". */
+  unit: string;
   title: string;
 }) {
-  const all = props.series.flatMap((s) => s.points);
-  const yMax = niceMax(Math.max(...all.map((p) => p.y), 0));
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => yMax * f);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const drawn = props.series.filter((s) => s.points.length > 0);
+  const allX = [...new Set(drawn.flatMap((s) => s.points.map((p) => p.x)))].sort((a, b) => a - b);
+  const domain = snugDomain(allX);
+  const yMax = niceMax(Math.max(...drawn.flatMap((s) => s.points.map((p) => p.y)), 0));
+  // Round ticks up to the ceiling rather than quarters OF it: quartering 350
+  // gave 87.5 / 175 / 262.5, which nobody reads off an axis. The topmost
+  // gridline sitting below the ceiling is normal and costs nothing.
+  const yTicks = ticksFor(0, yMax, 4);
+  const xTicks = ticksFor(domain.min, domain.max, 5);
 
-  const sx = (x: number) => PLOT.x0 + (x / props.xMax) * (PLOT.x1 - PLOT.x0);
+  const sx = (x: number) =>
+    PLOT.x0 + ((x - domain.min) / (domain.max - domain.min)) * (PLOT.x1 - PLOT.x0);
   const sy = (y: number) => PLOT.y0 - (y / yMax) * (PLOT.y0 - PLOT.y1);
   const place = (pts: Point[]) => pts.map((p) => ({ x: sx(p.x), y: sy(p.y) }));
 
+  // The gap between the two lines is the whole point of the chart, so it gets
+  // drawn rather than left for the eye to measure. Only where both exist.
+  const [first, second] = drawn;
+  const shared =
+    drawn.length === 2
+      ? allX.filter(
+          (x) =>
+            first.points.some((p) => p.x === x) && second.points.some((p) => p.x === x),
+        )
+      : [];
+  const at = (s: Series, x: number) => s.points.find((p) => p.x === x)!;
+  const band =
+    shared.length > 1
+      ? bandPath(
+          place(shared.map((x) => at(first, x))),
+          place(shared.map((x) => at(second, x))),
+        )
+      : '';
+
+  // End labels: the value only. The series name is the legend's job, and a name
+  // at the line end would need more width than a phone has to spare.
+  const ends = drawn
+    .map((s) => {
+      const last = s.points[s.points.length - 1];
+      return { series: s, x: sx(last.x), y: sy(last.y), value: last.y };
+    })
+    .sort((a, b) => a.y - b.y);
+  const labelY = ends.map((e) => e.y);
+  if (ends.length === 2 && labelY[1] - labelY[0] < LABEL_MIN_GAP) {
+    const mid = (labelY[0] + labelY[1]) / 2;
+    const ceiling = PLOT.y1 + 4;
+    let top = mid - LABEL_MIN_GAP / 2;
+    let bottom = mid + LABEL_MIN_GAP / 2;
+    // Push the other one along when either end hits its limit. Clamping only
+    // the one that overshot silently closed the gap again — which is how two
+    // near-equal Batches figures ended up printed over each other.
+    if (top < ceiling) {
+      top = ceiling;
+      bottom = top + LABEL_MIN_GAP;
+    }
+    if (bottom > PLOT.y0) {
+      bottom = PLOT.y0;
+      top = bottom - LABEL_MIN_GAP;
+    }
+    labelY[0] = top;
+    labelY[1] = bottom;
+  }
+
+  function pick(clientX: number) {
+    const svg = svgRef.current;
+    if (!svg || allX.length === 0) return;
+    const box = svg.getBoundingClientRect();
+    const inSvg = ((clientX - box.left) / box.width) * W;
+    const value = domain.min + ((inSvg - PLOT.x0) / (PLOT.x1 - PLOT.x0)) * (domain.max - domain.min);
+    props.onActive(nearestIndex(allX, value));
+  }
+
+  const activeX = props.activeIndex === null ? null : allX[props.activeIndex];
+
   return (
     <svg
+      ref={svgRef}
       className="chart"
       viewBox={`0 0 ${W} ${H}`}
       role="img"
       aria-label={props.title}
+      tabIndex={0}
       preserveAspectRatio="xMidYMid meet"
+      // Tapping reads a value; it should not also park a focus ring round the
+      // chart. Keyboard users still reach it with Tab, and get the ring then.
+      onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => {
+        // Read first, capture second. setPointerCapture throws for a pointer the
+        // browser no longer considers active, and a tap that reads nothing is
+        // exactly the failure this handler exists to prevent.
+        pick(e.clientX);
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // No capture — a drag just stops tracking once it leaves the chart.
+        }
+      }}
+      onPointerMove={(e) => {
+        if (e.buttons > 0) pick(e.clientX);
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const step = e.key === 'ArrowRight' ? 1 : -1;
+        const from = props.activeIndex ?? (step > 0 ? -1 : allX.length);
+        props.onActive(Math.min(allX.length - 1, Math.max(0, from + step)));
+      }}
     >
+      {/* Value axis: the unit sits above it, level — turned on its side it is
+          unreadable at this size. */}
+      <text className="chart-axis-title" x={2} y={12}>
+        {props.unit}
+      </text>
+
       {yTicks.map((t) => (
         <g key={t}>
           <line className="chart-grid" x1={PLOT.x0} y1={sy(t)} x2={PLOT.x1} y2={sy(t)} />
-          <text className="chart-tick" x={PLOT.x0 - 6} y={sy(t) + 3} textAnchor="end">
-            {tickLabel(t)}
+          <text className="chart-tick" x={PLOT.x0 - 5} y={sy(t) + 3} textAnchor="end">
+            {fmtValue(t)}
           </text>
         </g>
       ))}
 
-      {props.xTicks.map((t) => (
-        <text key={t} className="chart-tick" x={sx(t)} y={PLOT.y0 + 14} textAnchor="middle">
-          {tickLabel(t)}
-        </text>
+      {band && <path className="chart-band" d={band} style={{ ['--line' as string]: second.color }} />}
+
+      {activeX !== null && (
+        <line className="chart-crosshair" x1={sx(activeX)} y1={PLOT.y1} x2={sx(activeX)} y2={PLOT.y0} />
+      )}
+
+      {drawn.map((s) => {
+        const pts = place(s.points);
+        const active = activeX === null ? null : s.points.find((p) => p.x === activeX);
+        return (
+          <g key={s.label} style={{ ['--line' as string]: s.color }}>
+            <path
+              className={`chart-line${s.reference ? ' reference' : ''}`}
+              d={smoothPath(pts)}
+              fill="none"
+            />
+            {/* One marker at the end, ringed in the surface colour so it stays
+                legible where the two lines cross. */}
+            <circle className="chart-end" cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={4} />
+            {active && <circle className="chart-active" cx={sx(active.x)} cy={sy(active.y)} r={4.5} />}
+          </g>
+        );
+      })}
+
+      {ends.map((e, i) => (
+        <g key={e.series.label}>
+          {Math.abs(labelY[i] - e.y) > 1 && (
+            <line className="chart-leader" x1={e.x + 5} y1={e.y} x2={PLOT.x1 + 8} y2={labelY[i]} />
+          )}
+          <text className="chart-end-label" x={PLOT.x1 + 10} y={labelY[i] + 3}>
+            {fmtValue(e.value)}
+          </text>
+        </g>
       ))}
 
       <line className="chart-axis" x1={PLOT.x0} y1={PLOT.y0} x2={PLOT.x1} y2={PLOT.y0} />
 
-      {props.series.map((s) => {
-        const pts = place(s.points);
-        if (pts.length === 0) return null;
-        return (
-          <g key={s.label} style={{ ['--line' as string]: s.color }}>
-            <path
-              className={`chart-line${s.muted ? ' muted' : ''}`}
-              d={smoothPath(pts)}
-              fill="none"
-            />
-            {/* Dots mark the real thresholds — between them the line is drawn, not measured. */}
-            {!s.muted &&
-              pts.map((p) => <circle key={p.x} className="chart-dot" cx={p.x} cy={p.y} r={2} />)}
-          </g>
-        );
-      })}
+      {xTicks.map((t) => (
+        <text key={t} className="chart-tick" x={sx(t)} y={PLOT.y0 + 13} textAnchor="middle">
+          {fmtSales(t)}
+        </text>
+      ))}
+
+      <text className="chart-axis-title" x={(PLOT.x0 + PLOT.x1) / 2} y={H - 6} textAnchor="middle">
+        SALES $
+      </text>
     </svg>
   );
 }

@@ -1168,10 +1168,18 @@ button:focus-visible {
   display: block;
   width: 100%;
   height: auto;
-  margin-top: 12px;
-  overflow: visible;
+  margin-top: 4px;
+  touch-action: pan-y; /* let the page still scroll under a vertical drag */
 }
 
+.chart:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* Grid and axes are hairlines, one shade off the paper, and never dashed —
+   a dashed rule reads as a threshold when it is only a guide. */
 .chart-grid {
   stroke: var(--rule-soft);
   stroke-width: 1;
@@ -1184,33 +1192,134 @@ button:focus-visible {
 
 .chart-tick {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
+  fill: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-axis-title {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   fill: var(--ink-mute);
 }
 
 .chart-line {
   stroke: var(--line, var(--ink));
-  stroke-width: 2.5;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-/* The bible as it stands today: present, but not the thing being looked at. */
-.chart-line.muted {
-  stroke-width: 2;
-  stroke-dasharray: 4 3;
+/* The bible in use. Near-black rather than grey: against the warm size hues a
+   grey line failed the separation a reader needs to tell two lines apart. */
+.chart-line.reference {
+  stroke-dasharray: 5 4;
 }
 
-.chart-dot {
+/* The gap between the two lines — the thing the chart exists to show. A wash,
+   never a block. */
+.chart-band {
   fill: var(--line, var(--ink));
+  opacity: 0.1;
+}
+
+.chart-end {
+  fill: var(--line, var(--ink));
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.chart-active {
+  fill: var(--line, var(--ink));
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.chart-crosshair {
+  stroke: var(--ink-mute);
+  stroke-width: 1;
+}
+
+.chart-leader {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+/* Values ride the line ends; the name stays in the legend, where it costs no
+   width. Text never wears the series colour — the marker beside it carries
+   identity. */
+.chart-end-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-readout {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-readout.idle {
+  color: var(--ink-mute);
+}
+
+.chart-readout .at {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.chart-readout .pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-readout .pair strong {
+  color: var(--ink);
+}
+
+.chart-readout .key {
+  width: 12px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--line, var(--ink));
+  flex: none;
+}
+
+.chart-readout .gap {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.chart-readout .gap.up {
+  color: var(--good);
+}
+
+.chart-readout .gap.down {
+  color: var(--accent);
 }
 
 .chart-legend {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 8px;
+  gap: 6px 16px;
+  margin-top: 6px;
 }
 
 .chart-key {
@@ -1223,15 +1332,68 @@ button:focus-visible {
 }
 
 .chart-key .swatch {
-  width: 16px;
+  width: 18px;
   height: 3px;
   border-radius: 99px;
   background: var(--line, var(--ink));
   flex: none;
 }
 
-.chart-axis-note {
-  margin-left: auto;
+/* Mirrors the line it stands for, dashes and all. */
+.chart-key .swatch.dashed {
+  height: 0;
+  border-top: 3px dashed var(--line, var(--ink));
+  border-radius: 0;
+}
+
+/* ————— the graph's numbers, for anyone who would rather read them ————— */
+.chart-table {
+  margin-top: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.chart-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink-mute);
+  text-align: right;
+  padding: 6px 3px;
+}
+
+.chart-table th.left,
+.chart-table td.left {
+  text-align: left;
+}
+
+.chart-table td {
+  text-align: right;
+  padding: 6px 3px;
+  border-top: 1px dashed var(--rule-soft);
+  color: var(--ink);
+}
+
+.chart-table td.up {
+  color: var(--good);
+  font-weight: 700;
+}
+
+.chart-table td.down {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ————— history ————— */

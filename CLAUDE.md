@@ -43,7 +43,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - `src/data/` — the two bibles (`doughBible.json`, `peachBible.json`) plus `bibles.ts`, the single
   place that loads them. Real data — **never alter a number**.
 - `src/features/<feature>/` — UI, one folder per page or piece. `graphs/` is the only one that
-  draws: a hand-rolled SVG, no charting library, no CDN.
+  draws: a hand-rolled SVG, no charting library, no CDN. Its geometry lives in `chartMath.ts`
+  (pure, tested) so the curve's one guarantee is provable rather than eyeballed: the smoothing
+  is **monotone cubic**, which cannot overshoot between two thresholds — an ordinary spline
+  draws dough no threshold asks for and dips below zero at the bottom end.
+- **The graph's two lines were re-coloured against a measured floor, not by eye** (v1.17.0).
+  The reference line is `--ink`, NOT `--ink-mute`: against the warm size hues the grey scored
+  ΔE 11.9–14.8 for ordinary colour vision (floor 15) and as low as 5.2 for colour-blind readers
+  (floor 8) — three of five views genuinely unreadable. `--ink` scores 26.8 worst case. If a
+  size hue ever changes, re-run the check before shipping; don't re-pick by taste.
 - `src/services/` — Google Sheets clients, transport, phone storage, the sync engine, the mapping
   layer, and `sheets.ts` (the two `/exec` addresses). **Core never imports services.**
 - `apps-script/` — `dough/Code.gs` and `temps/Code.gs` are the real code inside the two

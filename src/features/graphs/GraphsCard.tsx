@@ -9,22 +9,20 @@ import {
 } from '../../services/doughService';
 import { cacheBibleBuild, cachedBibleBuild } from '../../services/local';
 import { Collapsible } from '../shared/Collapsible';
+import { fmt } from '../shared/counts';
 import { SectionHead } from '../shell/SectionHead';
+import { BibleTable, type TableRow } from './BibleTable';
 import { LineChart, type Point } from './LineChart';
-
-/** The x scale the owner asked for: every bible on the same run of sales. */
-const X_MAX = 23000;
-const X_TICKS = [0, 5000, 10000, 15000, 20000];
 
 type Measure = BibleSizeKey | 'batches';
 
-const MEASURES: { key: Measure; label: string; color: string }[] = [
-  { key: 'indi', label: 'Indi', color: 'var(--indi)' },
-  { key: 'small', label: 'Small', color: 'var(--small)' },
-  { key: 'large', label: 'Large', color: 'var(--large)' },
-  { key: 'sic', label: 'Sic', color: 'var(--sic)' },
+const MEASURES: { key: Measure; label: string; color: string; unit: string }[] = [
+  { key: 'indi', label: 'Indi', color: 'var(--indi)', unit: 'BALLS' },
+  { key: 'small', label: 'Small', color: 'var(--small)', unit: 'BALLS' },
+  { key: 'large', label: 'Large', color: 'var(--large)', unit: 'BALLS' },
+  { key: 'sic', label: 'Sic', color: 'var(--sic)', unit: 'BALLS' },
   // Not a size, so it borrows the one signal colour no size uses.
-  { key: 'batches', label: 'Batches', color: 'var(--warn)' },
+  { key: 'batches', label: 'Batches', color: 'var(--warn)', unit: 'BATCHES' },
 ];
 
 const BIBLES: { key: BibleId; label: string }[] = [
@@ -35,25 +33,27 @@ const BIBLES: { key: BibleId; label: string }[] = [
 const SIZES: BibleSizeKey[] = ['indi', 'small', 'large', 'sic'];
 
 /**
- * One side of one measure as plottable points. A threshold the sheet has no
- * suggestion for is dropped rather than plotted as zero — and Batches needs
- * all four sizes, since a total missing a size is not a smaller total, it is
- * an unknown one.
+ * One side of one measure. A threshold the sheet has no suggestion for is left
+ * out rather than plotted as zero — and Batches needs all four sizes, since a
+ * total missing a size is not a smaller total, it is an unknown one.
  */
+function valueAt(row: BibleBuildRow, side: 'old' | 'new', measure: Measure): number | null {
+  const values = row[side];
+  if (measure !== 'batches') return values[measure];
+  if (SIZES.some((size) => values[size] === null)) return null;
+  return batchesForNeeds(values as PerBibleSize, defaultConfig);
+}
+
 function pointsFor(rows: BibleBuildRow[], side: 'old' | 'new', measure: Measure): Point[] {
-  const out: Point[] = [];
-  for (const row of rows) {
-    const values = row[side];
-    if (measure === 'batches') {
-      if (SIZES.some((size) => values[size] === null)) continue;
-      out.push({ x: row.sales, y: batchesForNeeds(values as PerBibleSize, defaultConfig) });
-    } else {
-      const value = values[measure];
-      if (value === null) continue;
-      out.push({ x: row.sales, y: value });
-    }
-  }
-  return out.sort((a, b) => a.x - b.x);
+  return rows
+    .map((row) => ({ x: row.sales, y: valueAt(row, side, measure) }))
+    .filter((p): p is Point => p.y !== null)
+    .sort((a, b) => a.x - b.x);
+}
+
+function showValue(value: number | null): string {
+  if (value === null) return '—';
+  return Number.isInteger(value) ? fmt(value) : value.toFixed(2);
 }
 
 export function GraphsCard() {
@@ -62,6 +62,21 @@ export function GraphsCard() {
   const [note, setNote] = useState('');
   const [bible, setBible] = useState<BibleId>('regular');
   const [measure, setMeasure] = useState<Measure>('small');
+  const [view, setView] = useState<'graph' | 'table'>('graph');
+  const [active, setActive] = useState<number | null>(null);
+
+  // Switching what's plotted moves the thresholds out from under the crosshair,
+  // so the reading it was showing no longer describes anything. Cleared at the
+  // tap that causes it, rather than after the fact in an effect.
+  function pickBible(id: BibleId) {
+    setBible(id);
+    setActive(null);
+  }
+
+  function pickMeasure(key: Measure) {
+    setMeasure(key);
+    setActive(null);
+  }
 
   async function load() {
     setBusy(true);
@@ -83,6 +98,24 @@ export function GraphsCard() {
   const chosen = MEASURES.find((m) => m.key === measure)!;
   const oldPoints = pointsFor(rows, 'old', measure);
   const newPoints = pointsFor(rows, 'new', measure);
+  const allX = [...new Set([...oldPoints, ...newPoints].map((p) => p.x))].sort((a, b) => a - b);
+
+  const tableRows: TableRow[] = rows.map((row) => ({
+    sales: row.sales,
+    now: valueAt(row, 'old', measure),
+    suggested: valueAt(row, 'new', measure),
+  }));
+
+  const reading =
+    active === null || allX[active] === undefined
+      ? null
+      : (() => {
+          const sales = allX[active];
+          const now = oldPoints.find((p) => p.x === sales)?.y ?? null;
+          const next = newPoints.find((p) => p.x === sales)?.y ?? null;
+          const gap = now !== null && next !== null ? Number((next - now).toFixed(2)) : null;
+          return { sales, now, next, gap };
+        })();
 
   return (
     <>
@@ -104,7 +137,7 @@ export function GraphsCard() {
                 <button
                   key={b.key}
                   className={`pill pill-sm${bible === b.key ? ' active' : ''}`}
-                  onClick={() => setBible(b.key)}
+                  onClick={() => pickBible(b.key)}
                 >
                   {b.label}
                 </button>
@@ -117,7 +150,7 @@ export function GraphsCard() {
                 <button
                   key={m.key}
                   className={`pill pill-sm${measure === m.key ? ' active' : ''}`}
-                  onClick={() => setMeasure(m.key)}
+                  onClick={() => pickMeasure(m.key)}
                 >
                   {m.label}
                 </button>
@@ -130,33 +163,76 @@ export function GraphsCard() {
               </p>
             ) : (
               <>
-                <LineChart
-                  title={`${chosen.label}: new bible against the old one, by sales`}
-                  xMax={X_MAX}
-                  xTicks={X_TICKS}
-                  series={[
-                    { label: 'Old', points: oldPoints, color: 'var(--ink-mute)', muted: true },
-                    { label: 'New', points: newPoints, color: chosen.color },
-                  ]}
-                />
-
-                <div className="chart-legend">
-                  <span className="chart-key" style={{ ['--line' as string]: 'var(--ink-mute)' }}>
-                    <span className="swatch" />
-                    Bible now
-                  </span>
-                  {/* Only key a line that is actually on the chart — otherwise
-                      it advertises a suggestion that isn't there. */}
-                  {newPoints.length > 0 && (
-                    <span className="chart-key" style={{ ['--line' as string]: chosen.color }}>
-                      <span className="swatch" />
-                      Suggested
-                    </span>
-                  )}
-                  <span className="micro chart-axis-note">
-                    {measure === 'batches' ? 'BATCHES' : 'BALLS'} · SALES ACROSS
-                  </span>
+                <div className="rounding-row">
+                  <span className="label">VIEW</span>
+                  {(['graph', 'table'] as const).map((v) => (
+                    <button
+                      key={v}
+                      className={`pill pill-sm${view === v ? ' active' : ''}`}
+                      onClick={() => setView(v)}
+                    >
+                      {v === 'graph' ? 'Graph' : 'Table'}
+                    </button>
+                  ))}
                 </div>
+
+                {view === 'graph' ? (
+                  <>
+                    {/* The readout keeps its height whether or not anything is
+                        picked, so tapping the chart never shunts it up the page. */}
+                    <div className={`chart-readout${reading ? '' : ' idle'}`}>
+                      {reading ? (
+                        <>
+                          <span className="at">${fmt(reading.sales)}</span>
+                          <span className="pair">
+                            <span className="key" style={{ ['--line' as string]: 'var(--ink)' }} />
+                            now <strong>{showValue(reading.now)}</strong>
+                          </span>
+                          <span className="pair">
+                            <span className="key" style={{ ['--line' as string]: chosen.color }} />
+                            new <strong>{showValue(reading.next)}</strong>
+                          </span>
+                          {reading.gap !== null && (
+                            <span className={`gap ${reading.gap > 0 ? 'up' : reading.gap < 0 ? 'down' : ''}`}>
+                              {reading.gap === 0
+                                ? 'same'
+                                : `${reading.gap > 0 ? '+' : '−'}${Math.abs(reading.gap)}`}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        'Tap the graph to read a sales figure.'
+                      )}
+                    </div>
+
+                    <LineChart
+                      title={`${chosen.label}: the suggested bible against the one in use, by sales`}
+                      unit={chosen.unit}
+                      activeIndex={active}
+                      onActive={setActive}
+                      series={[
+                        { label: 'Bible now', points: oldPoints, color: 'var(--ink)', reference: true },
+                        { label: 'Suggested', points: newPoints, color: chosen.color },
+                      ]}
+                    />
+
+                    <div className="chart-legend">
+                      <span className="chart-key" style={{ ['--line' as string]: 'var(--ink)' }}>
+                        <span className="swatch dashed" />
+                        Bible now
+                      </span>
+                      {/* Only key a line that is actually on the chart. */}
+                      {newPoints.length > 0 && (
+                        <span className="chart-key" style={{ ['--line' as string]: chosen.color }}>
+                          <span className="swatch" />
+                          Suggested
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <BibleTable rows={tableRows} unit={chosen.unit} />
+                )}
 
                 {newPoints.length === 0 && (
                   <p className="days-work-note">
