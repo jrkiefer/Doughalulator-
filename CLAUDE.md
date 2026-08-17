@@ -47,6 +47,15 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   (pure, tested) so the curve's one guarantee is provable rather than eyeballed: the smoothing
   is **monotone cubic**, which cannot overshoot between two thresholds — an ordinary spline
   draws dough no threshold asks for and dips below zero at the bottom end.
+- **The Gap view is a DIVERGING chart, and its colours are not interchangeable** (v1.18.0).
+  Warm above the zero line, cool below, neutral at zero — `--accent` against `--large`. The
+  obvious more/less pair, red against green, measures ΔE 7.2 under colour blindness, under the
+  floor of 8; red against blue measures 21.2. Do not "fix" it to green. The view exists because
+  reading a height off a baseline is a far easier job than judging the distance between two
+  near-parallel curves, which is what the two-line view asks for.
+- **`describeDiff.ts` is the card's actual answer.** One sentence about the SHAPE of the gap
+  (everywhere / nowhere / turns over at $X), in the app's plain voice, pure and tested. A chart
+  says what it looks like; the owner asked how the two differ.
 - **The graph's two lines were re-coloured against a measured floor, not by eye** (v1.17.0).
   The reference line is `--ink`, NOT `--ink-mute`: against the warm size hues the grey scored
   ΔE 11.9–14.8 for ordinary colour vision (floor 15) and as low as 5.2 for colour-blind readers

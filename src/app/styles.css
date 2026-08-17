@@ -1346,6 +1346,74 @@ button:focus-visible {
   border-radius: 0;
 }
 
+/* ————— the gap on its own ————— */
+/* Polarity, not identity: warm above the line, cool below. Red against green
+   — the obvious more/less pair — measures ΔE 7.2 under colour blindness,
+   under the floor of 8. Red against blue measures 21.2. */
+.diff-fill {
+  opacity: 0.16;
+}
+
+.diff-fill.up {
+  fill: var(--accent);
+}
+
+.diff-fill.down {
+  fill: var(--large);
+}
+
+.diff-line {
+  stroke: var(--ink-soft);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Zero is the reference the whole view is about, so it outranks the grid. */
+.diff-zero {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.diff-dot {
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.diff-dot.up {
+  fill: var(--accent);
+}
+
+.diff-dot.down {
+  fill: var(--large);
+}
+
+.diff-key .swatch {
+  height: 8px;
+  width: 14px;
+  border-radius: 2px;
+}
+
+.diff-key.up .swatch {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border: 1px solid var(--accent);
+}
+
+.diff-key.down .swatch {
+  background: color-mix(in srgb, var(--large) 30%, transparent);
+  border: 1px solid var(--large);
+}
+
+/* The one-line reading of the gap — the card's actual answer. */
+.days-work-note.lede-note {
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 10px;
+}
+
 /* ————— the graph's numbers, for anyone who would rather read them ————— */
 .chart-table {
   margin-top: 10px;

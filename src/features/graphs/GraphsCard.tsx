@@ -12,6 +12,8 @@ import { Collapsible } from '../shared/Collapsible';
 import { fmt } from '../shared/counts';
 import { SectionHead } from '../shell/SectionHead';
 import { BibleTable, type TableRow } from './BibleTable';
+import { describeDifference } from './describeDiff';
+import { DiffChart } from './DiffChart';
 import { LineChart, type Point } from './LineChart';
 
 type Measure = BibleSizeKey | 'batches';
@@ -31,6 +33,13 @@ const BIBLES: { key: BibleId; label: string }[] = [
 ];
 
 const SIZES: BibleSizeKey[] = ['indi', 'small', 'large', 'sic'];
+
+const VIEWS = [
+  { key: 'lines', label: 'Lines' },
+  // The gap on its own — the question the card is actually asked.
+  { key: 'diff', label: 'Gap' },
+  { key: 'table', label: 'Table' },
+] as const;
 
 /**
  * One side of one measure. A threshold the sheet has no suggestion for is left
@@ -62,7 +71,7 @@ export function GraphsCard() {
   const [note, setNote] = useState('');
   const [bible, setBible] = useState<BibleId>('regular');
   const [measure, setMeasure] = useState<Measure>('small');
-  const [view, setView] = useState<'graph' | 'table'>('graph');
+  const [view, setView] = useState<'lines' | 'diff' | 'table'>('lines');
   const [active, setActive] = useState<number | null>(null);
 
   // Switching what's plotted moves the thresholds out from under the crosshair,
@@ -106,15 +115,32 @@ export function GraphsCard() {
     suggested: valueAt(row, 'new', measure),
   }));
 
+  // The gap as its own series, and as a sentence.
+  const diffPoints: Point[] = tableRows
+    .filter((r) => r.now !== null && r.suggested !== null)
+    .map((r) => ({ x: r.sales, y: Number((r.suggested! - r.now!).toFixed(2)) }));
+  const summary = describeDifference(
+    tableRows,
+    measure === 'batches' ? 'batches' : 'balls',
+    measure === 'batches' ? 'dough' : chosen.label,
+  );
+
+  // The Gap view plots only the paired thresholds, so its crosshair indexes a
+  // shorter list than the other two views. Reading the wrong list would report
+  // a neighbouring row's numbers, which is worse than reporting none.
+  const readX = view === 'diff' ? diffPoints.map((p) => p.x) : allX;
   const reading =
-    active === null || allX[active] === undefined
+    active === null || readX[active] === undefined
       ? null
       : (() => {
-          const sales = allX[active];
+          const sales = readX[active];
           const now = oldPoints.find((p) => p.x === sales)?.y ?? null;
           const next = newPoints.find((p) => p.x === sales)?.y ?? null;
           const gap = now !== null && next !== null ? Number((next - now).toFixed(2)) : null;
-          return { sales, now, next, gap };
+          // Three balls off seven is a different story from three off three
+          // hundred, and the percentage is the only place that shows.
+          const pct = gap !== null && now ? Math.round((gap / now) * 100) : null;
+          return { sales, now, next, gap, pct };
         })();
 
   return (
@@ -165,18 +191,23 @@ export function GraphsCard() {
               <>
                 <div className="rounding-row">
                   <span className="label">VIEW</span>
-                  {(['graph', 'table'] as const).map((v) => (
+                  {VIEWS.map((v) => (
                     <button
-                      key={v}
-                      className={`pill pill-sm${view === v ? ' active' : ''}`}
-                      onClick={() => setView(v)}
+                      key={v.key}
+                      className={`pill pill-sm${view === v.key ? ' active' : ''}`}
+                      onClick={() => {
+                        setView(v.key);
+                        setActive(null);
+                      }}
                     >
-                      {v === 'graph' ? 'Graph' : 'Table'}
+                      {v.label}
                     </button>
                   ))}
                 </div>
 
-                {view === 'graph' ? (
+                {view === 'table' ? (
+                  <BibleTable rows={tableRows} unit={chosen.unit} />
+                ) : (
                   <>
                     {/* The readout keeps its height whether or not anything is
                         picked, so tapping the chart never shunts it up the page. */}
@@ -196,7 +227,8 @@ export function GraphsCard() {
                             <span className={`gap ${reading.gap > 0 ? 'up' : reading.gap < 0 ? 'down' : ''}`}>
                               {reading.gap === 0
                                 ? 'same'
-                                : `${reading.gap > 0 ? '+' : '−'}${Math.abs(reading.gap)}`}
+                                : `${reading.gap > 0 ? '+' : '−'}${Math.abs(reading.gap)}` +
+                                  (reading.pct === null ? '' : ` (${reading.pct > 0 ? '+' : '−'}${Math.abs(reading.pct)}%)`)}
                             </span>
                           )}
                         </>
@@ -205,34 +237,57 @@ export function GraphsCard() {
                       )}
                     </div>
 
-                    <LineChart
-                      title={`${chosen.label}: the suggested bible against the one in use, by sales`}
-                      unit={chosen.unit}
-                      activeIndex={active}
-                      onActive={setActive}
-                      series={[
-                        { label: 'Bible now', points: oldPoints, color: 'var(--ink)', reference: true },
-                        { label: 'Suggested', points: newPoints, color: chosen.color },
-                      ]}
-                    />
-
-                    <div className="chart-legend">
-                      <span className="chart-key" style={{ ['--line' as string]: 'var(--ink)' }}>
-                        <span className="swatch dashed" />
-                        Bible now
-                      </span>
-                      {/* Only key a line that is actually on the chart. */}
-                      {newPoints.length > 0 && (
-                        <span className="chart-key" style={{ ['--line' as string]: chosen.color }}>
-                          <span className="swatch" />
-                          Suggested
-                        </span>
-                      )}
-                    </div>
+                    {view === 'diff' ? (
+                      <>
+                        <DiffChart
+                          title={`${chosen.label}: how far the suggestion sits from the bible, by sales`}
+                          unit={chosen.unit}
+                          points={diffPoints}
+                          activeIndex={active}
+                          onActive={setActive}
+                        />
+                        <div className="chart-legend">
+                          <span className="chart-key diff-key up">
+                            <span className="swatch" />
+                            Make more
+                          </span>
+                          <span className="chart-key diff-key down">
+                            <span className="swatch" />
+                            Make less
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <LineChart
+                          title={`${chosen.label}: the suggested bible against the one in use, by sales`}
+                          unit={chosen.unit}
+                          activeIndex={active}
+                          onActive={setActive}
+                          series={[
+                            { label: 'Bible now', points: oldPoints, color: 'var(--ink)', reference: true },
+                            { label: 'Suggested', points: newPoints, color: chosen.color },
+                          ]}
+                        />
+                        <div className="chart-legend">
+                          <span className="chart-key" style={{ ['--line' as string]: 'var(--ink)' }}>
+                            <span className="swatch dashed" />
+                            Bible now
+                          </span>
+                          {/* Only key a line that is actually on the chart. */}
+                          {newPoints.length > 0 && (
+                            <span className="chart-key" style={{ ['--line' as string]: chosen.color }}>
+                              <span className="swatch" />
+                              Suggested
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </>
-                ) : (
-                  <BibleTable rows={tableRows} unit={chosen.unit} />
                 )}
+
+                {summary && <p className="days-work-note lede-note">{summary}</p>}
 
                 {newPoints.length === 0 && (
                   <p className="days-work-note">
