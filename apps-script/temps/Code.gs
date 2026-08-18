@@ -249,10 +249,48 @@ function doGet(e) {
       });
       return jsonOut({ ok: true, date: date, stations: grid });
     }
+    if (p.action === 'recent') {
+      return jsonOut({ ok: true, stations: recentReadings(Number(p.n)) });
+    }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
   }
+}
+
+/**
+ * The last few readings per station, oldest first — what the app's temp graph
+ * draws. The Log is the truth for "last taken": append-only with clock times,
+ * so corrections appear as newer entries, exactly as a paper log would read.
+ *
+ * Reads only the Log's tail: at 24 rows a day (8 stations x 3 slots) the
+ * window below covers well over a week, which is plenty for a graph of the
+ * last three. Display values throughout — this script never sees a Date
+ * object (see findDateRow), and that stays true here.
+ */
+var RECENT_WINDOW_ROWS = 250;
+
+function recentReadings(n) {
+  var count = Math.max(1, Math.min(10, isFinite(n) && n > 0 ? Math.floor(n) : 3));
+  var log = SpreadsheetApp.getActive().getSheetByName('Log');
+  var out = {};
+  var last = log ? log.getLastRow() : 0;
+  if (last < 2) return out;
+
+  var window = Math.min(last - 1, RECENT_WINDOW_ROWS);
+  var rows = log.getRange(last - window + 1, 1, window, LOG_HEADERS.length).getDisplayValues();
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var row = rows[i];
+    var station = row[3];
+    if (STATIONS.indexOf(station) === -1) continue; // a retired station stays in the Log
+    var temp = Number(row[4]);
+    if (row[4] === '' || !isFinite(temp)) continue;
+    if (!out[station]) out[station] = [];
+    if (out[station].length >= count) continue;
+    // Walking bottom-up, unshift keeps each station's list oldest-first.
+    out[station].unshift({ date: normalizeDate(row[0]), time: row[1], slot: row[2], temp: temp });
+  }
+  return out;
 }
 
 /**

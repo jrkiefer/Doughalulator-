@@ -1347,6 +1347,64 @@ button:focus-visible {
   border-radius: 0;
 }
 
+/* ————— the temps graph ————— */
+/* One hue, lightness steps: recency is an order, not an identity. */
+.temp-row-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--ink-soft);
+}
+
+.temp-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.temp-connector {
+  stroke: color-mix(in srgb, var(--large) 30%, transparent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.temp-dot-old {
+  fill: color-mix(in srgb, var(--large) 45%, var(--paper));
+}
+
+.temp-dot-new {
+  fill: var(--large);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+/* Zero is where fridge becomes freezer — it outranks the other gridlines. */
+.temp-zero {
+  stroke: var(--rule);
+  stroke-width: 1.5;
+}
+
+.temp-active-band {
+  fill: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.temp-key-old .swatch.dot,
+.temp-key-new .swatch.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+}
+
+.temp-key-old .swatch.dot {
+  background: color-mix(in srgb, var(--large) 45%, var(--paper));
+}
+
+.temp-key-new .swatch.dot {
+  background: var(--large);
+}
+
 /* ————— history ————— */
 .history .history-row {
   display: flex;

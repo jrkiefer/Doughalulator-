@@ -42,8 +42,11 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   station list…). Change numbers here, never in core.
 - `src/data/` — the two bibles (`doughBible.json`, `peachBible.json`) plus `bibles.ts`, the single
   place that loads them. Real data — **never alter a number**.
-- `src/features/<feature>/` — UI, one folder per page or piece. `graphs/` is the only one that
-  draws: a hand-rolled SVG, no charting library, no CDN. Its geometry lives in `chartMath.ts`
+- `src/features/<feature>/` — UI, one folder per page or piece. Two folders draw — `graphs/`
+  (the bible comparison) and `temps/` (the last-readings dot rows) — both hand-rolled SVG, no
+  charting library, no CDN, sharing `graphs/chartMath.ts` for scales and ticks. The temps chart
+  is dot rows on one °F axis, NOT eight lines: recency is an order, so it wears one hue in
+  lightness steps. Its geometry lives in `chartMath.ts`
   (pure, tested) so the curve's one guarantee is provable rather than eyeballed: the smoothing
   is **monotone cubic**, which cannot overshoot between two thresholds — an ordinary spline
   draws dough no threshold asks for and dips below zero at the bottom end.
@@ -113,6 +116,10 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   gets one (retrying a refusal teaches nobody anything), and a keepalive flush neither arms nor
   clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
   read OFFLINE.
+- **`action: 'recent'` on the TEMPS script** (`recentReadings` in `temps/Code.gs`) serves the temp
+  graph: the last n (default 3, cap 10) Log entries per station, oldest first, read from the
+  Log's tail with `getDisplayValues()` — this script never sees a Date object, and that stays
+  true. Same deployment rule as the dough script: paste, then UPDATE THE EXISTING deployment.
 - **`action: 'bibles'`** (`readBibleBuilds` in `dough/Code.gs`) is the only read that reaches the
   `New Bieblerb` tabs — `loadTabIndex()` walks `TABS`, which excludes them and the bible mirrors.
   It pairs each threshold's current value with its suggestion. A size under the three-night gate

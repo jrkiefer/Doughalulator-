@@ -1,6 +1,7 @@
 import { defaultConfig } from '../../config';
 import type { TempSlot } from '../../core';
 import { Collapsible } from '../shared/Collapsible';
+import { TempGraph } from './TempGraph';
 import { SectionHead } from '../shell/SectionHead';
 
 export type TempReadings = Record<TempSlot, Record<string, string>>;
@@ -68,6 +69,10 @@ export function TempsPage(props: {
           );
         })}
       </Collapsible>
+
+      {/* The last few readings per station, drawn. Shut by default and loads
+          nothing until asked, so a normal reading round costs what it did. */}
+      <TempGraph />
     </div>
   );
 }

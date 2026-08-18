@@ -14,6 +14,7 @@ const PREFIX = `doughalulator.v${STORE_VERSION}.`;
 const DATE_PREFIX = `${PREFIX}date.`;
 const HISTORY_KEY = `${PREFIX}history`;
 const BIBLE_BUILD_KEY = `${PREFIX}biblebuild`;
+const TEMP_GRAPH_KEY = `${PREFIX}tempgraph`;
 /**
  * Keys no longer read by anything, swept at boot: the pre-rename snapshots, the
  * retired queue, and the latest-temps cache that LOAD LAST TEMPS used before
@@ -195,6 +196,15 @@ export function cachedBibleBuild<T>(): T | null {
 
 export function cacheBibleBuild(build: unknown): void {
   write(BIBLE_BUILD_KEY, build);
+}
+
+/** The temp graph's last load — same reasoning as the bible comparison above. */
+export function cachedTempGraph<T>(): T | null {
+  return read<T>(TEMP_GRAPH_KEY);
+}
+
+export function cacheTempGraph(stations: unknown): void {
+  write(TEMP_GRAPH_KEY, stations);
 }
 
 // There is no latest-temps cache any more: the button that read it is gone, so

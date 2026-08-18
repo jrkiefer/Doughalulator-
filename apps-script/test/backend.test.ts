@@ -809,6 +809,86 @@ describe('the app can read the suggestion back for its graph', () => {
   });
 });
 
+describe("temps script — the graph's last-few readings per station", () => {
+  const ALL_STATIONS = ['Pizza 1', 'Pizza Lowboy', 'Pizza 2', 'Slice', 'Salad',
+    'Reach-In', 'Walk-In', 'Freezer'];
+
+  /** One full recorded day: all eight stations, all three slots. Fridges sit
+   *  near `base` and climb 1° per slot; the freezer runs below zero. */
+  function tempsDay(script: LoadedScript, date: string, base: number) {
+    const temp = (station: string, bump: number) =>
+      station === 'Freezer' ? -6 + bump : base + bump;
+    post(script, {
+      type: 'temps', date,
+      items: [
+        { time: '08:30', slot: 'Morning', readings: ALL_STATIONS.map((s) => ({ station: s, temp: temp(s, 0) })) },
+        { time: '14:05', slot: '2 PM', readings: ALL_STATIONS.map((s) => ({ station: s, temp: temp(s, 1) })) },
+        { time: '21:15', slot: 'Night', readings: ALL_STATIONS.map((s) => ({ station: s, temp: temp(s, 2) })) },
+      ],
+    });
+  }
+
+  type Reading = { date: string; time: string; slot: string; temp: number };
+  const recent = (script: LoadedScript, n?: number) =>
+    (get(script, { action: 'recent', ...(n ? { n: String(n) } : {}) })
+      .stations as Record<string, Reading[]>);
+
+  it('returns the last three per station, oldest first, negatives intact', () => {
+    const script = freshTemps();
+    tempsDay(script, '2026-08-14', 36);
+    tempsDay(script, '2026-08-15', 37);
+    tempsDay(script, '2026-08-16', 38);
+
+    const out = recent(script);
+    expect(Object.keys(out).sort()).toEqual([...ALL_STATIONS].sort());
+    // Three each — and they are the LAST day's three slots, in taken order.
+    expect(out['Pizza 1']).toEqual([
+      { date: '2026-08-16', time: '08:30', slot: 'Morning', temp: 38 },
+      { date: '2026-08-16', time: '14:05', slot: '2 PM', temp: 39 },
+      { date: '2026-08-16', time: '21:15', slot: 'Night', temp: 40 },
+    ]);
+    // The freezer's readings stay below zero — never clamped or dropped.
+    expect(out.Freezer.map((r) => r.temp)).toEqual([-6, -5, -4]);
+  });
+
+  it('a station with fewer readings hands over what it has', () => {
+    const script = freshTemps();
+    post(script, {
+      type: 'temps', date: '2026-08-16',
+      items: [{ time: '09:00', slot: 'Morning', readings: [{ station: 'Walk-In', temp: 36 }] }],
+    });
+    const out = recent(script);
+    expect(out['Walk-In']).toHaveLength(1);
+    expect(out['Pizza 1']).toBeUndefined();
+  });
+
+  it('an empty log answers with no stations, never a throw', () => {
+    const script = freshTemps();
+    expect(get(script, { action: 'recent' })).toEqual({ ok: true, stations: {} });
+  });
+
+  it('a correction shows up as the newest reading, like the paper log it mirrors', () => {
+    const script = freshTemps();
+    tempsDay(script, '2026-08-16', 36);
+    // The 2 PM figure gets re-entered later that evening.
+    post(script, {
+      type: 'temps', date: '2026-08-16',
+      items: [{ time: '21:40', slot: '2 PM', readings: [{ station: 'Slice', temp: 39 }] }],
+    });
+    const out = recent(script);
+    expect(out.Slice.map((r) => r.temp)).toEqual([37, 38, 39]);
+    expect(out.Slice[2]).toMatchObject({ slot: '2 PM', time: '21:40' });
+  });
+
+  it('asks for more with n, capped sanely', () => {
+    const script = freshTemps();
+    tempsDay(script, '2026-08-15', 36);
+    tempsDay(script, '2026-08-16', 38);
+    expect(recent(script, 5)['Pizza 1']).toHaveLength(5);
+    expect(recent(script, 99)['Pizza 1']).toHaveLength(6); // cap, then all it has
+  });
+});
+
 describe('the bible mirror cannot go missing behind a stale memory', () => {
   it('rewrites the mirrors when they are empty, even though the hash matches', () => {
     const script = freshDough();
