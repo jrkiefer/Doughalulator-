@@ -427,7 +427,9 @@ function upsertRow(tabName, row) {
 
 /**
  * Erase every data row. Headings and the bible mirrors survive. Reached from
- * the menu only, never from the web.
+ * the menu only, never from the web. The bible-build tabs are not in TABS,
+ * but their history no longer outlives an erase: the next refresh rebuilds
+ * it from the emptied log, so "clears every recorded day" stays true.
  */
 function wipeAllData() {
   var ss = SpreadsheetApp.getActive();
@@ -539,20 +541,137 @@ function writeBibles(payload) {
 // ----- the self-building bible -----
 
 /**
- * Refresh the suggestion columns on both bible-building tabs. The app has
- * already added tonight's row to columns A-F; this fits a line through all the
- * nights recorded there and writes what each bible threshold WOULD say, beside
- * what it says today. Runs after every EON save, so the suggestion keeps
- * sharpening on its own as nights accumulate.
+ * Refresh both bible-building tabs: rebuild the A-F history from the recorded
+ * tabs, then fit a line through it and write what each bible threshold WOULD
+ * say beside what it says today. Runs after every EON save and from the menu.
  *
  * This is the one sum the sheet does rather than the app: it needs the whole
  * recorded history, which the app would otherwise have to re-download on every
  * single save.
  */
 function refreshBibleBuilds() {
+  rebuildBibleHistories();
   Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
     refreshBibleBuild(key);
   });
+}
+
+/**
+ * How far back the morning's "last count" may be. Across a closed Monday,
+ * Sunday's close against Tuesday's 2 PM count IS Tuesday's morning use —
+ * nothing moved in between. Seven days matches the rule the owner's other
+ * app always used; a longer gap means the trail has genuinely gone cold.
+ */
+var AM_LOOKBACK_DAYS = 7;
+
+/** Where each size lives (1-based) in the three tabs the day's use is derived from. */
+var USE_COLS = {
+  indi: { eon: 3, twopm: 6, after: 2 },
+  small: { eon: 4, twopm: 7, after: 3 },
+  large: { eon: 5, twopm: 8, after: 4 },
+  sic: { eon: 6, twopm: 9, after: 5 },
+};
+
+/**
+ * Rewrite each Bieblerb tab's A-F history from the recorded tabs, so the fit
+ * eats whole days worked out HERE rather than whatever one phone could see.
+ *
+ * The app also writes an AM + PM total per night (kept for old cached phones),
+ * but its morning half comes from that phone's own copy of yesterday - enter
+ * the EON on one phone and the next day's 2 PM on another, or wipe a phone,
+ * and the morning silently vanished, leaving the evening recorded as if it
+ * were the whole day. Every input already sits in this notebook:
+ *
+ *   AM use = last EON count (up to AM_LOOKBACK_DAYS back) - today's 2 PM count
+ *   PM use = Estimated Dough After Gang - tonight's EON count
+ *
+ * Per size: both halves known -> their sum; either missing or negative (a
+ * count that ROSE is a miscount, not negative use) -> that size abstains for
+ * the day, a blank cell the fit skips - never a half-day passed off as whole.
+ * A day needs takings (EON Sales > 0) to teach the bible anything. Days split
+ * regular/peach by the 2 PM row's Bible cell, falling back to the date rule.
+ *
+ * Note this makes Erase all data mean what it says for the suggestion too:
+ * the next refresh rebuilds this history from the emptied log.
+ */
+function rebuildBibleHistories() {
+  var ss = SpreadsheetApp.getActive();
+  var index = {};
+  [T_IN, T_AFTER, T_EON].forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    var byDate = {};
+    var last = sheet ? sheet.getLastRow() : 0;
+    if (last >= 2) {
+      sheet.getRange(2, 1, last - 1, TABS[name].length).getValues().forEach(function (row) {
+        var d = normalizeDate(row[0]);
+        if (d && !byDate[d]) byDate[d] = row; // first match wins, as everywhere
+      });
+    }
+    index[name] = byDate;
+  });
+
+  var histories = { dough: [], peach: [] };
+  Object.keys(index[T_EON]).sort().forEach(function (date) {
+    var eonRow = index[T_EON][date];
+    var sales = numOrNull(eonRow[1]);
+    if (sales === null || sales <= 0) return;
+
+    var twopmRow = index[T_IN][date] || null;
+    var afterRow = index[T_AFTER][date] || null;
+    var lastEonRow = null;
+    for (var back = 1; back <= AM_LOOKBACK_DAYS && !lastEonRow; back++) {
+      lastEonRow = index[T_EON][addDaysIso(date, -back)] || null;
+    }
+
+    var out = { Date: date, sales: sales, any: false };
+    Object.keys(USE_COLS).forEach(function (size) {
+      var cols = USE_COLS[size];
+      var am = halfUse(lastEonRow, cols.eon, twopmRow, cols.twopm);
+      var pm = halfUse(afterRow, cols.after, eonRow, cols.eon);
+      out[size] = am === null || pm === null ? '' : am + pm;
+      if (out[size] !== '') out.any = true;
+    });
+    if (!out.any) return; // nothing usable - no row at all
+
+    var bible = twopmRow ? String(twopmRow[10]).toLowerCase() : '';
+    var key = bible === 'peach' ? 'peach' : bible === 'regular' ? 'dough' : isPeachDate(date) ? 'peach' : 'dough';
+    histories[key].push([out.Date, out.sales, out.indi, out.small, out.large, out.sic]);
+  });
+
+  Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
+    var sheet = ss.getSheetByName(BIBLE_BUILD_TABS[key]);
+    if (!sheet) return;
+    var rows = histories[key];
+    var stale = sheet.getLastRow();
+    if (stale >= 2) sheet.getRange(2, 1, stale - 1, 6).clearContent();
+    if (rows.length) {
+      ensureRows(sheet, rows.length + 1);
+      sheet.getRange(2, 1, rows.length, 6).setValues(rows);
+    }
+  });
+}
+
+/** One half of a day's use: before - after, both present, never negative. */
+function halfUse(beforeRow, beforeCol, afterRow, afterCol) {
+  if (!beforeRow || !afterRow) return null;
+  var before = numOrNull(beforeRow[beforeCol - 1]);
+  var after = numOrNull(afterRow[afterCol - 1]);
+  if (before === null || after === null) return null;
+  var used = before - after;
+  return used < 0 ? null : used; // a count that rose is a miscount, not use
+}
+
+/** 'YYYY-MM-DD' plus a day count, timezone-proof (pure string-and-UTC maths). */
+function addDaysIso(iso, delta) {
+  var parts = iso.split('-');
+  var d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) + delta));
+  return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+}
+
+/** Peach season by date, inclusive both ends - the fallback when no Bible cell says. */
+function isPeachDate(iso) {
+  var md = iso.slice(5);
+  return md >= PEACH_START && md <= PEACH_END;
 }
 
 function refreshBibleBuild(key) {

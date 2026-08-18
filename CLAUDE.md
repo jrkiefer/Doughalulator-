@@ -141,9 +141,18 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - Saves are **merge-upserts by Date**. Columns depending on the tapped batch choice stay blank
   until a choice exists.
 - **The app is the only calculator.** The Dough Log holds no formulas — every number is worked out
-  here and written into place. The one exception is the self-building bible: the app appends each
-  finished night to `New Bieblerb` / `New Peach Bieblerb` and the script refits a Theil–Sen line
-  through the whole history after every EON save. Nights with no takings are excluded.
+  here and written into place. The one exception is the self-building bible (v1.20.0): after every
+  EON save, `rebuildBibleHistories()` in `dough/Code.gs` derives each day's WHOLE use from the
+  recorded tabs — AM = last EON count (looking back ≤ `AM_LOOKBACK_DAYS` = 7, the old app's rule,
+  so a closed Monday doesn't orphan Tuesday) − 2 PM count; PM = Estimated Dough After Gang − EON
+  count — rewrites the `New Bieblerb` A–F history from it, and refits Theil–Sen. Per size, BOTH
+  halves must be known and non-negative (a count that rose is a miscount) or the size ABSTAINS
+  for the day: never a half day passed off as whole. Days need takings; the bucket comes from the
+  2 PM row's Bible cell, falling back to the date rule. This replaced the app's phone-local sum,
+  whose AM half silently vanished on a second phone or after a wipe and understated the day. The
+  app STILL appends its own row (kept for stale phone caches — never reject it); the rebuild
+  overwrites it, so there is no deploy-order hazard in either direction. A consequence made
+  deliberate: Erase all data now truly erases the fit history on the next refresh.
 - **No secrets** (v1.4.0, owner's explicit request), and since v1.12.0 **no Settings page either**:
   both `/exec` addresses are constants in `src/services/sheets.ts`. A per-device Settings page meant
   a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is

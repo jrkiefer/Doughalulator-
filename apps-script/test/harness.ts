@@ -402,6 +402,7 @@ const EXPORTS = [
   'rebuildDoughUse',
   'generateFittedBibles',
   'theilSen',
+  'refreshBibleBuilds',
   'normalizeDate',
   'findDateRow',
   'writeBibles',
