@@ -143,9 +143,9 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - **The app is the only calculator.** The Dough Log holds no formulas — every number is worked out
   here and written into place. The one exception is the self-building bible (v1.20.0): after every
   EON save, `rebuildBibleHistories()` in `dough/Code.gs` derives each day's WHOLE use from the
-  recorded tabs — AM = last EON count (looking back ≤ `AM_LOOKBACK_DAYS` = 7, the old app's rule,
-  so a closed Monday doesn't orphan Tuesday) − 2 PM count; PM = Estimated Dough After Gang − EON
-  count — rewrites the `New Bieblerb` A–F history from it, and refits Theil–Sen. Per size, BOTH
+  recorded tabs — AM = YESTERDAY'S EON count − 2 PM count (yesterday exactly, owner's rule Aug
+  2026 "just to be extra safe": a gap abstains, no lookback across closed days — the same rule
+  as the app's own `computeAmUse`); PM = Estimated Dough After Gang − EON count — rewrites the `New Bieblerb` A–F history from it, and refits Theil–Sen. Per size, BOTH
   halves must be known and non-negative (a count that rose is a miscount) or the size ABSTAINS
   for the day: never a half day passed off as whole. Days need takings; the bucket comes from the
   2 PM row's Bible cell, falling back to the date rule. This replaced the app's phone-local sum,

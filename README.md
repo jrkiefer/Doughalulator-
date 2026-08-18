@@ -107,9 +107,10 @@ it holds no formulas, so nothing in it can break.
 - Change any one number and the whole day is worked out and saved again. Each number shows a small
   green **saved** tag once it has reached the notebook.
 - **The new bible builds itself.** After each end-of-night save, the notebook's own machine works
-  out every recorded day's *whole* dough use — the morning (last close-count minus the 2 PM
-  count, reaching back over closed days up to a week) plus the night (the after-gang dough minus
-  the closing count) — rewrites its history from that, and fits a line through all of it. Three
+  out every recorded day's *whole* dough use — the morning (yesterday's close-count minus the
+  2 PM count — yesterday exactly, so a day after a closed day is left out rather than guessed
+  at) plus the night (the after-gang dough minus the closing count) — rewrites its history from
+  that, and fits a line through all of it. Three
   days in it starts suggesting, and it sharpens from there with nothing to press. A day with no
   takings is left out, and a day it can only half-see is left out rather than under-counted.
 - **Correcting a number by hand: which ones stick.** Fix a **count or a sales figure** on
@@ -211,6 +212,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.20.1** | Tightened before it ever reached your notebook: the morning figure now comes from **the day before only**. If the previous close isn't from yesterday exactly — a closed day in between, a gap in the record — that day is simply left out of the new bible, no guessing. Your call, to be extra safe, and it matches how the app itself works out the morning on screen. |
 | **1.20.0** | More days now feed the new bible, and every one of them is a *whole* day. Before, the morning-plus-night sum was worked out on whichever phone saved the night — so if the closing count was entered on one phone and the next afternoon on another, or a phone was wiped, the morning silently went missing and the evening got recorded as if it were the whole day, dragging the suggestion low. Now the notebook works it out itself from what's already written in it: last night's close minus the 2 PM count for the morning (reaching back over closed days up to a week, so Tuesdays after a closed Monday count too), the after-gang dough minus the closing count for the night. A day it can only half-see is left out instead of under-counted. **Needs the one-off spreadsheet update** — paste the script and update the existing deployment, then run *Refresh new-bible suggestions* once from the Dough Tools menu. |
 | **1.19.0** | The graph slimmed back down, at your ask. The Gap and Table buttons and the sentence under the chart are gone, along with the "05 Graphs" heading over the drawer — one graph, nothing extra. What stayed: the two bible buttons, the size buttons, tapping the graph to read a figure, and the labels. The chart itself got a light polish — slightly bigger axis numbers, a touch more height, and the suggested line drawn a shade heavier than the dashed bible line so the eye goes to the right one. |
 | **1.18.0** | The graph now answers the question instead of leaving you to work it out. A **Gap** button draws just the difference between the two bibles against a zero line — red where your nights say make more, blue where they say make less — so you can see at a glance where the two part company, instead of trying to judge the distance between two lines running side by side. Under every view there is now **one sentence** saying what it means, e.g. *"Your nights say make more Small below $11,500 and less above it — biggest gap 46 fewer at $20,750."* Tapping the graph also shows the difference **as a percentage**, which matters for the small counts: 3 Sicilian off 7 is a big change, 3 Small off 276 is not. Red and blue, not red and green — the obvious pair is the one colour-blind eyes can't separate. |

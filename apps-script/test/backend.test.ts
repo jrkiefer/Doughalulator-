@@ -665,18 +665,19 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(build.getCell(3, 4)).toBe(''); // Small abstains — never a negative half
   });
 
-  it('the morning looks back across closed days, but the trail goes cold at seven', () => {
+  it("the morning must come from the day before — any gap abstains (owner's rule)", () => {
     const script = freshDough();
     seedEon(script, '2026-09-01');
-    // Closed the 2nd–4th: the 1st\'s close against the 5th\'s 2 PM is still the morning.
-    fullDay(script, '2026-09-05', 4000, 40, 'regular');
+    // Yesterday's close exists: the day counts, morning and night.
+    fullDay(script, '2026-09-02', 4000, 40, 'regular');
     const build = script.world.ss.getSheetByName('New Bieblerb')!;
     expect(build.getCell(2, 2)).toBe(4000);
     expect(build.getCell(2, 3)).toBe(40);
 
-    // A day fifteen days on has no last count within reach: no AM half, and a
-    // PM-only figure must NOT be passed off as the whole day — no row at all.
-    fullDay(script, '2026-09-20', 9000, 90, 'regular');
+    // Closed on the 3rd: the 4th has no yesterday, so it abstains outright —
+    // the sheet never guesses across a gap, and a PM-only figure is never
+    // passed off as a whole day. No row at all.
+    fullDay(script, '2026-09-04', 9000, 90, 'regular');
     expect(build.getCell(3, 1)).toBe('');
     expect(build.getCell(3, 2)).toBe('');
   });

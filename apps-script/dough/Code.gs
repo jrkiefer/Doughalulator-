@@ -556,14 +556,6 @@ function refreshBibleBuilds() {
   });
 }
 
-/**
- * How far back the morning's "last count" may be. Across a closed Monday,
- * Sunday's close against Tuesday's 2 PM count IS Tuesday's morning use —
- * nothing moved in between. Seven days matches the rule the owner's other
- * app always used; a longer gap means the trail has genuinely gone cold.
- */
-var AM_LOOKBACK_DAYS = 7;
-
 /** Where each size lives (1-based) in the three tabs the day's use is derived from. */
 var USE_COLS = {
   indi: { eon: 3, twopm: 6, after: 2 },
@@ -582,8 +574,13 @@ var USE_COLS = {
  * and the morning silently vanished, leaving the evening recorded as if it
  * were the whole day. Every input already sits in this notebook:
  *
- *   AM use = last EON count (up to AM_LOOKBACK_DAYS back) - today's 2 PM count
+ *   AM use = YESTERDAY'S EON count - today's 2 PM count
  *   PM use = Estimated Dough After Gang - tonight's EON count
+ *
+ * Yesterday exactly (owner's rule, Aug 2026 - "just to be extra safe"): a
+ * day whose previous close is older than one day abstains rather than
+ * guesses - which is also precisely the app's own on-screen AM rule
+ * (computeAmUse). No lookback across closed days.
  *
  * Per size: both halves known -> their sum; either missing or negative (a
  * count that ROSE is a miscount, not negative use) -> that size abstains for
@@ -618,10 +615,7 @@ function rebuildBibleHistories() {
 
     var twopmRow = index[T_IN][date] || null;
     var afterRow = index[T_AFTER][date] || null;
-    var lastEonRow = null;
-    for (var back = 1; back <= AM_LOOKBACK_DAYS && !lastEonRow; back++) {
-      lastEonRow = index[T_EON][addDaysIso(date, -back)] || null;
-    }
+    var lastEonRow = index[T_EON][addDaysIso(date, -1)] || null;
 
     var out = { Date: date, sales: sales, any: false };
     Object.keys(USE_COLS).forEach(function (size) {
