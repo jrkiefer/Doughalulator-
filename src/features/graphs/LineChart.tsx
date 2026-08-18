@@ -32,11 +32,11 @@ export interface Series {
 }
 
 const W = 340;
-const H = 218;
-const PAD = { left: 32, right: 46, top: 22, bottom: 36 };
+const H = 232;
+const PAD = { left: 32, right: 48, top: 26, bottom: 36 };
 const PLOT = { x0: PAD.left, x1: W - PAD.right, y0: H - PAD.bottom, y1: PAD.top };
 /** Below this the end labels would sit on top of each other. */
-const LABEL_MIN_GAP = 14;
+const LABEL_MIN_GAP = 17;
 
 function fmtValue(value: number): string {
   if (Number.isInteger(value)) return String(value);
@@ -207,9 +207,9 @@ export function LineChart(props: {
       {ends.map((e, i) => (
         <g key={e.series.label}>
           {Math.abs(labelY[i] - e.y) > 1 && (
-            <line className="chart-leader" x1={e.x + 5} y1={e.y} x2={PLOT.x1 + 8} y2={labelY[i]} />
+            <line className="chart-leader" x1={e.x + 5} y1={e.y} x2={PLOT.x1 + 10} y2={labelY[i]} />
           )}
-          <text className="chart-end-label" x={PLOT.x1 + 10} y={labelY[i] + 3}>
+          <text className="chart-end-label" x={PLOT.x1 + 12} y={labelY[i] + 3}>
             {fmtValue(e.value)}
           </text>
         </g>
