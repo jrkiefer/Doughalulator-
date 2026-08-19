@@ -5,12 +5,14 @@ import { bibles } from '../data/bibles';
 import { BibleViewer } from '../features/bibleViewer/BibleViewer';
 import { EonPage } from '../features/eon/EonPage';
 import { emptyEonForm, type EonForm } from '../features/eon/formState';
+import { GraphsCard } from '../features/graphs/GraphsCard';
 import { HistoryCard } from '../features/history/HistoryCard';
 import { ActiveDate } from '../features/shell/ActiveDate';
 import { BibleToggle } from '../features/shell/BibleToggle';
 import { Footer } from '../features/shell/Footer';
 import { Header } from '../features/shell/Header';
 import { ModeNav, type Mode } from '../features/shell/ModeNav';
+import { TempGraph } from '../features/temps/TempGraph';
 import { emptyTempReadings, TempsPage, type TempReadings } from '../features/temps/TempsPage';
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
@@ -290,6 +292,19 @@ export default function App() {
 
       <HistoryCard onPick={(d) => setDate(d)} />
       {mode !== 'temps' && <BibleViewer bible={bibles[activeBible]} />}
+
+      {/* Graph drawers close their pages (owner's ask): a look-at-sometimes
+          panel belongs after everything used on an ordinary night. */}
+      {mode === '2pm' && (
+        <div className="band">
+          <GraphsCard />
+        </div>
+      )}
+      {mode === 'temps' && (
+        <div className="band">
+          <TempGraph />
+        </div>
+      )}
       <Footer />
     </div>
   );

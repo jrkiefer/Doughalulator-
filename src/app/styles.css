@@ -125,6 +125,12 @@ body {
 .section-head .note {
   margin-left: auto;
   text-align: right;
+  /* A point under .micro with tighter tracking: the two long notes
+     ("10 = $10,000 · TOMORROW 0 = CLOSED", "°F · 3× DAILY · SAVES BY ITSELF")
+     then hold one line beside their titles at phone width instead of
+     wrapping onto a lonely right-aligned second line. */
+  font-size: 9px;
+  letter-spacing: 0.08em;
 }
 
 .badge {
@@ -1444,7 +1450,9 @@ button:focus-visible {
 /* ————— bible viewer ————— */
 .bible-viewer {
   display: block;
-  padding: 0 var(--pad) 12px;
+  /* The same 24px every band leaves below a card — anything less makes the
+     card after this one sit visibly tighter than the rest of the column. */
+  padding: 0 var(--pad) 24px;
 }
 
 .bible-viewer .bible-name {

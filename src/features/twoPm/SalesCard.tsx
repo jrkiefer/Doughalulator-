@@ -52,7 +52,9 @@ export function SalesCard(props: {
 
   return (
     <>
-      <SectionHead num="01" title="Sales & Forecast" note="10 = $10,000 · TOMORROW 0 = CLOSED" />
+      {/* Just the one rule typing never teaches: the dollar echo under each
+          field already shows "15 → $15,000" as it is typed. */}
+      <SectionHead num="01" title="Sales & Forecast" note="TOMORROW 0 = CLOSED" />
       <div className="card">
         {field("TODAY'S FORECAST", 'todayForecast')}
         {field('CURRENT SALES', 'currentSales')}
