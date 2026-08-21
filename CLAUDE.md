@@ -33,9 +33,13 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 
 ## Folder rules
 
-- `src/app/` — the shell. `App.tsx` is the screen only; `engine.ts` is the composition root that
-  wires the pure engine to real storage, network and clock; `main.tsx` is the entry; `styles.css`
-  is the whole design system.
+- `src/app/` — the shell. `App.tsx` holds only the header band (date, status, mode nav), the
+  form state + engine wiring, and WHICH tab is showing; each tab's feature folder owns its whole
+  page top to bottom (v1.25.0, owner's ask: "easy to differentiate between this tab and the
+  others") — `twoPm/TwoPmPage` ends with History, the Dough Bible and the comparison graph,
+  `eon/EonPage` with History and the Dough Bible, `temps/TempsPage` with its own TempHistory and
+  the temp graph. `engine.ts` is the composition root that wires the pure engine to real
+  storage, network and clock; `main.tsx` is the entry; `styles.css` is the whole design system.
 - `src/core/` — pure calculation logic ONLY. No React, no I/O, no `Date.now()` inside; dates and
   data are passed in as arguments. Every core function is tested.
 - `src/config/` — every tunable constant (balls per tray, batch size, season dates, rounding rules,
@@ -61,6 +65,11 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   measured hues (large blue → boli purple → warn ochre → small red; worst pair ΔE 18.8 CVD /
   19.6 normal on paper) — eight per-station hues were measured and don't exist: every teal
   collides with the Large blue. The pill wears its line's dot, so the pills are the legend.
+  The tab's History card (`temps/TempHistory.tsx`) words the same last-3 data and shares the
+  graph's phone cache — one truth, two tellings. `Today's temps` opens by default
+  (`defaultOpen` on `Collapsible`; a session's own tap still wins). Each temp input wears a
+  save chip driven by `engine.recordStatus(date, 'temps')` — the temps record's OWN state,
+  never the whole date's, or a busy dough side makes a saved temperature look unsaved (it did).
 - **The Graphs drawer stays SIMPLE (owner's choice, Aug 2026).** A Gap view, a Table view and a
   one-sentence summary were built, shipped in v1.18.0, and removed at the owner's ask in
   v1.19.0 — one chart, the pill rows and the tap readout are the whole surface. Don't re-add

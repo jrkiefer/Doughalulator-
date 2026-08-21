@@ -1,4 +1,13 @@
+/**
+ * The whole 2 PM tab, top to bottom: sales + counts, the day's work, history,
+ * the Dough Bible and the bible-comparison graph. App.tsx only decides WHICH
+ * tab is showing.
+ */
 import type { DoughDayRecord, RoundDirection } from '../../core/types';
+import { bibles } from '../../data/bibles';
+import { BibleViewer } from '../bibleViewer/BibleViewer';
+import { GraphsCard } from '../graphs/GraphsCard';
+import { HistoryCard } from '../history/HistoryCard';
 import { CountCards } from '../shared/CountCards';
 import { BySizeTable } from './BySizeTable';
 import { DaysWork } from './DaysWork';
@@ -11,6 +20,8 @@ export function TwoPmPage(props: {
   form: TwoPmForm;
   onFormChange: (patch: Partial<TwoPmForm>) => void;
   onRounding: (direction: RoundDirection) => void;
+  onForecastRound: (direction: RoundDirection) => void;
+  onPickDate: (date: string) => void;
   synced: boolean;
 }) {
   const { form, record } = props;
@@ -37,6 +48,20 @@ export function TwoPmPage(props: {
       <div className="band">
         <DaysWork record={record} onRounding={props.onRounding} />
         <BySizeTable record={record} />
+      </div>
+
+      <HistoryCard onPick={props.onPickDate} />
+      <BibleViewer
+        bible={bibles[record.bibleUsed]}
+        record={record}
+        forecastRound={record.rounding.forecast}
+        forecastAuto={record.rounding.forecastAuto}
+        onForecastRound={props.onForecastRound}
+      />
+      {/* The graph drawer closes the page (owner's ask): a look-at-sometimes
+          panel belongs after everything used on an ordinary night. */}
+      <div className="band">
+        <GraphsCard />
       </div>
     </>
   );

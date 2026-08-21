@@ -22,9 +22,11 @@ export function Collapsible(props: {
   id: string;
   title: ReactNode;
   note?: string;
+  /** Start open on first sight — a tap in this session still wins. */
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(() => remembered(props.id) ?? false);
+  const [open, setOpen] = useState(() => remembered(props.id) ?? props.defaultOpen ?? false);
   return (
     <section className="collapsible">
       <button

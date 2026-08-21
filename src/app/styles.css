@@ -1428,6 +1428,45 @@ button:focus-visible {
   border-top: 1px dashed var(--rule-soft);
 }
 
+/* The temps tab's History: a station a row, its last three worded. */
+.temp-history {
+  padding: 2px 0 6px;
+}
+
+.temp-history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--rule-soft);
+}
+
+.temp-history-row:last-of-type {
+  border-bottom: 0;
+}
+
+.temp-history-row .station {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  flex: 0 0 92px;
+}
+
+.temp-history-row .readings {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.temp-history-row .readings strong {
+  color: var(--ink);
+}
+
 .station-row .pill .dot {
   display: inline-block;
   width: 8px;
@@ -1587,6 +1626,12 @@ button:focus-visible {
   text-transform: uppercase;
   color: var(--good);
   pointer-events: none;
+}
+
+/* The chip's bad news: a save the sheet refused, or nowhere held it. */
+.chip.bad {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .micro.sublabel {

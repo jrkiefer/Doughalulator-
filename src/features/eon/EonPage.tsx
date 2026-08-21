@@ -1,7 +1,9 @@
 import { defaultConfig, type BibleId } from "../../config";
 import { runEonCalculation } from "../../core";
-import type { DoughDayRecord, SizeKey } from "../../core/types";
+import type { DoughDayRecord, RoundDirection, SizeKey } from "../../core/types";
 import { bibles } from "../../data/bibles";
+import { BibleViewer } from "../bibleViewer/BibleViewer";
+import { HistoryCard } from "../history/HistoryCard";
 import { CountCards } from "../shared/CountCards";
 import { fmtMaybe, parseCounts, toNumOrNull } from "../shared/counts";
 import { numericChangeHandler } from "../shared/inputs";
@@ -35,6 +37,8 @@ export function EonPage(props: {
   dayRecord: DoughDayRecord | null;
   form: EonForm;
   onFormChange: (patch: Partial<EonForm>) => void;
+  onForecastRound: (direction: RoundDirection) => void;
+  onPickDate: (date: string) => void;
   synced: boolean;
 }) {
   const cfg = defaultConfig;
@@ -234,6 +238,17 @@ export function EonPage(props: {
           )}
         </div>
       </div>
+
+      <HistoryCard onPick={props.onPickDate} />
+      {dayRecord && (
+        <BibleViewer
+          bible={bibles[dayRecord.bibleUsed]}
+          record={dayRecord}
+          forecastRound={dayRecord.rounding.forecast}
+          forecastAuto={dayRecord.rounding.forecastAuto}
+          onForecastRound={props.onForecastRound}
+        />
+      )}
     </>
   );
 }

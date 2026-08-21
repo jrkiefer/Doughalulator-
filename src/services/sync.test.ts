@@ -565,3 +565,44 @@ describe('reset (§4)', () => {
     expect(world.posts).toHaveLength(1); // nothing new went out
   });
 });
+
+describe('per-record status — a screen speaks only for what it edits', () => {
+  it('a dough failure never makes a saved temp read as unsaved', async () => {
+    const world = makeWorld();
+    world.setOutcomes([
+      { kind: 'retryable', error: 'timeout' }, // dough stays dirty
+      { kind: 'ok', data: {} }, // temps saves fine
+    ]);
+    typeSales(world);
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    await world.engine.flush();
+    expect(world.engine.status(D).state).toBe('offline'); // the date as a whole, honestly
+    expect(world.engine.recordStatus(D, 'temps').state).toBe('synced');
+    expect(world.engine.recordStatus(D, 'day').state).toBe('offline');
+  });
+
+  it('typing a temp dirties the temps record alone', () => {
+    const world = makeWorld();
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    expect(world.engine.recordStatus(D, 'temps').state).toBe('saving');
+    expect(world.engine.recordStatus(D, 'day').state).toBe('new');
+  });
+
+  it('a temps rejection parks its reason on the temps record only', async () => {
+    const world = makeWorld();
+    world.setOutcomes([{ kind: 'rejected', reason: 'unknown slot' }]);
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    await world.engine.flush();
+    expect(world.engine.recordStatus(D, 'temps')).toMatchObject({
+      state: 'rejected',
+      reason: 'unknown slot',
+    });
+    expect(world.engine.recordStatus(D, 'day').state).toBe('new');
+  });
+});

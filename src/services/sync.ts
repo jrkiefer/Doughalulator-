@@ -114,6 +114,11 @@ export interface SyncEngine {
   editSeq(date: string): number;
   flush(opts?: { keepalive?: boolean }): Promise<void>;
   status(date: string): SyncStatus;
+  /**
+   * One record's own state, so a screen can speak for exactly what it edits —
+   * the temps page must not read "saving" because the DOUGH side is behind.
+   */
+  recordStatus(date: string, type: RecordType): SyncStatus;
   subscribe(listener: () => void): () => void;
   /** Boot: resend anything dirty from earlier sessions. */
   start(): void;
@@ -362,17 +367,17 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     }
   }
 
+  const formHas = (form: Record<string, string>) =>
+    Object.values(form).some((v) => v.trim() !== '');
+
+  function recordHasContent(entry: DateEntry, type: RecordType): boolean {
+    if (type === 'day') return !!entry.day && (formHas(entry.day.form) || entry.day.rounding !== null);
+    if (type === 'eon') return !!entry.eon && formHas(entry.eon.form);
+    return !!entry.temps && Object.values(entry.temps.readings).some(formHas);
+  }
+
   function hasContent(entry: DateEntry): boolean {
-    const formHas = (form: Record<string, string>) =>
-      Object.values(form).some((v) => v.trim() !== '');
-    if (entry.day && (formHas(entry.day.form) || entry.day.rounding !== null)) return true;
-    if (entry.eon && formHas(entry.eon.form)) return true;
-    if (entry.temps) {
-      for (const slot of Object.values(entry.temps.readings)) {
-        if (formHas(slot)) return true;
-      }
-    }
-    return false;
+    return TYPE_ORDER.some((type) => recordHasContent(entry, type));
   }
 
   return {
@@ -433,6 +438,24 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       if (!hasContent(entry)) return { state: 'new', reason: null, phoneWriteFailed: false };
       const waitingOnOffline = dirtyTargets(entry).some((t) => offlineTargets.has(t));
       if (dirty && waitingOnOffline) {
+        return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
+      }
+      if (dirty && inFlight) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
+      if (dirty) return { state: 'saving', reason: null, phoneWriteFailed: failedPhone };
+      return { state: 'synced', reason: null, phoneWriteFailed: failedPhone };
+    },
+
+    recordStatus(date, type): SyncStatus {
+      const entry = getEntry(date);
+      const rec = metaOf(entry, type);
+      const failedPhone = phoneFailed.has(date);
+      const rejected = rec?.rejectedReason ?? null;
+      if (rejected) return { state: 'rejected', reason: rejected, phoneWriteFailed: failedPhone };
+      const content = recordHasContent(entry, type);
+      const dirty = !!rec && rec.updatedAt > rec.syncedAt && content;
+      if (dirty && failedPhone) return { state: 'unsaved', reason: null, phoneWriteFailed: true };
+      if (!content) return { state: 'new', reason: null, phoneWriteFailed: false };
+      if (dirty && offlineTargets.has(TARGET_OF[type])) {
         return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
       }
       if (dirty && inFlight) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
