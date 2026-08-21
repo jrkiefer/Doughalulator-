@@ -293,6 +293,7 @@ export default function App() {
       {mode !== 'temps' && (
         <BibleViewer
           bible={bibles[activeBible]}
+          record={record}
           forecastRound={record.rounding.forecast}
           forecastAuto={record.rounding.forecastAuto}
           onForecastRound={editForecastRound}

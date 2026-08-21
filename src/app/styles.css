@@ -1455,6 +1455,34 @@ button:focus-visible {
   padding: 0 var(--pad) 24px;
 }
 
+/* The rows tonight's figures land on. LEFT is what the maths reads, so it
+   sits a shade stronger than the whole-forecast row; tomorrow's row — where
+   the make comes from — carries the accent, like the owner's other app. */
+.bible-viewer tr.mark-tonight td {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.bible-viewer tr.mark-left td {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.bible-viewer tr.mark-tmrw td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.bible-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  margin-left: 7px;
+}
+
+.bible-tag.tmrw {
+  color: var(--accent);
+}
+
 .bible-viewer .bible-name {
   padding: 0 2px 10px;
 }
