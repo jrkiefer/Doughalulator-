@@ -11,7 +11,6 @@ export function TwoPmPage(props: {
   form: TwoPmForm;
   onFormChange: (patch: Partial<TwoPmForm>) => void;
   onRounding: (direction: RoundDirection) => void;
-  onForecastRound: (direction: RoundDirection) => void;
   synced: boolean;
 }) {
   const { form, record } = props;
@@ -24,10 +23,6 @@ export function TwoPmPage(props: {
           onChange={props.onFormChange}
           salesLeft={record.salesLeft}
           negativeSalesLeft={record.flags.negativeSalesLeft}
-          forecastRound={record.rounding.forecast}
-          forecastAuto={record.rounding.forecastAuto}
-          slowDay={record.rounding.slowDay}
-          onForecastRound={props.onForecastRound}
           synced={props.synced}
         />
         <CountCards

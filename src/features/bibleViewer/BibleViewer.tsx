@@ -1,8 +1,18 @@
-import type { Bible } from '../../core/types';
+import type { Bible, RoundDirection } from '../../core/types';
 import { Collapsible } from '../shared/Collapsible';
+import { RoundingPills } from '../twoPm/RoundingPills';
 
-/** Read-only view of the active bible's table. Collapsed by default, remembered per session. */
-export function BibleViewer(props: { bible: Bible }) {
+/**
+ * The active bible's table, with the forecast-rounding pills above it — the
+ * rounding IS a bible matter (which row a lookup lands on), and this is where
+ * the owner's other app has always kept it. Collapsed by default.
+ */
+export function BibleViewer(props: {
+  bible: Bible;
+  forecastRound: RoundDirection;
+  forecastAuto: boolean;
+  onForecastRound: (direction: RoundDirection) => void;
+}) {
   return (
     <section className="bible-viewer">
       <Collapsible
@@ -16,6 +26,13 @@ export function BibleViewer(props: { bible: Bible }) {
         <div className="micro bible-name">
           {props.bible.name}
         </div>
+        <RoundingPills
+          label="ROUNDING"
+          active={props.forecastRound}
+          isAuto={props.forecastAuto}
+          autoText="AUTO · SLOW DAY = DOWN"
+          onPick={props.onForecastRound}
+        />
         <table>
           <thead>
             <tr>

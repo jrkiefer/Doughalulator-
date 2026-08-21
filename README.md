@@ -45,8 +45,9 @@ built in, so any phone that opens the page is already working.
    and Large, leaning Large.
 7. **Quiet days round down.** When both forecasts are under $13,000 the bible rounds down to the row
    below rather than up — but never by more than $400, because that is more dough than one step
-   should ever shed. Every other night rounds up. There is a **Forecast rounding** pair of buttons
-   on the sales card to overrule that too.
+   should ever shed. Every other night rounds up. The **Rounding** pair of buttons to overrule that
+   lives in the Dough Bible drawer — the rounding decides which bible row a look-up lands on,
+   so it sits with the bible.
 8. **Sicilian never drops to nothing.** If fewer than 8 are on hand, at least 1 gets made.
 9. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
 
@@ -212,6 +213,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.22.0** | The forecast **Rounding** buttons moved off the sales card and into the **Dough Bible** drawer, where your other app has always kept them — rounding decides which bible row a look-up lands on, so it belongs with the bible. The little tag beside them now carries the rule itself (*AUTO · SLOW DAY = DOWN*), and the sentence that used to explain it under the sales fields is gone. |
 | **1.21.1** | Tidy-ups, measured rather than eyeballed. The two graph drawers now sit **last on their pages** — Bible comparison after History and the Dough Bible on the 2 PM page, Temp graph after History on the temps page. Every card now sits exactly the same distance from the next (the Dough Bible card used to sit half as far from whatever followed it). And the small corner notes beside the section titles hold one line on a phone instead of wrapping — the sales one now just says *TOMORROW 0 = CLOSED*, since the $-shorthand teaches itself as you type. |
 | **1.21.0** | A **Temp graph** drawer on the Station Temps page, shut until opened. Tap LOAD GRAPH and each station gets a row on one °F scale: its last three readings as dots — paler for older, solid for the newest, with the newest figure printed at the row's end — straight off the Log, so corrections show as the newer entry they are. Tap a row to read all three with their time slots and dates. The freezer's below-zero readings sit left of an emphasised 0° line. **Needs its own one-off update, this time in the Temp Log** — same dance as the Dough Log's: paste the script, update the existing deployment. Three days of made-up sample readings were written into the log at your ask so the graph had something to show; they fall out of view after one real day of readings. |
 | **1.20.1** | Tightened before it ever reached your notebook: the morning figure now comes from **the day before only**. If the previous close isn't from yesterday exactly — a closed day in between, a gap in the record — that day is simply left out of the new bible, no guessing. Your call, to be extra safe, and it matches how the app itself works out the morning on screen. |

@@ -266,7 +266,6 @@ export default function App() {
           form={form}
           onFormChange={editDay}
           onRounding={editRounding}
-          onForecastRound={editForecastRound}
           synced={synced}
         />
       )}
@@ -291,7 +290,14 @@ export default function App() {
       )}
 
       <HistoryCard onPick={(d) => setDate(d)} />
-      {mode !== 'temps' && <BibleViewer bible={bibles[activeBible]} />}
+      {mode !== 'temps' && (
+        <BibleViewer
+          bible={bibles[activeBible]}
+          forecastRound={record.rounding.forecast}
+          forecastAuto={record.rounding.forecastAuto}
+          onForecastRound={editForecastRound}
+        />
+      )}
 
       {/* Graph drawers close their pages (owner's ask): a look-at-sometimes
           panel belongs after everything used on an ordinary night. */}

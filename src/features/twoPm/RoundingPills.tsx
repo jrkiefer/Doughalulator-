@@ -14,11 +14,15 @@ export function RoundingPills(props: {
   active: RoundDirection | null;
   isAuto: boolean;
   onPick: (direction: RoundDirection) => void;
+  /** What the AUTO tag says — room for the rule itself, e.g. "AUTO · SLOW DAY = DOWN". */
+  autoText?: string;
 }) {
   return (
     <div className="rounding-row">
       <span className="label">{props.label}</span>
-      {props.isAuto && props.active !== null && <span className="auto-tag">AUTO</span>}
+      {props.isAuto && props.active !== null && (
+        <span className="auto-tag">{props.autoText ?? 'AUTO'}</span>
+      )}
       <button
         className={`pill pill-sm${props.active === 'up' ? ' active' : ''}`}
         onClick={() => props.onPick('up')}
