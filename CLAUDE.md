@@ -43,13 +43,24 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
 - `src/data/` — the two bibles (`doughBible.json`, `peachBible.json`) plus `bibles.ts`, the single
   place that loads them. Real data — **never alter a number**.
 - `src/features/<feature>/` — UI, one folder per page or piece. Two folders draw — `graphs/`
-  (the bible comparison) and `temps/` (the last-readings dot rows) — both hand-rolled SVG, no
-  charting library, no CDN, sharing `graphs/chartMath.ts` for scales and ticks. The temps chart
-  is dot rows on one °F axis, NOT eight lines: recency is an order, so it wears one hue in
-  lightness steps. Its geometry lives in `chartMath.ts`
-  (pure, tested) so the curve's one guarantee is provable rather than eyeballed: the smoothing
-  is **monotone cubic**, which cannot overshoot between two thresholds — an ordinary spline
-  draws dough no threshold asks for and dips below zero at the bottom end.
+  (the bible comparison) and `temps/` (the temp line graph) — both hand-rolled SVG, no
+  charting library, no CDN, sharing `graphs/chartMath.ts` for scales and ticks. The bible
+  chart's geometry lives in `chartMath.ts` (pure, tested) so the curve's one guarantee is
+  provable rather than eyeballed: the smoothing is **monotone cubic**, which cannot overshoot
+  between two thresholds — an ordinary spline draws dough no threshold asks for and dips below
+  zero at the bottom end.
+- **The temp graph is a line graph, at the owner's explicit ask (Aug 2026)** — it REPLACED the
+  v1.21.0 dot rows. X is TIME: the last 3 (date, slot) moments any station was read, labeled
+  slot-over-date; the shaping is `temps/tempChart.ts` (pure, tested). Y is a FIXED 28–60 °F
+  scale split at 40 — 28–40 GOOD wash, 40–60 DANGER ZONE wash — the owner's own thresholds
+  (their freezer runs ~32 °F, their word, so it fits the same scale). A reading past 60 draws
+  as an accent arrow out the top with its true figure plus the "Check foods / Check chicken"
+  warning; below 28 mirrors it in ink, quietly. STRAIGHT segments — three points is a record,
+  not a curve; a missed slot breaks the line, never interpolates. The station pills above it
+  multi-select, persist per phone (`temppicks`), and colour lines by PICK ORDER from four
+  measured hues (large blue → boli purple → warn ochre → small red; worst pair ΔE 18.8 CVD /
+  19.6 normal on paper) — eight per-station hues were measured and don't exist: every teal
+  collides with the Large blue. The pill wears its line's dot, so the pills are the legend.
 - **The Graphs drawer stays SIMPLE (owner's choice, Aug 2026).** A Gap view, a Table view and a
   one-sentence summary were built, shipped in v1.18.0, and removed at the owner's ask in
   v1.19.0 — one chart, the pill rows and the tap readout are the whole surface. Don't re-add

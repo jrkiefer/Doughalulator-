@@ -1354,61 +1354,87 @@ button:focus-visible {
 }
 
 /* ————— the temps graph ————— */
-/* One hue, lightness steps: recency is an order, not an identity. */
-.temp-row-label {
+/* The two zones the fixed 28–60 scale splits into. Faint washes: the lines
+   are the data, the bands are the verdict on where they sit. */
+.temp-band-good {
+  fill: color-mix(in srgb, var(--good) 7%, transparent);
+}
+
+.temp-band-danger {
+  fill: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.temp-band-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.temp-band-label.good {
+  fill: color-mix(in srgb, var(--good) 75%, var(--ink));
+}
+
+.temp-band-label.danger {
+  fill: color-mix(in srgb, var(--accent) 80%, var(--ink));
+}
+
+/* A reading past the scale's end: the arrow out of the plot and its figure.
+   Over the top is the danger signal; under 28 is only odd, so it stays ink. */
+.temp-arrow {
+  fill: var(--ink-mute);
+}
+
+.temp-arrow.over {
+  fill: var(--accent);
+}
+
+.temp-arrow-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.temp-arrow-value.over {
+  fill: var(--accent);
+}
+
+.temp-warning {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  fill: var(--accent);
+}
+
+/* Time-axis labels: the slot carries the meaning, the date sits under it. */
+.temp-x-slot {
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   fill: var(--ink-soft);
 }
 
-.temp-value {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  fill: var(--ink);
-  font-variant-numeric: tabular-nums;
+/* The station picker. A chosen pill carries its line's colour as a dot —
+   the pill row IS the legend. */
+.station-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule-soft);
 }
 
-.temp-connector {
-  stroke: color-mix(in srgb, var(--large) 30%, transparent);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.temp-dot-old {
-  fill: color-mix(in srgb, var(--large) 45%, var(--paper));
-}
-
-.temp-dot-new {
-  fill: var(--large);
-  stroke: var(--paper);
-  stroke-width: 2;
-}
-
-/* Zero is where fridge becomes freezer — it outranks the other gridlines. */
-.temp-zero {
-  stroke: var(--rule);
-  stroke-width: 1.5;
-}
-
-.temp-active-band {
-  fill: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-.temp-key-old .swatch.dot,
-.temp-key-new .swatch.dot {
-  width: 9px;
-  height: 9px;
+.station-row .pill .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   border-radius: 99px;
-}
-
-.temp-key-old .swatch.dot {
-  background: color-mix(in srgb, var(--large) 45%, var(--paper));
-}
-
-.temp-key-new .swatch.dot {
-  background: var(--large);
+  background: var(--line);
+  margin-right: 6px;
 }
 
 /* ————— history ————— */

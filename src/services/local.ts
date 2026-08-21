@@ -15,6 +15,7 @@ const DATE_PREFIX = `${PREFIX}date.`;
 const HISTORY_KEY = `${PREFIX}history`;
 const BIBLE_BUILD_KEY = `${PREFIX}biblebuild`;
 const TEMP_GRAPH_KEY = `${PREFIX}tempgraph`;
+const TEMP_PICKS_KEY = `${PREFIX}temppicks`;
 /**
  * Keys no longer read by anything, swept at boot: the pre-rename snapshots, the
  * retired queue, and the latest-temps cache that LOAD LAST TEMPS used before
@@ -205,6 +206,15 @@ export function cachedTempGraph<T>(): T | null {
 
 export function cacheTempGraph(stations: unknown): void {
   write(TEMP_GRAPH_KEY, stations);
+}
+
+/** Which stations the temp graph draws — null means never chosen on this phone. */
+export function cachedTempPicks(): string[] | null {
+  return read<string[]>(TEMP_PICKS_KEY);
+}
+
+export function cacheTempPicks(picks: string[]): void {
+  write(TEMP_PICKS_KEY, picks);
 }
 
 // There is no latest-temps cache any more: the button that read it is gone, so
