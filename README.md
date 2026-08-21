@@ -92,8 +92,8 @@ notebooks are built into the app.
 
 **If an address ever changes** — creating a *new* deployment gives a new `/exec` address, while
 updating an existing one keeps the old address — the app has to be told. That is one line in
-`src/services/sheets.ts`; ask a fresh Claude session to change it and push. Until then the app
-would say it can't reach the sheet.
+`src/services/sheets.ts`, changed and pushed like any other change. Until then the app would say
+it can't reach the sheet.
 
 ### What the Dough Log holds
 
@@ -172,8 +172,8 @@ calculation engine, so past dates are filled in. Things worth knowing:
   address may have changed (see *Setting up a phone* above).
 - **"This app isn't verified"** from Google during a re-setup is normal for personal scripts:
   Advanced → Go to… → Allow.
-- **Anything bigger:** a fresh Claude session should read `CLAUDE.md` in this repo — it holds the
-  whole working picture.
+- **Anything bigger:** `CLAUDE.md` in this repo holds the whole technical working picture —
+  start there.
 
 ---
 
@@ -187,7 +187,7 @@ Everything is in a folder. Only the two documents and the tool files sit loose a
 | `src/core/` | The calculation brain. Pure maths, no screen and no internet — every function tested. |
 | `src/config/` | Every tunable number in one place: balls per tray, batch size, season dates, rounding rules, the station list. Change numbers here, never in `core`. |
 | `src/data/` | The two real bibles as data, plus the one file that loads them. **Never alter a number in these.** |
-| `src/features/` | The screen, one folder per page or piece: `twoPm`, `eon`, `temps`, `settings`, `history`, `bibleViewer`, plus `shell` and `shared`. |
+| `src/features/` | The screen, one folder per page or piece: `twoPm`, `eon`, `temps`, `graphs`, `history`, `bibleViewer`, plus `shell` and `shared`. Each of the three tabs owns its whole page in its own folder. |
 | `src/services/` | Talking to Google: the autosave engine, the phone's own storage, the transport, and the mapping that turns a record into sheet rows. |
 | `apps-script/` | The code that lives inside the two spreadsheets (`dough/Code.gs`, `temps/Code.gs`) and, in `test/`, a fake Google that runs those real files in-process so they can be tested here. |
 | `scripts/` | The one-off history importer. |
@@ -213,6 +213,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.26.1** | Breathing room between the station buttons and the red too-high box on the temp graph. And both of the repo's documents — this page and `CLAUDE.md` — were trimmed to hold only information about the app and its code: stale references cleaned out, the folder list corrected. |
 | **1.26.0** | The temps tab cleaned up on your marked screenshots. The graph's **danger zone is now 40–50** (the scale tops out at 50), and anything above 50 shows as an arrow out the top plus a **red warning box above the graph** — same style as the set-out dough alert — naming the station, the figure and when ("Pizza 1: 66° Night 8/20"). The words no longer sit inside the graph where lines crossed them out. The tap-to-read line is gone — **History now simply shows each station's last known temp**, one clean line each — and the temperature entry rows sit tighter so the list reads as one card. |
 | **1.25.0** | The Station Temps tab got four asks in one go. **Every temp now wears its own save tag**: type or change a reading and its little chip goes *saving…* then *saved* the moment the Temp Log has it — before this, the tag watched the whole day including the dough numbers, so a saved temperature could sit there looking unsaved just because the dough side was busy. **History on this tab is now temp history**: each station's last three readings in plain words, newest in bold — the same figures the graph draws. **Today's temps starts open** — no tap to reach the boxes. And behind the scenes, each tab's code now lives fully in its own folder (2 PM, EON, Temps each own their whole page), so future changes to one tab can't trip over another. |
 | **1.24.1** | Found by filling the log with your three nights of sample data: Google quietly reads the words "2 PM" in the log as a clock time and hands them back as "2:00 PM", which knocked that column out of order on the new graph. The graph now recognises both spellings, so the afternoon column sits where it belongs — between Morning and Night — and is labeled 2 PM. |

@@ -1,35 +1,27 @@
 # CLAUDE.md — Doughalulator
 
-A live dough-planning app for a pizzeria, in daily use. Read this before touching anything.
-`README.md` is the owner-facing companion — the plain-words account of the app, the two Google
-notebooks and every folder here. Keep both true.
+A live dough-planning app for a pizzeria, in daily use. This file is the technical working
+picture: how the code is organised, what every rule protects, and the decisions already made.
+`README.md` is the plain-words companion — the app, the two Google notebooks and every folder.
+Keep both true.
 
-## Who you're working with (follow this in every session)
+Guiding principle for every change: **clean seams and ruthless simplicity. When in doubt,
+build less.**
 
-The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
+## Working rules
 
-- Plain words only; if a technical word is unavoidable, explain it in the same breath ("a repo — the online folder holding your app").
-- Do everything yourself that you possibly can. Involve them only when a step truly needs their hands: signing into accounts, clicking in Google or GitHub, approving permissions.
-- When you need them: ONE step at a time, exactly what to click or type, then WAIT for "done".
-- Never show code or raw errors expecting understanding — say what it means and what you're doing about it.
-- If the computer is missing something you need (like Git), stop and walk them through installing it the same gentle way.
-- Guiding principle for every decision: **clean seams and ruthless simplicity. When in doubt, build less.**
-
-## How to work
-
-1. **Work directly on `main`** (owner's explicit choice, July 2026): commit there and
-   `git push origin main` — no feature branches, no pull requests unless the owner asks. The deploy
+1. **All work happens directly on `main`** (owner's choice, July 2026): commit there and
+   `git push origin main` — no feature branches, no pull requests unless asked. The deploy
    workflow re-runs lint + tests + build on every push and publishes only green builds, so a bad
    push cannot take down the live site.
 2. Never push with a failing gate: `npm run typecheck && npm run lint && npm test && npm run build`.
-3. Finish work completely, keep the tests green, update the version history in `README.md`, then
-   tell the owner in plain words what changed.
-4. If a chat gets long or anything resets, it's safe: read `CLAUDE.md` and `README.md` and carry on.
-   **If the working tree looks stale or wrong, `git fetch origin && git checkout -B main origin/main`
-   — the remote is the source of truth.** (Container resets have landed the checkout on an old
-   branch more than once; nothing is ever lost, it just needs restoring.)
-5. Two documents, and only two: this file and `README.md`. Don't add more markdown to the repo —
-   put the knowledge in whichever of these two owns it.
+3. Finish work completely, keep the tests green, and add a plain-words row to the version history
+   in `README.md`.
+4. **If the working tree looks stale or wrong, `git fetch origin && git checkout -B main
+   origin/main` — the remote is the source of truth.** Nothing is ever lost; it just needs
+   restoring.
+5. Two documents, and only two: this file and `README.md`. No further markdown in the repo —
+   knowledge goes in whichever of these two owns it.
 
 ## Folder rules
 
@@ -190,8 +182,8 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is
   exactly what happened to the owner's phone in Aug 2026. Built in, every device is already
   connected. **The addresses are therefore PUBLIC** — public repo, public site — so anyone who finds
-  them can read or write those notebooks. The owner was told this plainly and chose it; do not
-  re-litigate it, and do not treat the addresses as though they were secret. Erasing stays
+  them can read or write those notebooks. That trade was made knowingly (Aug 2026) and is settled;
+  the addresses are not secrets and must not be handled as though they were. Erasing stays
   unreachable over HTTP (the guarded **Erase all data** menu item), so the worst case is snooping or
   mess, not destruction. A test asserts the scripts refuse erase types over the web.
 - Two-phone rules: date navigation paints the phone copy then background-fetches the sheet; dirty

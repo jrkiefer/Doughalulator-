@@ -1461,6 +1461,11 @@ button:focus-visible {
   color: var(--ink);
 }
 
+/* The graph's too-high box breathes below the pills. */
+.station-row + .setout {
+  margin-top: 12px;
+}
+
 .station-row .pill .dot {
   display: inline-block;
   width: 8px;
