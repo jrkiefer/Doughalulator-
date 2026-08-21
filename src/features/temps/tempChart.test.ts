@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtTemp, slotRank, stationSeries, timeColumns } from './tempChart';
+import { fmtTemp, normalizeSlot, slotRank, stationSeries, timeColumns } from './tempChart';
 import type { RecentTemps, TempReading } from '../../services/tempsService';
 
 const r = (date: string, slot: string, temp: number): TempReading => ({
@@ -66,6 +66,34 @@ describe('stationSeries', () => {
 
   it('a station with nothing in the window is all nulls', () => {
     expect(stationSeries([], columns)).toEqual([null, null, null]);
+  });
+});
+
+describe('the real Log hands back "2:00 PM", not "2 PM"', () => {
+  // Google parses the written text "2 PM" as a time; the display-value read
+  // then returns "2:00 PM". The chart must order, match and label it as 2 PM.
+  it('normalizeSlot strips the parsed-time formatting, leaves the others alone', () => {
+    expect(normalizeSlot('2:00 PM')).toBe('2 PM');
+    expect(normalizeSlot('2 PM')).toBe('2 PM');
+    expect(normalizeSlot('Morning')).toBe('Morning');
+    expect(normalizeSlot('Night')).toBe('Night');
+  });
+
+  it('orders and labels a "2:00 PM" column between Morning and Night', () => {
+    const stations: RecentTemps = {
+      A: [r('2026-08-20', '2:00 PM', 38), r('2026-08-20', 'Night', 37)],
+      B: [r('2026-08-20', 'Morning', 36)],
+    };
+    expect(timeColumns(stations)).toEqual([
+      { date: '2026-08-20', slot: 'Morning' },
+      { date: '2026-08-20', slot: '2 PM' },
+      { date: '2026-08-20', slot: 'Night' },
+    ]);
+  });
+
+  it('matches a "2:00 PM" reading onto its column', () => {
+    const columns = [{ date: '2026-08-20', slot: '2 PM' }];
+    expect(stationSeries([r('2026-08-20', '2:00 PM', 38)], columns)).toEqual([38]);
   });
 });
 

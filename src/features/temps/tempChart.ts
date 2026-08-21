@@ -19,11 +19,21 @@ export interface TimeColumn {
   slot: string;
 }
 
-/** Slot names exactly as the Log writes them. */
+/** Slot names exactly as the app writes them. */
 const SLOT_ORDER = ['Morning', '2 PM', 'Night'];
 
+/**
+ * What the Log hands back, made speakable. The app writes the TEXT "2 PM",
+ * but Google parses that cell as a time and displays it as "2:00 PM" — and
+ * the read path is display values, so that is what arrives. Discovered
+ * against the real sheet, Aug 2026; the fixture-fed tests never see it.
+ */
+export function normalizeSlot(slot: string): string {
+  return slot.replace(/:00/g, '');
+}
+
 export function slotRank(slot: string): number {
-  return SLOT_ORDER.indexOf(slot);
+  return SLOT_ORDER.indexOf(normalizeSlot(slot));
 }
 
 /**
@@ -34,7 +44,8 @@ export function timeColumns(stations: RecentTemps, keep = 3): TimeColumn[] {
   const seen = new Map<string, TimeColumn>();
   for (const readings of Object.values(stations)) {
     for (const r of readings) {
-      seen.set(`${r.date}|${r.slot}`, { date: r.date, slot: r.slot });
+      const slot = normalizeSlot(r.slot);
+      seen.set(`${r.date}|${slot}`, { date: r.date, slot });
     }
   }
   return [...seen.values()]
@@ -55,7 +66,9 @@ export function stationSeries(
 ): (number | null)[] {
   return columns.map((c) => {
     for (let i = readings.length - 1; i >= 0; i--) {
-      if (readings[i].date === c.date && readings[i].slot === c.slot) return readings[i].temp;
+      if (readings[i].date === c.date && normalizeSlot(readings[i].slot) === c.slot) {
+        return readings[i].temp;
+      }
     }
     return null;
   });
