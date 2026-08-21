@@ -55,21 +55,26 @@ The owner of a pizzeria. ZERO coding knowledge — treat them like a smart kid:
   zero at the bottom end.
 - **The temp graph is a line graph, at the owner's explicit ask (Aug 2026)** — it REPLACED the
   v1.21.0 dot rows. X is TIME: the last 3 (date, slot) moments any station was read, labeled
-  slot-over-date; the shaping is `temps/tempChart.ts` (pure, tested). Y is a FIXED 28–60 °F
-  scale split at 40 — 28–40 GOOD wash, 40–60 DANGER ZONE wash — the owner's own thresholds
-  (their freezer runs ~32 °F, their word, so it fits the same scale). A reading past 60 draws
-  as an accent arrow out the top with its true figure plus the "Check foods / Check chicken"
-  warning; below 28 mirrors it in ink, quietly. STRAIGHT segments — three points is a record,
-  not a curve; a missed slot breaks the line, never interpolates. The station pills above it
+  slot-over-date; the shaping is `temps/tempChart.ts` (pure, tested). Y is a FIXED 28–50 °F
+  scale split at 40 — 28–40 GOOD wash, 40–50 DANGER ZONE wash — the owner's own thresholds,
+  re-chosen v1.26.0 (their freezer runs ~32 °F, their word, so it fits the same scale). A
+  reading past 50 draws as an accent arrow out the top AND raises a red `.setout` box above
+  the chart ("Too high — check foods · check chicken", station: figure slot date) — words were
+  moved OFF the plot because data lines crossed them; the box fires for hot readings on
+  UNSELECTED stations too (`overLimitReadings`), a food-safety fact never hides behind a pill.
+  Below 28 mirrors quietly in ink with its figure. STRAIGHT segments — a missed slot breaks
+  the line, never interpolates. **No tap readout and no crosshair** (owner removed them,
+  v1.26.0): the graph is for shape, History for numbers. The station pills above it
   multi-select, persist per phone (`temppicks`), and colour lines by PICK ORDER from four
   measured hues (large blue → boli purple → warn ochre → small red; worst pair ΔE 18.8 CVD /
   19.6 normal on paper) — eight per-station hues were measured and don't exist: every teal
   collides with the Large blue. The pill wears its line's dot, so the pills are the legend.
-  The tab's History card (`temps/TempHistory.tsx`) words the same last-3 data and shares the
-  graph's phone cache — one truth, two tellings. `Today's temps` opens by default
-  (`defaultOpen` on `Collapsible`; a session's own tap still wins). Each temp input wears a
-  save chip driven by `engine.recordStatus(date, 'temps')` — the temps record's OWN state,
-  never the whole date's, or a busy dough side makes a saved temperature look unsaved (it did).
+  The tab's History card (`temps/TempHistory.tsx`) shows each station's LAST temp only, one
+  line each (owner's ask — last-3 wrapped and read as clutter), sharing the graph's phone
+  cache. `Today's temps` opens by default (`defaultOpen` on `Collapsible`; a session's own
+  tap still wins). Each temp input wears a save chip driven by
+  `engine.recordStatus(date, 'temps')` — the temps record's OWN state, never the whole
+  date's, or a busy dough side makes a saved temperature look unsaved (it did).
 - **The Graphs drawer stays SIMPLE (owner's choice, Aug 2026).** A Gap view, a Table view and a
   one-sentence summary were built, shipped in v1.18.0, and removed at the owner's ask in
   v1.19.0 — one chart, the pill rows and the tap readout are the whole surface. Don't re-add

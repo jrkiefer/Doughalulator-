@@ -1086,7 +1086,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 0;
+  padding: 3px 0;
 }
 
 .temp-row .label {
@@ -1397,15 +1397,11 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.temp-arrow-value.over {
-  fill: var(--accent);
-}
-
-.temp-warning {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  fill: var(--accent);
+/* The graph's dots — small and quiet; nothing here is tappable. */
+.temp-dot {
+  fill: var(--line);
+  stroke: var(--paper);
+  stroke-width: 1.5;
 }
 
 /* Time-axis labels: the slot carries the meaning, the date sits under it. */
@@ -1457,9 +1453,7 @@ button:focus-visible {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-mute);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 

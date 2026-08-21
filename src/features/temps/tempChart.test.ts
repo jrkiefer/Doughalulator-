@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { fmtTemp, normalizeSlot, slotRank, stationSeries, timeColumns } from './tempChart';
+import {
+  fmtTemp,
+  normalizeSlot,
+  overLimitReadings,
+  SCALE_MAX,
+  slotRank,
+  stationSeries,
+  timeColumns,
+} from './tempChart';
 import type { RecentTemps, TempReading } from '../../services/tempsService';
 
 const r = (date: string, slot: string, temp: number): TempReading => ({
@@ -101,6 +109,25 @@ describe('slotRank', () => {
   it('puts the three slots in day order', () => {
     expect(slotRank('Morning')).toBeLessThan(slotRank('2 PM'));
     expect(slotRank('2 PM')).toBeLessThan(slotRank('Night'));
+  });
+});
+
+describe('overLimitReadings — the warning box never misses a hot reading', () => {
+  it('collects every reading above the scale top, with a normalized slot', () => {
+    const stations: RecentTemps = {
+      'Pizza 1': [r('2026-08-20', '2:00 PM', 38), r('2026-08-20', 'Night', 66)],
+      Slice: [r('2026-08-19', '2:00 PM', 63)],
+      Freezer: [r('2026-08-20', 'Night', 32)],
+    };
+    expect(overLimitReadings(stations)).toEqual([
+      { station: 'Pizza 1', temp: 66, slot: 'Night', date: '2026-08-20' },
+      { station: 'Slice', temp: 63, slot: '2 PM', date: '2026-08-19' },
+    ]);
+  });
+
+  it('exactly the scale top is not over it, and no data raises nothing', () => {
+    expect(overLimitReadings({ A: [r('2026-08-20', 'Night', SCALE_MAX)] })).toEqual([]);
+    expect(overLimitReadings({})).toEqual([]);
   });
 });
 

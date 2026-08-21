@@ -11,7 +11,7 @@ import {
   cachedTempPicks,
 } from '../../services/local';
 import { Collapsible } from '../shared/Collapsible';
-import { fmtTemp, stationSeries, timeColumns } from './tempChart';
+import { fmtTemp, overLimitReadings, stationSeries, timeColumns } from './tempChart';
 import { TempLines, type TempSeries } from './TempLines';
 
 /**
@@ -34,7 +34,6 @@ export function TempGraph() {
   const [note, setNote] = useState('');
   // First ever open shows one station; after that, whatever was chosen last.
   const [picks, setPicks] = useState<string[]>(() => cachedTempPicks() ?? ['Pizza 1']);
-  const [active, setActive] = useState<number | null>(null);
 
   async function load() {
     setBusy(true);
@@ -67,8 +66,9 @@ export function TempGraph() {
     temps: stationSeries(stations?.[station] ?? [], columns),
   }));
   const drawn = series.filter((s) => s.temps.some((t) => t !== null));
-
-  const column = active === null ? null : (columns[active] ?? null);
+  // Every hot reading in the data, drawn station or not — a temperature past
+  // the limit is a food-safety fact and must not hide behind a pill.
+  const hot = stations ? overLimitReadings(stations) : [];
 
   return (
     <Collapsible id="tempgraph" title="Temp graph" note={stations ? 'LOADED' : 'OFF'}>
@@ -108,6 +108,19 @@ export function TempGraph() {
             })}
           </div>
 
+          {hot.length > 0 && (
+            <div className="setout">
+              <span className="label">Too high — check foods · check chicken</span>
+              <div className="setout-list">
+                {hot.map((h) => (
+                  <span key={`${h.station}|${h.date}|${h.slot}`}>
+                    {h.station}: {fmtTemp(h.temp)} {h.slot} {shortDate(h.date)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {drawn.length === 0 ? (
             <p className="days-work-note">
               {picks.length === 0
@@ -115,38 +128,11 @@ export function TempGraph() {
                 : 'Nothing recorded for the chosen stations yet.'}
             </p>
           ) : (
-            <>
-              {/* The readout keeps its height whether or not anything is
-                  picked, so tapping the chart never shunts it up the page. */}
-              <div className={`chart-readout${column ? '' : ' idle'}`}>
-                {column ? (
-                  <>
-                    <span className="at">
-                      {column.slot} {shortDate(column.date)}
-                    </span>
-                    {drawn.map((s) => {
-                      const temp = active === null ? null : s.temps[active];
-                      return temp === null ? null : (
-                        <span className="pair" key={s.station}>
-                          <span className="key" style={{ ['--line' as string]: s.color }} />
-                          {s.station} <strong>{fmtTemp(temp)}</strong>
-                        </span>
-                      );
-                    })}
-                  </>
-                ) : (
-                  'Tap the graph to read a time.'
-                )}
-              </div>
-
-              <TempLines
-                title="Chosen stations' recent temperatures over the last reading times, in degrees Fahrenheit"
-                columns={columns}
-                series={drawn}
-                activeIndex={active}
-                onActive={setActive}
-              />
-            </>
+            <TempLines
+              title="Chosen stations' recent temperatures over the last reading times, in degrees Fahrenheit"
+              columns={columns}
+              series={drawn}
+            />
           )}
         </>
       )}

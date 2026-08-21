@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { defaultConfig } from '../../config';
 import { cachedTempGraph, cacheTempGraph } from '../../services/local';
-import { fetchRecentTemps, type RecentTemps, type TempReading } from '../../services/tempsService';
+import { fetchRecentTemps, type RecentTemps } from '../../services/tempsService';
 import { Collapsible } from '../shared/Collapsible';
 import { fmtTemp, normalizeSlot } from './tempChart';
 
@@ -11,9 +11,10 @@ function shortDate(iso: string): string {
 }
 
 /**
- * The temps tab's History: each station's last three readings, straight off
- * the Log — the same data (and the same phone cache) the graph draws, worded
- * instead of plotted. Phone copy paints instantly; the sheet refreshes it.
+ * The temps tab's History: each station's LAST reading, one line each (owner's
+ * ask, Aug 2026 — the last-three version wrapped and read as clutter). Same
+ * data and phone cache as the graph. Phone copy paints instantly; the sheet
+ * refreshes it.
  */
 export function TempHistory() {
   const [stations, setStations] = useState<RecentTemps | null>(() => cachedTempGraph<RecentTemps>());
@@ -42,16 +43,13 @@ export function TempHistory() {
   }, []);
 
   // Walking order, exactly as the inputs above — never the response's order.
+  // One line per station: its last known temp, and when it was taken.
   const rows = defaultConfig.stations
-    .map((station) => ({ station, readings: stations?.[station] ?? [] }))
-    .filter((row) => row.readings.length > 0);
-
-  const reading = (r: TempReading, last: boolean) => (
-    <span className="pair" key={`${r.date}|${r.slot}`}>
-      {last ? <strong>{fmtTemp(r.temp)}</strong> : fmtTemp(r.temp)} {normalizeSlot(r.slot)}{' '}
-      {shortDate(r.date)}
-    </span>
-  );
+    .map((station) => {
+      const readings = stations?.[station] ?? [];
+      return { station, last: readings[readings.length - 1] };
+    })
+    .filter((row) => row.last !== undefined);
 
   return (
     <div className="band">
@@ -60,11 +58,12 @@ export function TempHistory() {
           {rows.length === 0 && (
             <p className="days-work-note">No temperatures recorded yet — this fills in as readings are taken.</p>
           )}
-          {rows.map((row) => (
-            <div className="temp-history-row" key={row.station}>
-              <span className="station">{row.station}</span>
+          {rows.map(({ station, last }) => (
+            <div className="temp-history-row" key={station}>
+              <span className="station">{station}</span>
               <span className="readings">
-                {row.readings.map((r, i) => reading(r, i === row.readings.length - 1))}
+                <strong>{fmtTemp(last!.temp)}</strong> {normalizeSlot(last!.slot)}{' '}
+                {shortDate(last!.date)}
               </span>
             </div>
           ))}

@@ -3,16 +3,17 @@
  * onto the shared time axis is provable rather than eyeballed.
  *
  * The x axis is TIME: the last few (date, slot) moments any station was read,
- * in slot order within the day. The y axis is a FIXED 28–60 °F scale split at
- * 40 — 28–40 is the fridge-safe zone, 40–60 the danger zone (owner's spec,
+ * in slot order within the day. The y axis is a FIXED 28–50 °F scale split at
+ * 40 — 28–40 is the fridge-safe zone, 40–50 the danger zone (owner's spec,
  * Aug 2026; their freezer runs ~32 °F so it fits the same scale). A reading
- * past either end is drawn as an arrow out of the plot, not silently clamped.
+ * past either end is drawn as an arrow out of the plot, not silently clamped,
+ * and anything above 50 also raises the red warning box beside the chart.
  */
 import type { RecentTemps, TempReading } from '../../services/tempsService';
 
 export const SCALE_MIN = 28;
 export const SAFE_MAX = 40;
-export const SCALE_MAX = 60;
+export const SCALE_MAX = 50;
 
 export interface TimeColumn {
   date: string;
@@ -72,6 +73,30 @@ export function stationSeries(
     }
     return null;
   });
+}
+
+export interface OverLimit {
+  station: string;
+  temp: number;
+  slot: string;
+  date: string;
+}
+
+/**
+ * Every loaded reading above the scale's top, for the warning box. Deliberately
+ * NOT limited to the stations currently drawn: a temperature past 50 is a
+ * food-safety fact, and a fact like that must not hide behind a pill.
+ */
+export function overLimitReadings(stations: RecentTemps): OverLimit[] {
+  const hot: OverLimit[] = [];
+  for (const [station, readings] of Object.entries(stations)) {
+    for (const r of readings) {
+      if (r.temp > SCALE_MAX) {
+        hot.push({ station, temp: r.temp, slot: normalizeSlot(r.slot), date: r.date });
+      }
+    }
+  }
+  return hot;
 }
 
 export function fmtTemp(value: number): string {
