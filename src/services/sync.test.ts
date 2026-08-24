@@ -54,9 +54,9 @@ function makeWorld(opts: { debounceMs?: number } = {}) {
       }
       return { type, date, body };
     },
-    post: async (target, payload, o) => {
+    post: (target, payload, o) => {
       posts.push({ target, payload, keepalive: o?.keepalive ?? false });
-      return outcomes.shift() ?? { kind: 'ok', data: { ok: true } };
+      return Promise.resolve(outcomes.shift() ?? { kind: 'ok', data: { ok: true } });
     },
     setTimer: (fn, ms) => {
       timers.push({ fn, ms, id: ++timerId });
@@ -246,7 +246,7 @@ describe('the retry ladder — "WILL RETRY" with a clock behind it', () => {
 
     const ladder: number[] = [];
     for (let i = 0; i < 7; i++) {
-      ladder.push(world.timerDelays()[0]);
+      ladder.push(world.timerDelays()[0]!);
       await world.fireTimers();
       await settle();
     }
@@ -375,7 +375,7 @@ describe('page-hide keepalive (§3c)', () => {
     typeSales(world);
     await world.engine.flush({ keepalive: true });
     expect(world.posts).toHaveLength(1);
-    expect(world.posts[0].keepalive).toBe(true);
+    expect(world.posts[0]!.keepalive).toBe(true);
     // Still dirty: if the keepalive died with the page, the boot retry has it.
     expect(world.engine.status(D).state).toBe('saving');
   });
@@ -493,6 +493,74 @@ describe('two-phone merge (§4)', () => {
     expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('8');
     expect(world.engine.isDirty(D)).toBe(false);
   });
+
+  it('a dough force-load leaves a DIRTY temp reading dirty — never stamped synced', async () => {
+    // The trap this pins: the sheet-truth stamp must touch ONLY the record
+    // types the fetch replaces. Stamping every type once marked an unsent
+    // temperature "synced" during a force-load — its retry stood down and the
+    // reading would never have reached the Temp Log unless edited again.
+    const world = makeWorld();
+    world.setOutcomes([{ kind: 'retryable', error: 'temp log unreachable' }]);
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    await world.engine.flush(); // the temps notebook is down: still dirty
+    expect(world.engine.recordStatus(D, 'temps').state).toBe('offline');
+
+    world.engine.overwrite(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
+    });
+    // The reading survives AND is still owed to the sheet.
+    expect(world.engine.getEntry(D).temps!.readings.morning['Pizza 1']).toBe('38');
+    expect(world.engine.isDirty(D, ['temps'])).toBe(true);
+
+    // The next flush really does deliver it (the fake network answers ok).
+    await world.engine.flush();
+    expect(world.posts.filter((p) => p.target === 'temps')).toHaveLength(2);
+    expect(world.engine.recordStatus(D, 'temps').state).toBe('synced');
+  });
+
+  it('a dirty TEMP does not block the dough side from refreshing — different notebook', () => {
+    // The background merge's dirty check is scoped to the types the fetch
+    // replaces: the fetch does not touch temps, so a half-typed temperature
+    // is no reason to keep a stale dough copy on screen.
+    const world = makeWorld();
+    world.engine.edit(D, 'temps', (rec) => {
+      rec.readings.morning['Pizza 1'] = '38';
+    });
+    const result = world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
+      entry.day = fetchedDay('8');
+    });
+    expect(result).toBe('replaced');
+    expect(world.engine.getEntry(D).day!.form.todayForecast).toBe('8');
+    // …while the temp reading stays exactly as typed, and stays dirty.
+    expect(world.engine.getEntry(D).temps!.readings.morning['Pizza 1']).toBe('38');
+    expect(world.engine.isDirty(D, ['temps'])).toBe(true);
+  });
+
+  it('a dirty DAY record still blocks the merge, exactly as before', () => {
+    const world = makeWorld();
+    typeSales(world, '7.7');
+    expect(
+      world.engine.applyFetched(D, FROM_DOUGH_SHEET, (entry) => {
+        entry.day = fetchedDay('8');
+      }),
+    ).toBe('kept-dirty');
+  });
+});
+
+describe('a rounding tap alone is content — both pills, symmetrically', () => {
+  it('a forecast-rounding tap dirties the day record like a batch tap does', () => {
+    // Each tap is a decision the other phone must see. The forecast pill was
+    // once left out of the content check, so a tap-only day read as NEW and
+    // never posted anywhere.
+    const world = makeWorld();
+    world.engine.edit(D, 'day', (rec) => {
+      rec.forecastRound = 'down';
+    });
+    expect(world.engine.recordStatus(D, 'day').state).not.toBe('new');
+    expect(world.engine.isDirty(D, ['day'])).toBe(true);
+  });
 });
 
 describe('derived records resync — the new math is always saved', () => {
@@ -518,7 +586,7 @@ describe('derived records resync — the new math is always saved', () => {
     await world.engine.flush();
     const types = world.posts.map((p) => (p.payload as { type: string }).type);
     expect(types).toEqual(['day', 'eon', 'day', 'eon']);
-    expect((world.posts[3].payload as { need: string }).need).toBe('10.5');
+    expect((world.posts[3]!.payload as { need: string }).need).toBe('10.5');
     expect(world.engine.status(D).state).toBe('synced');
   });
 

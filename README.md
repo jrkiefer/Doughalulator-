@@ -142,6 +142,31 @@ calculation engine, so past dates are filled in. Things worth knowing:
 
 ---
 
+### Selling or moving this app — the whole handover, in order
+
+Everything below already appears somewhere on this page; this list is the order to do it in when
+the app changes hands (or the notebooks move to a different Google account). Nothing else is
+attached to the old owner.
+
+1. **Two new Google spreadsheets** in the new owner's account. In each: Extensions → Apps Script,
+   paste the matching file from `apps-script/` (`dough/Code.gs`, `temps/Code.gs`), run `setup()`
+   once, then Deploy → New deployment → Web app, "Execute as: Me", "Access: Anyone". Copy the two
+   `/exec` addresses.
+2. **Point the app at them:** the two addresses in `src/services/sheets.ts`. This is the only
+   wiring there is.
+3. **Host it yourself:** fork or transfer this repo, turn on GitHub Pages (the workflow in
+   `.github/` publishes `main` automatically), and the live address changes with it. Phones then
+   add the new address to their home screens.
+4. **Make the data yours.** The bibles in `src/data/` and every number in `src/config/` (stations,
+   balls per tray, the $13,000 slow-day gate, batch size…) are THIS restaurant's. A new kitchen
+   needs its own bible tables and its own constants — that is data entry plus a config edit, no
+   engine changes.
+5. **History is portable too:** past records live in the notebooks, and
+   `scripts/import-history.ts` can replay records into a fresh Dough Log (dry → live → verify).
+
+There is no license file in this repo; ownership travels with whatever the sale agreement says,
+so put it in writing there.
+
 ## Everyday things worth knowing
 
 - **The app saves by itself.** Every number typed is kept on the phone instantly and sent to Google
@@ -157,6 +182,12 @@ calculation engine, so past dates are filled in. Things worth knowing:
   a temperature log is a record of measurements actually taken, and filling one in with yesterday's
   numbers is the exact thing a health inspector looks for.
 - The **◀ ▶** arrows step a day at a time, and the date itself opens a calendar.
+- **Closing out after midnight?** The calendar has already turned, so a fresh open lands on the
+  new day. Until 5 AM the date card reminds you: last night is yesterday's date — tap ◀ before
+  entering the close. The app never switches dates by itself.
+- **The first open needs signal.** Once loaded, everything typed keeps working offline and syncs
+  itself later — but the page itself comes from the web, so a phone that has never opened it (or
+  cleared its browser) needs a connection that first time.
 - **Don't rename** the spreadsheets' tabs, their column headers, or the station tabs. The app finds
   everything by those exact names.
 - **Don't reformat the number columns** either — no commas, no dollar signs. The app reads a cell
@@ -213,6 +244,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.27.0** | The production-readiness pass, done after a full line-by-line review. **Four real fixes:** a force-load can no longer quietly mark an unsent temperature as saved; "Up to date ✓" now also compares the forecast-rounding tap, so a tap made on the other phone loads properly; a rounding tap alone now counts as something worth saving (both pills, symmetrically); and a half-typed temperature no longer blocks the dough side from refreshing. **The notebooks got tougher:** a save now checks every page's headings before writing anything, so a moved heading can never leave a half-saved day; a make that gets un-decided is now cleared off the sheet instead of lingering where the self-building bible would read it; Google's own hiccups now retry quietly instead of showing a red refusal nobody can act on; and the Temp Log got the same protections the Dough Log already had (moved headings refused, stray notes unable to derail saves or the graph). **New on screen:** a reminder on the date card after midnight (last night is yesterday's date — tap ◀), and if the app ever crashes it now shows a calm "nothing typed has been lost — reload" card instead of a blank page. **Under the hood, for whoever maintains this next:** proper home-screen icons and app identity (no more grey screenshot tile on iPhone), the whole toolchain brought current (React 19, Vite 8, Vitest 4, TypeScript 5.9, pinned to Node 22), stricter compiler and lint settings that read the actual types, dead styles and dead code removed, the one-off importer's stale Boli check fixed, and a step-by-step handover list added above for if the app ever changes hands. All 310 tests pass. |
 | **1.26.1** | Breathing room between the station buttons and the red too-high box on the temp graph. And both of the repo's documents — this page and `CLAUDE.md` — were trimmed to hold only information about the app and its code: stale references cleaned out, the folder list corrected. |
 | **1.26.0** | The temps tab cleaned up on your marked screenshots. The graph's **danger zone is now 40–50** (the scale tops out at 50), and anything above 50 shows as an arrow out the top plus a **red warning box above the graph** — same style as the set-out dough alert — naming the station, the figure and when ("Pizza 1: 66° Night 8/20"). The words no longer sit inside the graph where lines crossed them out. The tap-to-read line is gone — **History now simply shows each station's last known temp**, one clean line each — and the temperature entry rows sit tighter so the list reads as one card. |
 | **1.25.0** | The Station Temps tab got four asks in one go. **Every temp now wears its own save tag**: type or change a reading and its little chip goes *saving…* then *saved* the moment the Temp Log has it — before this, the tag watched the whole day including the dough numbers, so a saved temperature could sit there looking unsaved just because the dough side was busy. **History on this tab is now temp history**: each station's last three readings in plain words, newest in bold — the same figures the graph draws. **Today's temps starts open** — no tap to reach the boxes. And behind the scenes, each tab's code now lives fully in its own folder (2 PM, EON, Temps each own their whole page), so future changes to one tab can't trip over another. |

@@ -521,13 +521,10 @@ button:focus-visible {
   border-radius: var(--radius);
   padding: 12px;
   box-shadow: var(--shadow);
-  /* a 5% wash of the size's own colour over the paper */
-  background:
-    linear-gradient(
-      color-mix(in srgb, var(--size, var(--ink)) 5%, transparent),
-      color-mix(in srgb, var(--size, var(--ink)) 5%, transparent)
-    ),
-    var(--paper);
+  /* A 5% wash of the size's own colour mixed straight into the paper — one
+     flat colour, honouring the no-gradients rule to the letter (this used to
+     be a two-stop gradient trick that merely LOOKED flat). */
+  background-color: color-mix(in srgb, var(--size, var(--ink)) 5%, var(--paper));
 }
 
 .count-card.wide {
@@ -730,15 +727,6 @@ button:focus-visible {
   font-size: 12px;
   color: var(--ink-mute);
   margin: 8px 0 0;
-}
-
-.days-work-note.spaced {
-  margin-top: 10px;
-}
-
-.days-work-note .lede {
-  color: var(--ink);
-  font-size: 15px;
 }
 
 /* ————— by size table ————— */
@@ -1035,38 +1023,6 @@ button:focus-visible {
   color: var(--ink-mute);
 }
 
-.verdict {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-  padding: 6px 2px;
-}
-
-.verdict.ok {
-  color: var(--good);
-}
-
-.verdict.bad {
-  color: var(--neg);
-}
-
-.short-list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--neg);
-  font-variant-numeric: tabular-nums;
-}
-
-.short-list li {
-  padding: 4px 0;
-}
-
 .closed-chip {
   font-family: var(--font-display);
   font-size: 20px;
@@ -1120,11 +1076,6 @@ button:focus-visible {
   font-size: 11px;
   color: var(--ink-mute);
   pointer-events: none;
-}
-
-.pill-block {
-  display: block;
-  margin: 14px auto 0;
 }
 
 /* ————— collapsibles ————— */
@@ -1354,7 +1305,7 @@ button:focus-visible {
 }
 
 /* ————— the temps graph ————— */
-/* The two zones the fixed 28–60 scale splits into. Faint washes: the lines
+/* The two zones the fixed 28–50 scale splits into. Faint washes: the lines
    are the data, the bands are the verdict on where they sit. */
 .temp-band-good {
   fill: color-mix(in srgb, var(--good) 7%, transparent);
@@ -1506,11 +1457,6 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.history .short-dot {
-  color: var(--accent);
-  font-size: 10px;
-}
-
 /* ————— bible viewer ————— */
 .bible-viewer {
   display: block;
@@ -1633,12 +1579,6 @@ button:focus-visible {
   color: var(--accent);
 }
 
-.micro.sublabel {
-  display: block;
-  margin-top: 4px;
-  text-transform: none;
-}
-
 .dollar-echo {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1657,6 +1597,34 @@ button:focus-visible {
   font-size: 13px;
   font-weight: 700;
   margin: 6px 4px 4px;
+}
+
+/* ————— the crash card (ErrorBoundary) ————— */
+/* Worn only when a render throws. Same paper and type as every other card,
+   so even the failure screen is recognisably this app. */
+.crash-card {
+  margin-top: 24px;
+}
+
+.crash-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 4px 0 8px;
+}
+
+.crash-body {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+/* The raw error text: for relaying to a helper, not for reading. */
+.crash-detail {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  overflow-wrap: anywhere;
+  margin: 0 0 14px;
 }
 
 /* ————— misc ————— */

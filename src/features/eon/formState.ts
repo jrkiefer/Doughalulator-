@@ -1,9 +1,13 @@
 import { emptyCountsFields, type CountsFields } from '../shared/counts';
 
-/** Everything the owner types on the EON page. */
+/** Everything the owner types on the EON page. Blank ≠ zero throughout. */
 export interface EonForm extends CountsFields {
   finalSales: string;
-  /** Only used when there is no 2 PM record for the date. */
+  /**
+   * Tomorrow's forecast as typed HERE. Once typed it overrides the 2 PM
+   * save's figure (the engine's `needSource` becomes 'manualForecast');
+   * cleared, the afternoon's figure takes over again.
+   */
   manualTomorrowForecast: string;
 }
 

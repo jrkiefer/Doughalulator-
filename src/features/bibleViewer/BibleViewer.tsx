@@ -63,11 +63,14 @@ export function BibleViewer(props: {
         <div className="micro bible-name">
           {props.bible.name}
         </div>
+        {/* The AUTO tag teaches the rule only when the rule actually fired:
+            "SLOW DAY = DOWN" beside a highlighted Round UP pill read as a
+            contradiction, so an ordinary night just says AUTO. */}
         <RoundingPills
           label="ROUNDING"
           active={props.forecastRound}
           isAuto={props.forecastAuto}
-          autoText="AUTO · SLOW DAY = DOWN"
+          autoText={props.forecastRound === 'down' ? 'AUTO · SLOW DAY = DOWN' : undefined}
           onPick={props.onForecastRound}
         />
         <table>

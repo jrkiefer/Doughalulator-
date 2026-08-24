@@ -111,7 +111,12 @@ export const engine = createSyncEngine({
   buildPayload: (type, date, entry) => {
     if (type === 'day') {
       const day = entry.day;
-      if (!day || (!formHasContent(day.form) && day.rounding === null)) return null;
+      // A record is worth sending when the owner typed anything OR tapped
+      // either rounding pill — both taps are decisions the other phone must
+      // see, symmetrically (the forecast pill was once left out here, so a
+      // tap-only day never posted).
+      const tapped = day && (day.rounding !== null || (day.forecastRound ?? null) !== null);
+      if (!day || (!formHasContent(day.form) && !tapped)) return null;
       const form = { ...emptyTwoPmForm, ...day.form };
       const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null);
       return { type: 'day', date, tabs: dayRecordToTabWrites(record, amUseFor(date, record)) };
@@ -120,9 +125,12 @@ export const engine = createSyncEngine({
       const eon = entry.eon;
       if (!eon || !formHasContent(eon.form)) return null;
       const eonForm = { ...emptyEonForm, ...eon.form };
+      // The EON maths leans on the afternoon's record when one exists. "Exists"
+      // uses the same bar as the day payload above: typed content or either
+      // rounding tap.
       const day = entry.day;
       const dayRecord =
-        day && (formHasContent(day.form) || day.rounding !== null)
+        day && (formHasContent(day.form) || day.rounding !== null || (day.forecastRound ?? null) !== null)
           ? buildDayRecord(date, { ...emptyTwoPmForm, ...day.form }, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null)
           : null;
       const record = runEonCalculation(

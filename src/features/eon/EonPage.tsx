@@ -1,3 +1,13 @@
+/**
+ * The whole EON tab, top to bottom: final sales, the closing count, the
+ * outlook card (have vs tomorrow's need, all five sizes), then History and
+ * the Dough Bible. App.tsx only decides WHICH tab is showing.
+ *
+ * The EON record is computed right here on every render — pure and cheap —
+ * from the form plus the day record App passes down. The engine's own copy
+ * (built in engine.ts for the sheet payload) runs the same function on the
+ * same inputs, so screen and sheet can never disagree.
+ */
 import { defaultConfig, type BibleId } from "../../config";
 import { runEonCalculation } from "../../core";
 import type { DoughDayRecord, RoundDirection, SizeKey } from "../../core/types";
@@ -174,7 +184,7 @@ export function EonPage(props: {
 
           {showRows &&
             OUTLOOK_ROWS.map(({ key, name, color }) => {
-              const row = outlook!.rows[key];
+              const row = outlook.rows[key];
               const known = row.diff !== null && row.trays !== null;
               return (
                 <div
@@ -221,19 +231,19 @@ export function EonPage(props: {
               );
             })}
 
-          {showRows && outlook!.anyCounted && (
+          {showRows && outlook.anyCounted && (
             <div
-              className={`outlook-summary${outlook!.shortfallBalls > 0 ? "" : " good"}`}
+              className={`outlook-summary${outlook.shortfallBalls > 0 ? "" : " good"}`}
             >
-              {outlook!.shortfallBalls > 0
+              {outlook.shortfallBalls > 0
                 ? `Tomorrow we will potentially go into same-day dough by ${
-                    outlook!.shortTrays >= 1
-                      ? `~${outlook!.shortTrays} ${outlook!.shortTrays === 1 ? "tray" : "trays"}`
+                    outlook.shortTrays >= 1
+                      ? `~${outlook.shortTrays} ${outlook.shortTrays === 1 ? "tray" : "trays"}`
                       : "less than a tray"
-                  } (${outlook!.shortfallBalls} balls).`
-                : `Dough is good \u2713 — ~${outlook!.surplusTrays} ${
-                    outlook!.surplusTrays === 1 ? "tray" : "trays"
-                  } leftover (${outlook!.surplusBalls} balls).`}
+                  } (${outlook.shortfallBalls} balls).`
+                : `Dough is good \u2713 — ~${outlook.surplusTrays} ${
+                    outlook.surplusTrays === 1 ? "tray" : "trays"
+                  } leftover (${outlook.surplusBalls} balls).`}
             </div>
           )}
         </div>

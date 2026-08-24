@@ -133,13 +133,13 @@ function setup() {
  */
 function makeTab(ss, name) {
   if (name.length > NAME_LIMIT) {
-    throw new Error('tab name too long for Google (' + name.length + ' chars): ' + name);
+    throw refuse('tab name too long for Google (' + name.length + ' chars): ' + name);
   }
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
     if (sheet.getName() !== name) {
-      throw new Error('Google renamed the tab to "' + sheet.getName() + '" instead of "' + name + '"');
+      throw refuse('Google renamed the tab to "' + sheet.getName() + '" instead of "' + name + '"');
     }
   }
   return sheet;
@@ -266,19 +266,49 @@ function removeRetiredTabs() {
 
 // ----- write path -----
 
+/**
+ * Mark an error as one of OUR OWN refusals — a structural problem the owner
+ * can act on (a moved heading, a missing tab, a too-long name). The catch in
+ * doPost answers these terminally, in plain words, so the phone TELLS rather
+ * than retries. Anything thrown WITHOUT this mark is Google misbehaving
+ * mid-request (a transient service error, a quota hiccup) and is answered
+ * retryable-shaped instead: the app's backoff ladder handles those far
+ * better than a red "SHEET REFUSED" the owner cannot do anything about.
+ */
+function refuse(message) {
+  var err = new Error(message);
+  err.plainRefusal = true;
+  return err;
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) {
     return jsonOut({ ok: false, retryable: true, error: 'busy - another save is writing; try again' });
   }
   try {
-    var body = JSON.parse(e.postData.contents);
+    var body;
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      // A body that is not JSON can never BECOME JSON by resending it.
+      return jsonOut({ ok: false, error: 'unreadable save: ' + String(parseErr) });
+    }
 
     if (body.type === 'day' || body.type === 'eon') {
       var problem = validateSave(body);
       if (problem) return jsonOut({ ok: false, error: problem });
-      (body.tabs || []).forEach(function (write) {
-        upsertRow(write.tab, write.row);
+      // Two phases, so a refusal can never leave a HALF-WRITTEN day behind:
+      // every tab's block is read and its headings checked first, and only
+      // once all of them pass does anything get written. (Before this, a
+      // moved heading on the third tab refused the save with the first two
+      // already written.) Same total Sheets calls as before - one read and
+      // one write per tab - just reordered.
+      var prepared = (body.tabs || []).map(function (write) {
+        return prepareUpsert(write.tab, write.row);
+      });
+      prepared.forEach(function (p) {
+        if (p) commitUpsert(p);
       });
       // A finished night changes the history the suggestion is fitted from.
       if (body.type === 'eon') refreshBibleBuilds();
@@ -291,7 +321,9 @@ function doPost(e) {
     // delete-everything button on the open internet. It lives in the menu.
     return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
   } catch (err) {
-    return jsonOut({ ok: false, error: String(err) });
+    // Our own guards refuse terminally; everything else is Google's moment.
+    if (err && err.plainRefusal) return jsonOut({ ok: false, error: err.message });
+    return jsonOut({ ok: false, retryable: true, error: String(err) });
   } finally {
     lock.releaseLock();
   }
@@ -369,7 +401,7 @@ function assertHeaders(tabName, expected, actual) {
   for (var i = 0; i < expected.length; i++) {
     var found = String(actual[i] === undefined || actual[i] === null ? '' : actual[i]).trim();
     if (found !== expected[i]) {
-      throw new Error(
+      throw refuse(
         'the "' + tabName + '" tab has moved its columns - ' + colLetter(i + 1) +
         '1 should say "' + expected[i] + '" but says "' + found +
         '". Put that heading back, or run Dough Tools > Re-run setup.');
@@ -378,17 +410,23 @@ function assertHeaders(tabName, expected, actual) {
 }
 
 /**
- * Merge-upsert one row into a tab by Date. Only the provided columns
- * change (blank = clear): the tab's data block is read ONCE - which yields
- * the header row, the matching row's position and its current values - the
- * payload's columns are overlaid, and the row goes back in ONE ranged write.
+ * Phase 1 of a merge-upsert: read the tab's data block ONCE - which yields
+ * the header row, the matching row's position and its current values - check
+ * the headings, and work out exactly what the write will be. NOTHING is
+ * written here: doPost prepares every tab first so a refusal on any of them
+ * can never leave a half-written day behind.
  *
  * The read starts at row 1, not row 2, so the sheet's own headings come along
  * for free and can be checked before anything is written.
+ *
+ * Returns null for the one write that should not happen at all: a row whose
+ * payload cells are ALL blank landing on a date the tab has no row for.
+ * Blank cells exist to CLEAR (retract a make that no longer applies), and
+ * clearing a row that does not exist would only append date-only clutter.
  */
-function upsertRow(tabName, row) {
+function prepareUpsert(tabName, row) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(tabName);
-  if (!sheet) throw new Error('missing tab (run setup): ' + tabName);
+  if (!sheet) throw refuse('missing tab (run setup): ' + tabName);
   var headers = headersFor(tabName);
   var date = normalizeDate(row.Date);
 
@@ -412,8 +450,11 @@ function upsertRow(tabName, row) {
     }
   }
   if (rowIndex === -1) {
+    var anyContent = Object.keys(row).some(function (key) {
+      return key !== 'Date' && row[key] !== '' && row[key] !== null;
+    });
+    if (!anyContent) return null; // all-blank + no existing row: nothing to record
     rowIndex = lastDated + 1;
-    ensureRows(sheet, rowIndex);
     values = headers.map(function () { return ''; });
   }
   values[0] = date;
@@ -422,7 +463,15 @@ function upsertRow(tabName, row) {
     var c = headers.indexOf(key);
     if (c > 0) values[c] = row[key];
   });
-  sheet.getRange(rowIndex, 1, 1, headers.length).setValues([values]);
+  return { sheet: sheet, rowIndex: rowIndex, width: headers.length, values: values };
+}
+
+/** Phase 2: the one ranged write a prepared upsert boils down to. */
+function commitUpsert(prepared) {
+  ensureRows(prepared.sheet, prepared.rowIndex);
+  prepared.sheet
+    .getRange(prepared.rowIndex, 1, 1, prepared.width)
+    .setValues([prepared.values]);
 }
 
 /**
@@ -794,6 +843,8 @@ function doGet(e) {
       if (!date) return jsonOut({ ok: false, error: 'missing or invalid date: ' + p.date });
       return jsonOut({ ok: true, date: date, tabs: readDate(date) });
     }
+    // 'range' has one caller: scripts/import-history.ts --mode verify. The
+    // app itself asks only for 'date', 'recent' and 'bibles'.
     if (p.action === 'range') {
       var from = normalizeDate(p.from);
       var to = normalizeDate(p.to);
@@ -812,7 +863,10 @@ function doGet(e) {
     }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {
-    return jsonOut({ ok: false, error: String(err) });
+    // The read path has no guards of its own to refuse with, so anything
+    // thrown here is Google misbehaving mid-read - worth the app retrying,
+    // never worth a red "SHEET REFUSED" the owner cannot act on.
+    return jsonOut({ ok: false, retryable: true, error: String(err) });
   }
 }
 

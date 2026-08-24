@@ -21,7 +21,7 @@ export function HistoryCard(props: { onPick: (date: string) => void }) {
 
   useEffect(() => {
     let alive = true;
-    fetchHistory(RECENT_NIGHTS).then((result) => {
+    void fetchHistory(RECENT_NIGHTS).then((result) => {
       if (!alive) return;
       setRows(result.summaries);
       setNote(result.source === 'phone' ? 'showing the phone copy — sheet unreachable' : '');

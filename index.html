@@ -4,9 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
     <meta name="theme-color" content="#f3ece0" />
+    <!-- Declared here AND in styles.css: a phone's auto-dark-theme must never
+         invert bands of the page (that is what the black strips were). -->
     <meta name="color-scheme" content="light" />
     <title>Dough Tracker</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- Home-screen identity. The app lives on phone home screens via "Add to
+         Home Screen": the manifest gives Android a standalone window and a
+         real icon; the apple-touch-icon does the same for iOS, which ignores
+         SVG favicons and would otherwise tile a grey screenshot. Relative
+         paths throughout — the site is served from GitHub Pages' subfolder. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>

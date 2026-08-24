@@ -50,6 +50,18 @@ export interface BatchAdjustSplit {
   largeShare: number;
 }
 
+/**
+ * The just-after-midnight reminder on the date card. A close finished at
+ * 12:30 AM belongs to the evening that just ended — yesterday's date — but
+ * the calendar has already turned, so a fresh open lands on the new day.
+ * The app never switches dates by itself (guessing which night is meant
+ * would be worse); it says this out loud instead, until this clock time.
+ */
+export interface SmallHoursRule {
+  /** 'HH:MM' — the hint shows on today's date at clock times before this. */
+  before: string;
+}
+
 export interface TempSlotRules {
   /** Clock times strictly before this 'HH:MM' fall in the morning slot. */
   morningBefore: string;
@@ -76,6 +88,8 @@ export interface AppConfig {
   stations: string[];
   /** Temp slots: before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night. */
   tempSlots: TempSlotRules;
+  /** When the "still closing out last night?" hint shows on the date card. */
+  smallHours: SmallHoursRule;
 }
 
 export const defaultConfig: AppConfig = {
@@ -105,4 +119,5 @@ export const defaultConfig: AppConfig = {
     nightAfter: '17:00',
     names: { morning: 'Morning', midday: '2 PM', night: 'Night' },
   },
+  smallHours: { before: '05:00' },
 };

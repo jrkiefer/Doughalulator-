@@ -111,7 +111,7 @@ export default function App() {
     let alive = true;
     const seqBefore = engine.editSeq(date);
     const timer = setTimeout(() => {
-      fetchDate(date).then((result) => {
+      void fetchDate(date).then((result) => {
         if (!alive || result.kind !== 'loaded') return;
         // Keystroke guard: typing during the fetch discards the fetched record.
         if (engine.editSeq(date) !== seqBefore) return;
@@ -135,6 +135,15 @@ export default function App() {
   const status = engine.status(date);
   const synced = status.state === 'synced';
   const activeBible = bibleOverride ?? selectBibleId(date, cfg);
+
+  // Just after midnight the calendar has already turned but the SHIFT hasn't:
+  // an end-of-night count finished at 12:30 AM belongs to the evening that
+  // just ended — yesterday's date. The app never switches dates by itself
+  // (guessing which night is meant would be worse than either answer), so it
+  // says this out loud on the date card until the small hours pass. Checked
+  // per render: a keystroke or tap is what would bring someone here at that
+  // hour, so the hint appears exactly when it can matter.
+  const pastMidnight = date === todayIso() && nowHhMm() < cfg.smallHours.before;
 
   // ————— edits: React state + engine, in lockstep —————
 
@@ -193,7 +202,10 @@ export default function App() {
   // ————— load / reset —————
 
   async function handleLoad() {
-    if (engine.isDirty(date) && !loadArmed) {
+    // The confirmation warns only about edits this load would actually
+    // replace: LOAD FROM SHEET pulls the DOUGH notebook, so a half-typed
+    // temperature (the other notebook) is no reason to arm the warning.
+    if (engine.isDirty(date, DOUGH_SHEET_RECORDS) && !loadArmed) {
       setLoadArmed(true);
       setLoadMsg('This will replace unsynced edits — tap again to confirm.');
       return;
@@ -205,16 +217,22 @@ export default function App() {
     if (result.kind === 'unreachable') return setLoadMsg("Can't reach the sheet — check your connection.");
     if (result.kind === 'rejected') return setLoadMsg(`Sheet said no: ${result.reason}`);
 
+    // "Up to date" must compare EVERYTHING the fetch can change, or a
+    // difference gets reported as sameness and never pulled. The forecast
+    // rounding was once missing from this list, so a tap made on the other
+    // phone could not be loaded — the two phones then resolved the same
+    // night in opposite directions.
     const probe: DateEntry = {};
     applyFetchedToEntry(probe, result.day, date);
     const same =
       JSON.stringify({
         form: { ...emptyTwoPmForm, ...(probe.day?.form ?? {}) },
         rounding: probe.day?.rounding ?? null,
+        forecastRound: probe.day?.forecastRound ?? null,
         bible: probe.day?.bibleOverride ?? null,
         eon: { ...emptyEonForm, ...(probe.eon?.form ?? {}) },
       }) ===
-      JSON.stringify({ form, rounding, bible: bibleOverride ?? null, eon: eonForm });
+      JSON.stringify({ form, rounding, forecastRound, bible: bibleOverride ?? null, eon: eonForm });
     if (same) return setLoadMsg('Up to date ✓');
 
     engine.overwrite(date, DOUGH_SHEET_RECORDS, (entry) => applyFetchedToEntry(entry, result.day, date));
@@ -241,9 +259,10 @@ export default function App() {
         <ActiveDate
           date={date}
           onChange={setDate}
-          onLoad={handleLoad}
+          onLoad={() => void handleLoad()}
           loadArmed={loadArmed}
           loadMsg={loadMsg}
+          pastMidnight={pastMidnight}
         />
         {mode !== 'temps' && inPeachWindow(date) && (
           <BibleToggle

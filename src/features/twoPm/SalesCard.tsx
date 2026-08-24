@@ -1,3 +1,9 @@
+/**
+ * The sales card: today's forecast, current sales, the computed sales-left
+ * line between them, and tomorrow's forecast. The three inputs hold RAW
+ * strings (blank ≠ zero survives the form); every derived number on this
+ * card comes back down from the engine's record, never re-computed here.
+ */
 import { defaultConfig } from '../../config';
 import { normalizeSales } from '../../core';
 import type { Maybe } from '../../core/types';

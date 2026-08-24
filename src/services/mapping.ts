@@ -113,49 +113,52 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
   ];
 
   // The make and the resulting dough exist as soon as there is a batch
-  // direction — since v1.13.0 the remainder rule always resolves one, so these
-  // no longer wait on a tap. They stay absent only when there is nothing to make.
-  if (chosen) {
-    writes.push(
-      {
-        tab: FINAL_MAKE_TAB,
-        row: {
-          Date: d,
-          'Indi Trays': cellOf(chosen.finalTraysToMake.indi),
-          'Small Trays': cellOf(chosen.finalTraysToMake.small),
-          'Large Trays': cellOf(chosen.finalTraysToMake.large),
-          'Sic (balls)': cellOf(record.sicBalls),
-          'Boli Trays': cellOf(chosen.finalTraysToMake.boli),
-        },
+  // direction — since v1.13.0 the remainder rule always resolves one. When
+  // there is NO direction (nothing to make, or the inputs went unknown
+  // again), the rows still travel — as ALL-BLANK cells. Blanks clear: a make
+  // saved earlier tonight and then un-decided must not survive on the sheet,
+  // where the self-building bible would read the stale after-gang figure as
+  // tonight's truth. The script skips an all-blank row for a date that has
+  // none (blank rows clear, they never create), so this costs no clutter.
+  writes.push(
+    {
+      tab: FINAL_MAKE_TAB,
+      row: {
+        Date: d,
+        'Indi Trays': cellOf(chosen ? chosen.finalTraysToMake.indi : null),
+        'Small Trays': cellOf(chosen ? chosen.finalTraysToMake.small : null),
+        'Large Trays': cellOf(chosen ? chosen.finalTraysToMake.large : null),
+        'Sic (balls)': cellOf(chosen ? record.sicBalls : null),
+        'Boli Trays': cellOf(chosen ? chosen.finalTraysToMake.boli : null),
       },
-      {
-        tab: AFTER_TAB,
-        row: {
-          Date: d,
-          Indi: cellOf(chosen.finalDough.indiTotal),
-          Small: cellOf(chosen.finalDough.smallTotal),
-          Large: cellOf(chosen.finalDough.largeTotal),
-          Sic: cellOf(chosen.finalDough.sicTotal),
-          Boli: cellOf(chosen.finalDough.boliTotal),
-        },
+    },
+    {
+      tab: AFTER_TAB,
+      row: {
+        Date: d,
+        Indi: cellOf(chosen ? chosen.finalDough.indiTotal : null),
+        Small: cellOf(chosen ? chosen.finalDough.smallTotal : null),
+        Large: cellOf(chosen ? chosen.finalDough.largeTotal : null),
+        Sic: cellOf(chosen ? chosen.finalDough.sicTotal : null),
+        Boli: cellOf(chosen ? chosen.finalDough.boliTotal : null),
       },
-    );
-  }
-
-  if (amUse) {
-    writes.push({
+    },
+    // The morning's use rides with the 2 PM save (both of its inputs are known
+    // by then). Same retraction rule: no yesterday means BLANKS, clearing any
+    // morning figure a previously-cached yesterday once produced.
+    {
       tab: AM_USE_TAB,
       row: {
         Date: d,
-        'AM Sales $': cellOf(amUse.sales),
-        'AM Indi Use': cellOf(amUse.use.indi),
-        'AM Small Use': cellOf(amUse.use.small),
-        'AM Large Use': cellOf(amUse.use.large),
-        'AM Sic Use': cellOf(amUse.use.sic),
-        'Bible Used': record.bibleUsed,
+        'AM Sales $': cellOf(amUse ? amUse.sales : null),
+        'AM Indi Use': cellOf(amUse ? amUse.use.indi : null),
+        'AM Small Use': cellOf(amUse ? amUse.use.small : null),
+        'AM Large Use': cellOf(amUse ? amUse.use.large : null),
+        'AM Sic Use': cellOf(amUse ? amUse.use.sic : null),
+        'Bible Used': amUse ? record.bibleUsed : '',
       },
-    });
-  }
+    },
+  );
 
   return writes;
 }
@@ -181,22 +184,24 @@ export function eonRecordToTabWrites(
     },
   ];
 
-  if (record.pmUse) {
-    writes.push({
-      tab: PM_USE_TAB,
-      row: {
-        Date: d,
-        // A night whose final sales came in under the 2 PM figure has no
-        // meaningful PM takings — the owner's own sheet showed NA() here.
-        'PM Sales $': record.pmSales !== null && record.pmSales < 0 ? '' : cellOf(record.pmSales),
-        'PM Indi Use': cellOf(record.pmUse.indi),
-        'PM Small Use': cellOf(record.pmUse.small),
-        'PM Large Use': cellOf(record.pmUse.large),
-        'PM Sic Use': cellOf(record.pmUse.sic),
-        'Bible Used': bible ?? record.bibleUsed ?? '',
-      },
-    });
-  }
+  // The night's use always travels — as blanks when it is unknowable (no
+  // batch choice standing), which CLEARS a use recorded earlier and since
+  // retracted. The script skips an all-blank row for a date that has none.
+  const pm = record.pmUse;
+  writes.push({
+    tab: PM_USE_TAB,
+    row: {
+      Date: d,
+      // A night whose final sales came in under the 2 PM figure has no
+      // meaningful PM takings — the owner's own sheet showed NA() here.
+      'PM Sales $': pm === null || (record.pmSales !== null && record.pmSales < 0) ? '' : cellOf(record.pmSales),
+      'PM Indi Use': cellOf(pm ? pm.indi : null),
+      'PM Small Use': cellOf(pm ? pm.small : null),
+      'PM Large Use': cellOf(pm ? pm.large : null),
+      'PM Sic Use': cellOf(pm ? pm.sic : null),
+      'Bible Used': pm ? (bible ?? record.bibleUsed ?? '') : '',
+    },
+  });
 
   // Tonight's line on the bible this date used — the history the suggested
   // bible is fitted from. Total use is the morning's plus the night's.

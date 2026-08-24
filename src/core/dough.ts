@@ -1,5 +1,6 @@
 import type { AppConfig, RoundDirection } from '../config';
 import { getBible, isSlowDay, lookupBibleRow, resolveForecastRound, rowToNeeds, selectBibleId } from './bible';
+import { perTraySizes } from './bibleCompare';
 import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
@@ -161,7 +162,7 @@ export function runDoughCalculation(
 
   // Tonight: how much of what we have gets used before close.
   const tonightKnown = todayForecast !== null && currentSales !== null;
-  const salesLeft = tonightKnown ? todayForecast! - currentSales! : null;
+  const salesLeft = tonightKnown ? todayForecast - currentSales : null;
   const negativeSalesLeft = salesLeft !== null && salesLeft < 0;
   const tonightRowMatched =
     salesLeft !== null && salesLeft > 0
@@ -177,12 +178,9 @@ export function runDoughCalculation(
   const left: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
   const setOutTrays: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
   const setOutBalls: PerBibleSizeMaybe = { indi: null, small: null, large: null, sic: null };
-  const perTray: Record<BibleSizeKey, number> = {
-    indi: bpt.indi,
-    small: bpt.small,
-    large: bpt.large,
-    sic: config.sicMakeTraySize,
-  };
+  // Balls-per-tray for the four bible sizes — Sicilian reads off its
+  // make-tray of 3, the one divisor `ballsPerTray` deliberately lacks.
+  const perTray = perTraySizes(config);
   for (const size of BIBLE_SIZES) {
     if (!tonightUse || !countedSizes[size]) continue;
     use[size] = tonightUse[size];
@@ -229,14 +227,14 @@ export function runDoughCalculation(
     } else if (left[size] !== null) {
       // Set-out replacement: left may be negative, so tomorrow's make
       // includes tonight's set-out dough. Floor at zero only after that.
-      make[size] = Math.max(0, tomorrowNeed[size] - left[size]!);
+      make[size] = Math.max(0, tomorrowNeed[size] - left[size]);
       // Sicilian floor: never make fewer than `sicMinimum.make` unless that
       // many are already on hand. Only when Sicilian was actually COUNTED —
       // the floor must not invent dough on a size nobody has looked at.
       if (size === 'sic' && have.sic !== null && have.sic < config.sicMinimum.waiverAt) {
-        make[size] = Math.max(make[size]!, config.sicMinimum.make);
+        make[size] = Math.max(make[size], config.sicMinimum.make);
       }
-      trays[size] = Math.ceil(make[size]! / perTray[size]);
+      trays[size] = Math.ceil(make[size] / perTray[size]);
     }
   }
   const sicBalls = make.sic;

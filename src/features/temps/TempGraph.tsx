@@ -62,7 +62,8 @@ export function TempGraph() {
   const columns = stations ? timeColumns(stations) : [];
   const series: TempSeries[] = picks.map((station, i) => ({
     station,
-    color: LINE_COLORS[i % LINE_COLORS.length],
+    // Pick order chooses the hue; the modulo keeps `i` inside the palette.
+    color: LINE_COLORS[i % LINE_COLORS.length]!,
     temps: stationSeries(stations?.[station] ?? [], columns),
   }));
   const drawn = series.filter((s) => s.temps.some((t) => t !== null));

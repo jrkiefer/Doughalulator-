@@ -1,14 +1,28 @@
 {
+  // One tsconfig for everything the repo type-checks: the app (src), the
+  // node-side tools (scripts, apps-script/test) and the two config files.
+  // `npm run build` runs `tsc --noEmit` over all of it before Vite bundles,
+  // so nothing ships — or merges — with a type error anywhere.
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
+
+    // Full strictness, plus the two honesty flags on top of `strict`:
+    // - noUncheckedIndexedAccess: an indexed read is `T | undefined` until
+    //   proven otherwise, which is the truth about arrays and records —
+    //   the bible rows, the chart points and the sheet rows all index.
+    // - verbatimModuleSyntax: type-only imports must SAY they are type-only,
+    //   so the bundler never has to guess what it may erase.
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,

@@ -1,3 +1,13 @@
+/**
+ * The Bible-comparison drawer: the bible in use laid over what the recorded
+ * nights suggest (the self-building bible the Dough Log fits after every EON
+ * save). Loads NOTHING until the button is tapped, then caches the answer on
+ * the phone so it reopens instantly and still draws with no signal.
+ *
+ * Deliberately one chart + pills + the tap readout, nothing more (owner's
+ * choice, Aug 2026): a Gap view, a Table view and a summary sentence were
+ * built, shipped and removed. Don't re-add views here without being asked.
+ */
 import { useState } from 'react';
 import { defaultConfig, type BibleId } from '../../config';
 import { batchesForNeeds } from '../../core';

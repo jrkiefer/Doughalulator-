@@ -1,6 +1,14 @@
 /**
  * The chart's geometry, kept out of the component so it can be tested rather
- * than only looked at. Nothing in here knows about React or the DOM.
+ * than only looked at. Nothing in here knows about React or the DOM: points
+ * in, path strings and tick positions out.
+ *
+ * A note on the `!` assertions through this file: with
+ * `noUncheckedIndexedAccess` on, every indexed read is `T | undefined` even
+ * inside a loop whose bounds guarantee the element exists. Where a bound or
+ * an early return establishes the invariant, the assertion states it rather
+ * than papering over a real doubt — each one sits inside a loop shaped so it
+ * cannot miss.
  */
 
 export interface Point {
@@ -19,66 +27,102 @@ export interface Point {
  */
 export function monotoneTangents(pts: Point[]): number[] {
   const n = pts.length;
-  if (n < 2) return new Array(n).fill(0);
+  if (n < 2) return new Array<number>(n).fill(0);
 
+  // The slope of each straight segment between neighbouring points.
   const delta: number[] = [];
   for (let i = 0; i < n - 1; i++) {
-    const dx = pts[i + 1].x - pts[i].x;
-    delta.push(dx === 0 ? 0 : (pts[i + 1].y - pts[i].y) / dx);
+    const p = pts[i]!;
+    const q = pts[i + 1]!;
+    const dx = q.x - p.x;
+    delta.push(dx === 0 ? 0 : (q.y - p.y) / dx);
   }
 
-  const m: number[] = new Array(n);
-  m[0] = delta[0];
-  m[n - 1] = delta[n - 2];
-  for (let i = 1; i < n - 1; i++) m[i] = (delta[i - 1] + delta[i]) / 2;
+  // First guess at each point's tangent: the segment slope at the ends, the
+  // average of the two neighbouring slopes in the middle — EXCEPT at a local
+  // extremum (the slopes change sign), which must be flat. That flatness is
+  // Fritsch–Carlson's own rule, not an optimisation: averaging happens to
+  // work when a spike is symmetric, but an asymmetric peak would tilt the
+  // tangent and let the curve overshoot past the peak — exactly what
+  // "monotone" promises cannot happen. Today's series are monotone so the
+  // clamp never fires, but the guarantee must not depend on the data staying
+  // polite.
+  const m: number[] = new Array<number>(n);
+  m[0] = delta[0]!;
+  m[n - 1] = delta[n - 2]!;
+  for (let i = 1; i < n - 1; i++) {
+    const before = delta[i - 1]!;
+    const after = delta[i]!;
+    m[i] = before * after <= 0 ? 0 : (before + after) / 2;
+  }
 
+  // Second pass: keep each tangent inside the Fritsch–Carlson circle
+  // (a² + b² ≤ 9, in units of the segment slope). Outside it, the cubic
+  // between the two points stops being monotone even with well-signed
+  // tangents, so both ends are scaled back onto the circle together.
   for (let i = 0; i < n - 1; i++) {
-    if (delta[i] === 0) {
+    const d = delta[i]!;
+    if (d === 0) {
       // A flat run must stay flat, or the curve bulges off a level stretch.
       m[i] = 0;
       m[i + 1] = 0;
       continue;
     }
-    const a = m[i] / delta[i];
-    const b = m[i + 1] / delta[i];
+    const a = m[i]! / d;
+    const b = m[i + 1]! / d;
     const s = a * a + b * b;
     if (s > 9) {
       const t = 3 / Math.sqrt(s);
-      m[i] = t * a * delta[i];
-      m[i + 1] = t * b * delta[i];
+      m[i] = t * a * d;
+      m[i + 1] = t * b * d;
     }
   }
   return m;
 }
 
-/** The points as one smoothed cubic path. */
+/**
+ * The points as one smoothed cubic path. Each Bézier segment places its two
+ * control points a third of the way in along x — the standard Hermite→Bézier
+ * conversion — with their heights set by the monotone tangents above.
+ */
 export function smoothPath(pts: Point[]): string {
-  if (pts.length === 0) return '';
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+  const first = pts[0];
+  if (first === undefined) return '';
+  if (pts.length === 1) return `M ${first.x} ${first.y}`;
   const m = monotoneTangents(pts);
-  let d = `M ${pts[0].x} ${pts[0].y}`;
+  let d = `M ${first.x} ${first.y}`;
   for (let i = 0; i < pts.length - 1; i++) {
-    const h = (pts[i + 1].x - pts[i].x) / 3;
+    const p = pts[i]!;
+    const q = pts[i + 1]!;
+    const h = (q.x - p.x) / 3;
     d +=
-      ` C ${pts[i].x + h} ${pts[i].y + m[i] * h}` +
-      ` ${pts[i + 1].x - h} ${pts[i + 1].y - m[i + 1] * h}` +
-      ` ${pts[i + 1].x} ${pts[i + 1].y}`;
+      ` C ${p.x + h} ${p.y + m[i]! * h}` +
+      ` ${q.x - h} ${q.y - m[i + 1]! * h}` +
+      ` ${q.x} ${q.y}`;
   }
   return d;
 }
 
-/** The band between two curves, as one closed shape: out along a, back along b. */
+/**
+ * The band between two curves, as one closed shape: out along a, back along
+ * b reversed. The return leg re-derives its tangents from the REVERSED
+ * points so the band's lower edge is the same curve the line itself draws —
+ * mirroring the forward tangents would flip their signs subtly wrong.
+ */
 export function bandPath(a: Point[], b: Point[]): string {
   if (a.length < 2 || b.length < 2) return '';
   const back = [...b].reverse();
   const m = monotoneTangents(back);
-  let d = smoothPath(a) + ` L ${back[0].x} ${back[0].y}`;
+  const start = back[0]!;
+  let d = smoothPath(a) + ` L ${start.x} ${start.y}`;
   for (let i = 0; i < back.length - 1; i++) {
-    const h = (back[i + 1].x - back[i].x) / 3;
+    const p = back[i]!;
+    const q = back[i + 1]!;
+    const h = (q.x - p.x) / 3;
     d +=
-      ` C ${back[i].x + h} ${back[i].y + m[i] * h}` +
-      ` ${back[i + 1].x - h} ${back[i + 1].y - m[i + 1] * h}` +
-      ` ${back[i + 1].x} ${back[i + 1].y}`;
+      ` C ${p.x + h} ${p.y + m[i]! * h}` +
+      ` ${q.x - h} ${q.y - m[i + 1]! * h}` +
+      ` ${q.x} ${q.y}`;
   }
   return `${d} Z`;
 }
@@ -95,6 +139,8 @@ export function niceMax(value: number): number {
   const pow = 10 ** Math.floor(Math.log10(value));
   const steps = [1, 1.2, 1.4, 1.6, 1.8, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10];
   for (const step of steps) {
+    // toPrecision cleans the float noise a step × power multiply leaves
+    // behind (1.2 × 10 → 11.999999…), so the axis label prints round.
     if (value <= step * pow) return Number((step * pow).toPrecision(12));
   }
   return 10 * pow;
@@ -143,7 +189,11 @@ export function tickStep(range: number, count: number): number {
   return 10 * pow;
 }
 
-/** Evenly spaced round ticks inside a domain. */
+/**
+ * Evenly spaced round ticks inside a domain. The `step * 0.001` slack on the
+ * upper bound keeps a tick that lands exactly on `max` from being lost to
+ * float noise; toPrecision cleans each value for printing the same way.
+ */
 export function ticksFor(min: number, max: number, count: number): number[] {
   if (max <= min) return [min];
   const step = tickStep(max - min, count);

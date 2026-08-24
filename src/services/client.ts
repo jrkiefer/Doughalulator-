@@ -98,9 +98,10 @@ export function postJson(
 }
 
 export function getJson(url: string, params: Record<string, string>): Promise<Outcome> {
-  // new URL() THROWS on a typo'd address. Left unguarded it rejects the promise
-  // and Settings sits on "Testing…" for ever with nothing to show for it — the
-  // most likely mistake there is, pasting an address out of an email.
+  // new URL() THROWS on a mangled address. Guarded here (not just in run())
+  // because the throw would happen while BUILDING the query string below —
+  // before run() ever sees the address — and a rejected promise here would
+  // surface as an unhandled crash rather than a plain-words outcome.
   const problem = addressProblem(url);
   if (problem) return Promise.resolve({ kind: 'rejected', reason: problem });
   const u = new URL(url);

@@ -87,13 +87,74 @@ function eraseAllData() {
   ui.alert('Erased ' + wipeAllData() + ' rows.');
 }
 
+/**
+ * Mark an error as one of OUR OWN refusals — a structural problem the owner
+ * can fix (a moved heading, a missing tab). The catch in doPost answers
+ * these terminally so the phone TELLS rather than retries; anything thrown
+ * WITHOUT the mark is Google misbehaving mid-request and is answered
+ * retryable-shaped, which the app's backoff ladder handles by itself.
+ */
+function refuse(message) {
+  var err = new Error(message);
+  err.plainRefusal = true;
+  return err;
+}
+
+/**
+ * Refuse to write when a tab's headings are not where this script thinks.
+ * Every write below maps a column NAME to a POSITION from this script's own
+ * header lists; nothing else ever looks at the sheet's real header row, so a
+ * column renamed or reordered by hand would file temperatures into the wrong
+ * slot and report success. Throwing turns that into words on the phone.
+ */
+function assertHeaders(tabName, expected, actual) {
+  for (var i = 0; i < expected.length; i++) {
+    var found = String(actual[i] === undefined || actual[i] === null ? '' : actual[i]).trim();
+    if (found !== expected[i]) {
+      throw refuse(
+        'the "' + tabName + '" tab has moved its columns - column ' + (i + 1) +
+        ' should say "' + expected[i] + '" but says "' + found +
+        '". Put that heading back, or run Temp Tools > Re-run setup.');
+    }
+  }
+}
+
+/** Read a tab's header row and check it, in one small ranged read. */
+function checkTabHeaders(sheet, expected) {
+  var actual = sheet.getRange(1, 1, 1, expected.length).getDisplayValues()[0];
+  assertHeaders(sheet.getName(), expected, actual);
+}
+
+/**
+ * The last row with a DATE in column A. getLastRow() counts content in ANY
+ * column, so a stray note typed far down a tab would push the next append
+ * past a gap of blank rows — and, on the Log, would drag the graph's
+ * tail-read window away from the real data. One column-A read answers both.
+ */
+function lastDatedRow(sheet) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 1;
+  var values = sheet.getRange(2, 1, last - 1, 1).getDisplayValues();
+  var dated = 1;
+  for (var i = 0; i < values.length; i++) {
+    if (normalizeDate(values[i][0]) !== '') dated = i + 2;
+  }
+  return dated;
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) {
     return jsonOut({ ok: false, retryable: true, error: 'busy — another save is writing; try again' });
   }
   try {
-    var body = JSON.parse(e.postData.contents);
+    var body;
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      // A body that is not JSON can never BECOME JSON by resending it.
+      return jsonOut({ ok: false, error: 'unreadable save: ' + String(parseErr) });
+    }
     // Erasing is deliberately NOT reachable here — see the note up top.
     if (body.type !== 'temps') return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
 
@@ -104,10 +165,42 @@ function doPost(e) {
     var date = normalizeDate(body.date);
     var saved = 0;
 
+    // Every heading is checked BEFORE anything is written, so a refusal can
+    // never leave the Log holding readings the station tabs never got.
+    var log = ss.getSheetByName('Log');
+    if (!log) throw refuse('missing tab (run setup): Log');
+    checkTabHeaders(log, LOG_HEADERS);
+    var stations = {};
+    body.items.forEach(function (item) {
+      item.readings.forEach(function (r) { stations[r.station] = true; });
+    });
+    Object.keys(stations).forEach(function (station) {
+      var sheet = ss.getSheetByName(station);
+      if (sheet) checkTabHeaders(sheet, STATION_HEADERS); // unknown station: Log only
+    });
+    // The Overview block write further down is POSITIONAL — row 2 is
+    // STATIONS[0] and so on — so its station-name column is part of the
+    // pre-flight too: a reordered Overview would otherwise file every
+    // temperature against the wrong station, silently.
+    var overview = ss.getSheetByName('Overview');
+    if (overview) {
+      checkTabHeaders(overview, OVERVIEW_HEADERS);
+      var overviewNames = overview.getRange(2, 1, STATIONS.length, 1).getDisplayValues();
+      for (var s = 0; s < STATIONS.length; s++) {
+        if (overviewNames[s][0] !== STATIONS[s]) {
+          throw refuse(
+            'the Overview tab\'s station names have moved - row ' + (s + 2) +
+            ' should say "' + STATIONS[s] + '" but says "' + overviewNames[s][0] +
+            '". Run Temp Tools > Re-run setup.');
+        }
+      }
+    }
+
     // Cell-by-cell writes were the slowest part of every save — each section
     // below batches its whole update into ranged writes instead.
 
-    // 1. Append-only audit trail: every reading, one ranged write.
+    // 1. Append-only audit trail: every reading, one ranged write, appended
+    // after the last DATED row so a stray note cannot open a gap.
     var logRows = [];
     body.items.forEach(function (item) {
       item.readings.forEach(function (r) {
@@ -115,8 +208,7 @@ function doPost(e) {
         saved++;
       });
     });
-    var log = ss.getSheetByName('Log');
-    var logStart = log.getLastRow() + 1;
+    var logStart = lastDatedRow(log) + 1;
     ensureRows(log, logStart + logRows.length - 1);
     log.getRange(logStart, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
 
@@ -135,7 +227,9 @@ function doPost(e) {
       var rowIndex = findDateRow(sheet, date);
       var values;
       if (rowIndex === -1) {
-        rowIndex = sheet.getLastRow() + 1;
+        // Append after the last DATED row, not getLastRow(): a stray note
+        // far down the tab must not push the next day past a gap.
+        rowIndex = lastDatedRow(sheet) + 1;
         ensureRows(sheet, rowIndex);
         values = STATION_HEADERS.map(function () { return ''; });
       } else {
@@ -151,22 +245,28 @@ function doPost(e) {
     });
 
     // 3. Refresh the Overview block in one ranged write (later slots win).
-    var overview = ss.getSheetByName('Overview');
-    var block = overview.getRange(2, 2, STATIONS.length, 3).getValues();
-    var touched = false;
-    body.items.forEach(function (item) {
-      item.readings.forEach(function (r) {
-        var idx = STATIONS.indexOf(r.station);
-        if (idx === -1) return;
-        block[idx] = [r.temp, item.slot, date + ' ' + item.time];
-        touched = true;
+    // The name column was verified in the pre-flight above. A MISSING
+    // Overview is skipped rather than refused: the Log above is the record,
+    // and half a save beats none.
+    if (overview) {
+      var block = overview.getRange(2, 2, STATIONS.length, 3).getValues();
+      var touched = false;
+      body.items.forEach(function (item) {
+        item.readings.forEach(function (r) {
+          var idx = STATIONS.indexOf(r.station);
+          if (idx === -1) return;
+          block[idx] = [r.temp, item.slot, date + ' ' + item.time];
+          touched = true;
+        });
       });
-    });
-    if (touched) overview.getRange(2, 2, STATIONS.length, 3).setValues(block);
+      if (touched) overview.getRange(2, 2, STATIONS.length, 3).setValues(block);
+    }
 
     return jsonOut({ ok: true, saved: saved, date: date });
   } catch (err) {
-    return jsonOut({ ok: false, error: String(err) });
+    // Our own guards refuse terminally; everything else is Google's moment.
+    if (err && err.plainRefusal) return jsonOut({ ok: false, error: err.message });
+    return jsonOut({ ok: false, retryable: true, error: String(err) });
   } finally {
     lock.releaseLock();
   }
@@ -225,6 +325,10 @@ function doGet(e) {
     if (p.action === 'ping') {
       return jsonOut({ ok: true, sheet: 'temps', time: new Date().toISOString() });
     }
+    // 'latest' and 'day' have no caller in the app any more ('latest' fed the
+    // removed LOAD LAST TEMPS button; 'day' predates the graph). They are kept
+    // deliberately: answering an old cached phone beats breaking it, and both
+    // are read-only. The app itself asks only for 'recent'.
     if (p.action === 'latest') {
       var overview = SpreadsheetApp.getActive().getSheetByName('Overview');
       var out = {};
@@ -254,7 +358,10 @@ function doGet(e) {
     }
     return jsonOut({ ok: false, error: 'unknown action: ' + p.action });
   } catch (err) {
-    return jsonOut({ ok: false, error: String(err) });
+    // The read path has no guards of its own to refuse with, so anything
+    // thrown here is Google misbehaving mid-read - worth the app retrying,
+    // never worth a red "can't answer" the owner cannot act on.
+    return jsonOut({ ok: false, retryable: true, error: String(err) });
   }
 }
 
@@ -274,7 +381,10 @@ function recentReadings(n) {
   var count = Math.max(1, Math.min(10, isFinite(n) && n > 0 ? Math.floor(n) : 3));
   var log = SpreadsheetApp.getActive().getSheetByName('Log');
   var out = {};
-  var last = log ? log.getLastRow() : 0;
+  // The window hangs off the last DATED row, not getLastRow(): a stray note
+  // typed far below the data would otherwise drag the whole window down onto
+  // blank rows and the graph would quietly go empty.
+  var last = log ? lastDatedRow(log) : 0;
   if (last < 2) return out;
 
   var window = Math.min(last - 1, RECENT_WINDOW_ROWS);
