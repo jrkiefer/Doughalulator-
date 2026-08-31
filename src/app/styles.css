@@ -26,6 +26,10 @@
   --warn: #b87e1a; /* ochre */
   --good: #2f6b3a;
   --neg: #a3341f;
+  /* The By Size column wash: a desaturated steel, deliberately OUTSIDE the five
+     size hues so it can never be mistaken for one. Cool against warm paper, which
+     is why it separates columns at 7% without adding visual weight. */
+  --col-wash: #6a7f96;
 
   /* the five dough sizes */
   --indi: #2f6b3a;
@@ -838,6 +842,16 @@ button:focus-visible {
 .bysize td.round-cell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Every other column carries a whisper of the wash so eight right-aligned
+   figures stop running together — the header too, so each column reads as one
+   stripe top to bottom. Which columns get it is decided in the markup (a
+   `wash` class), not by nth-child here, so adding or moving a column can
+   never silently shift the stripes onto the wrong figures. */
+.bysize th.wash,
+.bysize td.wash {
+  background: color-mix(in srgb, var(--col-wash) 7%, transparent);
 }
 
 .bysize td.round-cell.up {

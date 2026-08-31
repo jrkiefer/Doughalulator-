@@ -73,12 +73,14 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
           <thead>
             <tr>
               <th />
+              {/* `wash` marks the striped columns — every other one, so the
+                  eye can follow a row across without the figures merging. */}
               <th>HAVE</th>
-              <th>USE</th>
+              <th className="wash">USE</th>
               <th>LEFT</th>
-              <th>NEED</th>
+              <th className="wash">NEED</th>
               <th>MAKE</th>
-              <th>PLAN</th>
+              <th className="wash">PLAN</th>
               <th>ROUND</th>
               <th>FINAL</th>
             </tr>
@@ -100,11 +102,11 @@ export function BySizeTable(props: { record: DoughDayRecord }) {
                   <td>
                     <strong>{fmtMaybe(record.have[key])}</strong>
                   </td>
-                  <td>{fmtMaybe(record.use[key])}</td>
+                  <td className="wash">{fmtMaybe(record.use[key])}</td>
                   <td className={left !== null && left < 0 ? 'neg' : ''}>{fmtMaybe(left)}</td>
-                  <td>{fmtMaybe(record.need[key])}</td>
+                  <td className="wash">{fmtMaybe(record.need[key])}</td>
                   <td>{fmtMaybe(record.make[key])}</td>
-                  <td>{fmtMaybe(isSic ? record.sicBalls : line.plan)}</td>
+                  <td className="wash">{fmtMaybe(isSic ? record.sicBalls : line.plan)}</td>
                   <RoundCell round={line.round} plan={isSic ? record.sicBalls : line.plan} />
                   <td className="trays-cell" style={{ ['--size' as string]: color }}>
                     {isSic ? (
