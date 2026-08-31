@@ -1,0 +1,14 @@
+{
+  "name": "Dough Tracker",
+  "short_name": "Dough Tracker",
+  "description": "Works out the night's dough make, checks tomorrow is covered, and keeps the station temperatures — saving everything to the notebooks by itself.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3ece0",
+  "theme_color": "#f3ece0",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

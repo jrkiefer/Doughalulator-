@@ -59,7 +59,7 @@ function listNames(names: string[]): string {
 function uncountedNames(record: DoughDayRecord): string[] {
   return (Object.keys(SIZE_NAMES) as (keyof typeof record.countedSizes)[])
     .filter((key) => !record.countedSizes[key])
-    .map((key) => SIZE_NAMES[key]);
+    .map((key) => SIZE_NAMES[key]!); // every countedSizes key has a name above
 }
 
 export function DaysWork(props: {

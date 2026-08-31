@@ -32,6 +32,10 @@ build less.**
   `eon/EonPage` with History and the Dough Bible, `temps/TempsPage` with its own TempHistory and
   the temp graph. `engine.ts` is the composition root that wires the pure engine to real
   storage, network and clock; `main.tsx` is the entry; `styles.css` is the whole design system.
+  `ErrorBoundary.tsx` (v1.27.0) is the deliberate one class component: a render crash shows a
+  styled "nothing typed has been lost — reload" card instead of a blank page, because the screen
+  is rebuilt from phone storage on every open and a malformed cached entry must not read as "the
+  app is gone".
 - `src/core/` — pure calculation logic ONLY. No React, no I/O, no `Date.now()` inside; dates and
   data are passed in as arguments. Every core function is tested.
 - `src/config/` — every tunable constant (balls per tray, batch size, season dates, rounding rules,
@@ -104,6 +108,10 @@ build less.**
 - **AM use** — dough used before 2 PM = yesterday's EON count − this morning's count, via `computeAmUse`. Blank when yesterday has no EON record (a closed day).
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
 - **Temp slots** — before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night.
+- **Past midnight** (v1.27.0) — a close finished after 12:00 AM belongs to the evening that just
+  ended, i.e. YESTERDAY's date, but a fresh open lands on the new calendar day. The app never
+  switches dates by itself; before `smallHours.before` (05:00, in config) the date card says
+  "Past midnight — still closing out last night? … tap ◀" and leaves the choice to the person.
 
 ## Design system (v1.5.0 — ported from the owner's other app)
 
@@ -116,7 +124,13 @@ build less.**
 - **One flat background, and it must stay that way.** `--bg` is painted on `html`, `body` and
   `.page`, with `color-scheme: light` declared on `html` and in `index.html`. Without that
   declaration a phone's auto-dark-theme inverts bands of the page — that is what the black strips
-  were. No gradients anywhere.
+  were. No gradients anywhere (the count-card wash is a single `color-mix()` background colour).
+- **Home-screen identity is deliberate** (v1.27.0): `public/manifest.webmanifest` (standalone
+  display, the paper colours) plus `apple-touch-icon.png` / `icon-512.png` rendered from
+  `favicon.svg`. Without them iOS tiles a grey screenshot and Android keeps browser chrome.
+  There is NO service worker, on purpose: the sync engine already owns offline for DATA, and a
+  hand-rolled shell cache is exactly the kind of silent-staleness machinery this app avoids —
+  the one cost is that a cold open needs signal once per browser-cache lifetime.
 - One global stylesheet of tokens + component classes; no framework, and **no inline `style=`
   except to pass a `--size` value**. Numbered badges are one global sequence (00 date, 01 sales,
   02 counts, 03 day's work, 04 by size, 08 EON outlook, 09 temps).
@@ -132,7 +146,8 @@ build less.**
   10s doubling to a 5-minute ceiling — cleared the moment any send succeeds. A *rejection* never
   gets one (retrying a refusal teaches nobody anything), and a keepalive flush neither arms nor
   clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
-  read OFFLINE.
+  read OFFLINE — and so is the in-flight flag (v1.27.0), so SYNCING is only ever claimed about
+  the notebook actually mid-send.
 - **`action: 'recent'` on the TEMPS script** (`recentReadings` in `temps/Code.gs`) serves the temp
   graph: the last n (default 3, cap 10) Log entries per station, oldest first, read from the
   Log's tail with `getDisplayValues()` — this script never sees a Date object, and that stays
@@ -162,8 +177,12 @@ build less.**
   memory + network; both failing raises the red "not saved anywhere" state.
 - **Blank ≠ zero end to end**: `toNumOrNull` in forms, `Maybe` in core, empty cells in payloads
   (they CLEAR sheet cells), blanks hydrate back as blanks on load.
-- Saves are **merge-upserts by Date**. Columns depending on the tapped batch choice stay blank
-  until a choice exists.
+- Saves are **merge-upserts by Date**, and since v1.27.0 **blank rows clear, they never create**:
+  the derived tabs (`Final Make Amount`, `Estimated Dough After Gang`, `AM Dough Use`,
+  `PM Dough Use`) travel on EVERY save — all-blank when their figure is unknowable — so a make
+  saved earlier and then un-decided is RETRACTED from the sheet rather than left for the
+  self-building bible to read as truth. The script skips an all-blank row for a date that has
+  none, so this never appends date-only clutter.
 - **The app is the only calculator.** The Dough Log holds no formulas — every number is worked out
   here and written into place. The one exception is the self-building bible (v1.20.0): after every
   EON save, `rebuildBibleHistories()` in `dough/Code.gs` derives each day's WHOLE use from the
@@ -195,10 +214,16 @@ build less.**
 - **A total summed from `?? 0` is not the same as an answer.** `totalTrays` stays `null` until at
   least one size is counted: with every size contributing zero, "nothing to make" reads as a
   finished decision when the truth is "nobody has counted yet". Any new roll-up needs the same care.
-- **A sheet fetch must clear what it speaks for before applying** (`takeFromSheet` in
-  `services/sync.ts`, `DOUGH_SHEET_RECORDS` in `app/engine.ts`). The fetch only writes back records
-  the sheet actually holds, so without clearing, a record the sheet lacks survives on screen *and*
-  gets stamped synced. Temps are excluded on purpose — different notebook.
+- **A sheet fetch must clear what it speaks for before applying — and touch NOTHING else**
+  (`takeFromSheet` in `services/sync.ts`, `DOUGH_SHEET_RECORDS` in `app/engine.ts`). The fetch
+  only writes back records the sheet actually holds, so without clearing, a record the sheet
+  lacks survives on screen *and* gets stamped synced. The sheet-truth stamp lands ONLY on the
+  replaced types (v1.27.0): stamping every type once marked a dirty, unsent temp reading synced
+  during a dough force-load, silently standing its retry down. Same scoping on the dirty guard:
+  only dirt on the replaced types blocks a background merge, so a half-typed temperature never
+  freezes the dough side, and `isDirty(date, types)` lets LOAD FROM SHEET warn only about edits
+  it would actually replace. Both rounding TAPS count as record content, symmetrically — a
+  forecast-round-only day must sync like a batch-round-only day does.
 - **`mirrorBibles()` runs at boot for a reason.** `refreshBibleBuild()` gives up silently when a
   bible mirror tab is empty, so without a re-send the self-building bible would just stop after an
   Erase all data. The script no-ops on an unchanged hash.
@@ -239,10 +264,17 @@ build less.**
    on `getDisplayValues()`, so it never sees a Date object at all.
 4. **Nothing but `assertHeaders` ever checks the columns are where the app thinks.** Every write maps
    a column NAME to a POSITION from this script's own header list; `validateSave` compares the
-   payload against that same list, so both sides of that check are the app. `upsertRow` reads its
-   block from **row 1, not row 2** — the same single `getRange`, no extra call — and refuses the
-   save in plain words when a heading has moved. A refusal surfaces on the phone as
-   "SHEET REFUSED: …", so it is told rather than retried.
+   payload against that same list, so both sides of that check are the app. `prepareUpsert` reads
+   its block from **row 1, not row 2** — the same single `getRange`, no extra call — and refuses
+   the save in plain words when a heading has moved. Since v1.27.0 saves are TWO-PHASE: every
+   tab's block is read and its headings checked before the first write, so a refusal can never
+   leave a half-written day. The temps script carries the same guards now (station tabs, Log,
+   Overview incl. its positional station-name column, and last-DATED-row appends) — only the
+   timezone rule stays dough-only, see rule 3. And the refusal/retry split is explicit
+   (`refuse()` in both scripts): OUR OWN guards answer terminally in plain words; any OTHER
+   throw (a transient Google service error) answers `retryable: true`, because a red
+   "SHEET REFUSED" over Google's own hiccup is a message nobody can act on — the app's backoff
+   ladder is the right tool there.
 5. **The read path uses `getDisplayValues()`** — what a cell LOOKS like, not what it holds. Nothing
    in either notebook is formatted today (setup only sets a date format on column A), so this costs
    nothing, but a number column given a comma or a currency symbol would come back as `"$11,000"`

@@ -1,8 +1,20 @@
+/**
+ * Collapsed-by-default card sections (History, the Dough Bible, the two
+ * graph drawers). Open/closed is remembered per SESSION, not per phone:
+ * sessionStorage means "keep my drawer open while I work tonight" without
+ * every drawer creeping open permanently over the weeks. Both accessors are
+ * try/caught — storage can be unavailable (private mode) and a drawer that
+ * merely forgets is fine, a drawer that crashes is not.
+ */
 import { useState, type ReactNode } from 'react';
+
+/** Same naming scheme as the phone store in services/local.ts, so every key
+ *  the app ever writes is recognisably ours at a glance in devtools. */
+const KEY_PREFIX = 'doughalulator.v2.open.';
 
 function remembered(id: string): boolean | null {
   try {
-    const v = sessionStorage.getItem(`doughalulator.open.${id}`);
+    const v = sessionStorage.getItem(KEY_PREFIX + id);
     return v === null ? null : v === '1';
   } catch {
     return null;
@@ -11,7 +23,7 @@ function remembered(id: string): boolean | null {
 
 function remember(id: string, open: boolean) {
   try {
-    sessionStorage.setItem(`doughalulator.open.${id}`, open ? '1' : '0');
+    sessionStorage.setItem(KEY_PREFIX + id, open ? '1' : '0');
   } catch {
     // storage full — the toggle still works for this render
   }

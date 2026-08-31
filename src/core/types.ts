@@ -223,7 +223,11 @@ export interface EonInputs {
   date: string;
   counts: CountedInventory;
   finalSalesRaw: Maybe;
-  /** Only used when there is no day record; a typed 0 means closed tomorrow. */
+  /**
+   * A tomorrow forecast typed on the EON page. When present it WINS over the
+   * 2 PM record's figure — the point of the box is to say "tomorrow now looks
+   * different" — and clearing it hands back. A typed 0 means closed tomorrow.
+   */
   manualTomorrowForecastRaw?: Maybe;
   bibleOverride?: BibleId;
 }

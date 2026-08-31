@@ -74,7 +74,8 @@ class FakeRange {
   }
 
   getDisplayValue(): string {
-    return this.getDisplayValues()[0][0];
+    // A 1×1 range by construction — the double index is asserted, not checked.
+    return this.getDisplayValues()[0]![0]!;
   }
 
   /** Erase the cells but keep the rows — formats and rule ranges survive. */
@@ -217,7 +218,8 @@ export class FakeSheet {
     const shift = <T>(entries: Map<string, T>) => {
       const next = new Map<string, T>();
       for (const [key, value] of entries) {
-        const [r, c] = key.split(':').map(Number);
+        // Grid keys are always 'row:col' — asserted rather than re-parsed.
+        const [r, c] = key.split(':').map(Number) as [number, number];
         if (r >= startRow && r < startRow + numRows) continue;
         next.set(`${r >= startRow + numRows ? r - numRows : r}:${c}`, value);
       }
@@ -244,11 +246,11 @@ export class FakeSheet {
 
   /** Test helpers */
   headerRow(width: number): string[] {
-    return new FakeRange(this, 1, 1, 1, width).getDisplayValues()[0];
+    return new FakeRange(this, 1, 1, 1, width).getDisplayValues()[0]!;
   }
 
   rowByIndex(row: number, width: number): string[] {
-    return new FakeRange(this, row, 1, 1, width).getDisplayValues()[0];
+    return new FakeRange(this, row, 1, 1, width).getDisplayValues()[0]!;
   }
 }
 
@@ -334,7 +336,9 @@ function makeGlobals(world: FakeWorld) {
         createMenu: () => menu,
         // alert(prompt) | alert(prompt, buttons) | alert(title, prompt, buttons)
         alert: (...args: string[]) => {
-          world.alerts.push(args.length >= 3 ? args[1] : args[0]);
+          // alert(prompt) | alert(prompt, buttons) | alert(title, prompt, buttons)
+          // — the PROMPT is what the scripts put their words in.
+          world.alerts.push((args.length >= 3 ? args[1] : args[0]) ?? '');
           return 'ok';
         },
         ButtonSet: { YES_NO: 'YES_NO', OK: 'OK' },
@@ -391,26 +395,37 @@ function makeGlobals(world: FakeWorld) {
 
 export interface LoadedScript {
   world: FakeWorld;
-  fns: Record<string, (...args: unknown[]) => unknown>;
+  /**
+   * The exported functions, keyed by the names above. Typed as always
+   * present for ergonomic tests — a name the OTHER script does not define is
+   * undefined at runtime (the `typeof` guard below), which a test calling it
+   * would discover immediately and loudly.
+   */
+  fns: Record<(typeof EXPORTS)[number], (...args: unknown[]) => unknown>;
 }
 
+/**
+ * The functions the tests reach into a script for. Both scripts are listed
+ * together — the `typeof` guard in the factory below hands back undefined
+ * for a name the other script does not define, so a shared list stays cheap.
+ */
 const EXPORTS = [
   'setup',
   'onOpen',
   'doPost',
   'doGet',
-  'rebuildDoughUse',
-  'generateFittedBibles',
   'theilSen',
   'refreshBibleBuilds',
+  'rebuildBibleHistories',
   'normalizeDate',
+  'lastDatedRow',
   'findDateRow',
   'writeBibles',
   'wipeAllData',
   'removeRetiredTabs',
   'checkLog',
   'logProblems',
-];
+] as const;
 
 /** Evaluate a Code.gs file against a fresh fake world and hand back its functions. */
 export function loadScript(file: 'dough' | 'temps'): LoadedScript {
@@ -428,6 +443,9 @@ export function loadScript(file: 'dough' | 'temps'): LoadedScript {
   const globals = makeGlobals(world);
 
   const body = `${code}\n;return {${EXPORTS.map((n) => `${n}: typeof ${n} === 'function' ? ${n} : undefined`).join(',')}};`;
+  // Evaluating the script text IS the harness — the entire point is to run
+  // the exact Code.gs the owner pastes into Google, not a port of it.
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const factory = new Function(
     'SpreadsheetApp',
     'LockService',
@@ -436,6 +454,7 @@ export function loadScript(file: 'dough' | 'temps'): LoadedScript {
     'Utilities',
     body,
   );
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- Function has no signature to check
   const fns = factory(
     globals.SpreadsheetApp,
     globals.LockService,

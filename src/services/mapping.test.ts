@@ -57,6 +57,8 @@ const eonRecord = runEonCalculation(
 describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
   it('writes the count, both bible lookups, the make and the batching', () => {
     const writes = dayRecordToTabWrites(dayRecord);
+    // Every derived tab travels on EVERY save — with blanks where a figure is
+    // unknowable — so a figure retracted on screen is retracted on the sheet.
     expect(writes.map((w) => w.tab)).toEqual([
       '2PM Dough Count',
       'Look up Dough Use for PM',
@@ -64,6 +66,7 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       'Dough Make (estimate)',
       'Final Make Amount',
       'Estimated Dough After Gang',
+      'AM Dough Use',
     ]);
     // Google truncates a tab name at 31 characters; two that truncate alike
     // silently collide, which is how the previous build lost a whole tab.
@@ -82,7 +85,7 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       'Sic Count': 1,
       'Boli Count': 13,
       Bible: 'regular',
-      'Forecast Rounding': '', // 2,700 is below the 10,000 threshold
+      'Forecast Rounding': '', // untapped → blank, so the rule stays live on reload
       'Batch Rounding': 'up',
     });
 
@@ -121,16 +124,26 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       bibles,
       defaultConfig,
     );
-    const row = dayRecordToTabWrites(partial)[0].row;
+    const row = dayRecordToTabWrites(partial)[0]!.row;
     expect(row['Small Count']).toBe(40);
     expect(row['Sic Count']).toBe(0); // a typed zero is a real zero
     expect(row['Indi Count']).toBe(''); // never counted → blank
   });
 
-  it('the batch-dependent tabs wait until a choice is tapped', () => {
+  it('a night with no batch direction RETRACTS the make: all-blank rows travel', () => {
+    // Blank cells clear their sheet cells, so a make saved earlier tonight
+    // and since un-decided cannot linger on the sheet — where the
+    // self-building bible would read the stale after-gang figure as truth.
+    // (The script skips an all-blank row for a date that has none, so this
+    // never appends date-only clutter.)
     const writes = dayRecordToTabWrites({ ...dayRecord, chosenBatchOption: null });
-    expect(writes.map((w) => w.tab)).not.toContain('Final Make Amount');
-    expect(writes.map((w) => w.tab)).not.toContain('Estimated Dough After Gang');
+    const blanksOnly = (tab: string) => {
+      const row = writes.find((w) => w.tab === tab)!.row;
+      const values = Object.entries(row).filter(([k]) => k !== 'Date').map(([, v]) => v);
+      expect(values.every((v) => v === '')).toBe(true);
+    };
+    blanksOnly('Final Make Amount');
+    blanksOnly('Estimated Dough After Gang');
     const make = writes.find((w) => w.tab === 'Dough Make (estimate)')!.row;
     expect(make.Batches).toBe(''); // trays are known; the batch count is not
     expect(make['Trays Total']).toBe(dayRecord.totalTrays);
@@ -151,8 +164,12 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       'AM Sic Use': 1,
       'Bible Used': 'regular',
     });
-    // No yesterday → no row at all, rather than a row of zeros.
-    expect(dayRecordToTabWrites(dayRecord).map((w) => w.tab)).not.toContain('AM Dough Use');
+    // No yesterday → an ALL-BLANK row, never zeros: blanks retract a morning
+    // figure a previously-cached yesterday once produced, and the script
+    // skips the row entirely when the date has none.
+    const bare = dayRecordToTabWrites(dayRecord).find((w) => w.tab === 'AM Dough Use')!.row;
+    const values = Object.entries(bare).filter(([k]) => k !== 'Date').map(([, v]) => v);
+    expect(values.every((v) => v === '')).toBe(true);
   });
 });
 
@@ -183,7 +200,7 @@ describe('bible mirror payload + hash gate', () => {
 
   it('the hash changes when any number changes', () => {
     const tampered = structuredClone(bibles);
-    tampered.regular.rows[0].small = 53;
+    tampered.regular.rows[0]!.small = 53;
     expect(biblesToPayload(tampered).hash).not.toBe(biblesToPayload(bibles).hash);
   });
 
@@ -234,7 +251,7 @@ describe('temps mapping', () => {
 
 describe('reverse mapping (loading)', () => {
   it('a 2 PM row hydrates back into the form — counts land as ball totals', () => {
-    const row = dayRecordToTabWrites(dayRecord)[0].row;
+    const row = dayRecordToTabWrites(dayRecord)[0]!.row;
     const fields = countsRowToFields(row);
     // The sheet never knew the tray/singles split, so totals come back as singles.
     expect(fields.smallSingles).toBe('43');
@@ -258,7 +275,7 @@ describe('reverse mapping (loading)', () => {
       bibles,
       defaultConfig,
     );
-    const row = dayRecordToTabWrites(stamped)[0].row;
+    const row = dayRecordToTabWrites(stamped)[0]!.row;
     expect(row['Forecast Rounding']).toBe('up');
     expect(row['Batch Rounding']).toBe('down');
     expect(summaryRowToForecastRounding(row)).toBe('up');
@@ -266,7 +283,7 @@ describe('reverse mapping (loading)', () => {
   });
 
   it('an EON row hydrates back through the EON prefix', () => {
-    const row = eonRecordToTabWrites(eonRecord)[0].row;
+    const row = eonRecordToTabWrites(eonRecord)[0]!.row;
     expect(countsRowToFields(row, 'EON ').largeSingles).toBe('154');
     expect(eonCountRowToFinalSales(row)).toBe('7900');
   });
@@ -345,7 +362,7 @@ describe("the night's line on the self-building bible", () => {
 describe('nights whose numbers do not line up', () => {
   it('leaves PM takings blank rather than recording a negative', () => {
     const odd = { ...eonRecord, pmSales: -2400 };
-    const row = eonRecordToTabWrites(odd, 'regular')!.find((w) => w.tab === 'PM Dough Use')!.row;
+    const row = eonRecordToTabWrites(odd, 'regular').find((w) => w.tab === 'PM Dough Use')!.row;
     expect(row['PM Sales $']).toBe('');
   });
 

@@ -70,15 +70,20 @@ export function lookupBibleRow(
   direction: RoundDirection = 'up',
 ): BibleRow {
   const rows = bible.rows;
-  const first = rows[0];
-  const last = rows[rows.length - 1];
+  // Both bibles ship non-empty and ascending — bibleData.test.ts trips if a
+  // future edit ever breaks that — so the two ends are asserted, not checked.
+  const first = rows[0]!;
+  const last = rows[rows.length - 1]!;
   if (sales <= first.sales) return first;
   if (sales >= last.sales) return last;
 
   if (direction === 'down') {
+    // Walk up from the bottom to the highest row at or below the figure —
+    // the row a round-down would land on — then apply the gap cap.
     for (let i = rows.length - 1; i >= 0; i--) {
-      if (rows[i].sales <= sales) {
-        if (sales - rows[i].sales <= config.bibleRounding.maxRoundDownGap) return rows[i];
+      const row = rows[i]!;
+      if (row.sales <= sales) {
+        if (sales - row.sales <= config.bibleRounding.maxRoundDownGap) return row;
         break; // too far to drop — fall through to the round-up path
       }
     }

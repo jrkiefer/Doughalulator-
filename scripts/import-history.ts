@@ -6,10 +6,10 @@
  *
  * Recorded reality always wins over recomputation: counts, sales, batches
  * made, and post-make final dough are written verbatim from the history file;
- * the engine only fills the derived tabs (Sales, Use Tonight, Left, Need
- * Tomorrow, Make, Batches, EON Check). Dates whose "final dough" was never
- * truly recorded get NO Final Dough row — a made-up number would poison the
- * sheet's PM-use formulas.
+ * the engine only fills the derived tabs (the two look-ups, the make, the
+ * final make, the dough after gang, the AM/PM use). Dates whose "final
+ * dough" was never truly recorded get NO after-gang row — a made-up number
+ * would poison the derived dough-use figures.
  *
  * Run with vite-node (ships with vitest):
  *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode dry
@@ -101,8 +101,10 @@ function eonHaveOn(date: string) {
 
 /** The morning's use for a date: last night's close against this afternoon's count. */
 function amUseFor(date: string, record: DoughDayRecord): AmUse | null {
+  // Dates in the history file are 'YYYY-MM-DD' — the split's three parts are
+  // asserted rather than re-validated on every call.
   const [y, m, d] = date.split('-').map(Number);
-  const prev = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+  const prev = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
   const yesterday = eonHaveOn(prev);
   if (!yesterday) return null;
   return computeAmUse(yesterday, record.have, record.currentSales);
@@ -190,7 +192,7 @@ function buildEon(date: string, e: HistoryEntry, dayRecord: DoughDayRecord | nul
 
 const payloads: Payload[] = [];
 for (const date of dates) {
-  const e = history[date];
+  const e = history[date]!; // dates IS Object.keys(history)
   const day = buildDay(date, e);
   if (day) payloads.push(day.payload);
   const eon = buildEon(date, e, day?.record ?? null);
@@ -238,10 +240,12 @@ function diffDate(date: string, e: HistoryEntry, sheet: SheetDate | null): strin
         bad.push(`${date} EON sales: ${eon['EON Sales']} != ${e.eon.finalSales}`);
       }
       if (e.eon.counts) {
+        // No Boli column here on purpose: the closing Boli count is
+        // screen-only by the owner's choice — `EON Dough Count` never holds
+        // it, so verifying it would flag every real night as a mismatch.
         const cols: [string, number][] = [
           ['EON Indi Count', e.eon.counts.indi], ['EON Small Count', e.eon.counts.small],
           ['EON Large Count', e.eon.counts.large], ['EON Sic Count', e.eon.counts.sic],
-          ['EON Boli Count', e.eon.counts.boli],
         ];
         cols.forEach(([key, want]) => {
           if (!near(eon[key], want)) bad.push(`${date} ${key}: ${eon[key]} != ${want}`);
@@ -278,7 +282,7 @@ async function main() {
     console.log(`dry run: all ${payloads.length} payloads accepted by the real backend code`);
     const problems = dates.flatMap((date) => {
       const answer = get(script, { action: 'date', date });
-      return diffDate(date, history[date], answer.ok === true ? (answer.tabs as SheetDate) : null);
+      return diffDate(date, history[date]!, answer.ok === true ? (answer.tabs as SheetDate) : null);
     });
     report(problems);
   }
@@ -326,17 +330,23 @@ async function main() {
   }
 
   if (mode === 'verify') {
+    const from = dates[0];
+    const to = dates[dates.length - 1];
+    if (!from || !to) {
+      console.error('history file holds no dates — nothing to verify');
+      process.exit(2);
+    }
     const u = new URL(url);
-        u.searchParams.set('action', 'range');
-    u.searchParams.set('from', dates[0]);
-    u.searchParams.set('to', dates[dates.length - 1]);
+    u.searchParams.set('action', 'range');
+    u.searchParams.set('from', from);
+    u.searchParams.set('to', to);
     const res = await fetch(u, { redirect: 'follow' });
     const answer = (await res.json()) as { ok?: boolean; dates?: Record<string, SheetDate>; error?: string };
     if (answer.ok !== true || !answer.dates) {
       console.error(`range read failed: ${answer.error}`);
       process.exit(1);
     }
-    const problems = dates.flatMap((date) => diffDate(date, history[date], answer.dates![date] ?? null));
+    const problems = dates.flatMap((date) => diffDate(date, history[date]!, answer.dates![date] ?? null));
     report(problems);
   }
 }

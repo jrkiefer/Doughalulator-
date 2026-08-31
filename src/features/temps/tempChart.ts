@@ -66,9 +66,12 @@ export function stationSeries(
   columns: TimeColumn[],
 ): (number | null)[] {
   return columns.map((c) => {
+    // Walk newest-first so the LAST matching Log entry wins — a re-entered
+    // slot is a correction, exactly as the paper log would read.
     for (let i = readings.length - 1; i >= 0; i--) {
-      if (readings[i].date === c.date && normalizeSlot(readings[i].slot) === c.slot) {
-        return readings[i].temp;
+      const r = readings[i]!;
+      if (r.date === c.date && normalizeSlot(r.slot) === c.slot) {
+        return r.temp;
       }
     }
     return null;

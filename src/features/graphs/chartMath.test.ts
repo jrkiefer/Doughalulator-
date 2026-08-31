@@ -31,13 +31,15 @@ function segmentRange(p0: Point, c1: Point, c2: Point, p1: Point) {
 /** Rebuild the control points the path uses, so the curve itself is checked. */
 function segments(pts: Point[]) {
   const m = monotoneTangents(pts);
+  // slice(0, -1) guarantees pts[i + 1] exists for every i mapped over.
   return pts.slice(0, -1).map((p, i) => {
-    const h = (pts[i + 1].x - pts[i].x) / 3;
+    const q = pts[i + 1]!;
+    const h = (q.x - p.x) / 3;
     return {
       p0: p,
-      c1: { x: p.x + h, y: p.y + m[i] * h },
-      c2: { x: pts[i + 1].x - h, y: pts[i + 1].y - m[i + 1] * h },
-      p1: pts[i + 1],
+      c1: { x: p.x + h, y: p.y + m[i]! * h },
+      c2: { x: q.x - h, y: q.y - m[i + 1]! * h },
+      p1: q,
     };
   });
 }
@@ -158,7 +160,7 @@ describe('ticks and snapping', () => {
     }
     // …and across a spread of ranges, so it cannot regress at one scale only.
     for (const [lo, hi] of [[0, 10], [0, 300], [3500, 21000], [2500, 18000], [0, 1.6]]) {
-      const ticks = ticksFor(lo, hi, 5);
+      const ticks = ticksFor(lo!, hi!, 5);
       expect(ticks.length).toBeGreaterThanOrEqual(2);
       expect(ticks.length).toBeLessThanOrEqual(8);
     }

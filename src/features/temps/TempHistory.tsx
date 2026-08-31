@@ -23,7 +23,7 @@ export function TempHistory() {
   // One refresh at mount, like the dough History card.
   useEffect(() => {
     let alive = true;
-    fetchRecentTemps().then((result) => {
+    void fetchRecentTemps().then((result) => {
       if (!alive) return;
       if (result.kind === 'unreachable') {
         setNote('showing the phone copy — sheet unreachable');

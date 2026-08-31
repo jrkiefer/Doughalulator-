@@ -447,8 +447,8 @@ describe('dough script — batched reads (one pass per tab, any number of dates)
     const recent = get(script, { action: 'recent', n: '30' });
     const recentDates = recent.dates as Record<string, Record<string, Record<string, string> | null>>;
     expect(Object.keys(recentDates).sort()).toEqual(['2026-08-01', '2026-08-02']);
-    expect(recentDates['2026-08-01']['2PM Dough Count']).toEqual(tabs['2PM Dough Count']);
-    expect(recentDates['2026-08-02']['EON Dough Count']!['EON Sales']).toBe('9100');
+    expect(recentDates['2026-08-01']!['2PM Dough Count']).toEqual(tabs['2PM Dough Count']);
+    expect(recentDates['2026-08-02']!['EON Dough Count']!['EON Sales']).toBe('9100');
 
     // range narrows by date without changing row content.
     const range = get(script, { action: 'range', from: '2026-08-02', to: '2026-08-31' });
@@ -604,7 +604,7 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(build.getCell(4, 2)).toBe(8000);
     expect(build.getCell(4, 5)).toBe(80);
     // And the suggestion columns fill beside the current bible.
-    const first = bibles.regular.rows[0];
+    const first = bibles.regular.rows[0]!;
     expect(build.getCell(2, 8)).toBe(first.sales); // X Sales
     expect(build.getCell(2, 9)).toBe(first.indi); // Old Indi — today's bible
     expect(build.getCell(2, 10)).toBe(Math.round(first.sales * 0.01)); // New Indi — the fit
@@ -764,17 +764,17 @@ describe('the app can read the suggestion back for its graph', () => {
     const out = read(script);
     // One row per threshold in that bible — not per recorded day.
     expect(out.dough).toHaveLength(bibles.regular.rows.length);
-    const first = bibles.regular.rows[0];
-    expect(out.dough[0].sales).toBe(first.sales);
-    expect(out.dough[0].old).toEqual({
+    const first = bibles.regular.rows[0]!;
+    expect(out.dough![0]!.sales).toBe(first.sales);
+    expect(out.dough![0]!.old).toEqual({
       indi: first.indi, small: first.small, large: first.large, sic: first.sic,
     });
     // Whole-day use ran at 1% of sales on all four sizes, so the fit says so.
-    expect(out.dough[0].new.indi).toBe(Math.round(first.sales * 0.01));
-    expect(out.dough[0].new.sic).toBe(Math.round(first.sales * 0.01));
+    expect(out.dough![0]!.new.indi).toBe(Math.round(first.sales * 0.01));
+    expect(out.dough![0]!.new.sic).toBe(Math.round(first.sales * 0.01));
     // The last threshold comes back too, so the graph spans the whole bible.
-    const last = bibles.regular.rows[bibles.regular.rows.length - 1];
-    expect(out.dough[out.dough.length - 1].sales).toBe(last.sales);
+    const last = bibles.regular.rows[bibles.regular.rows.length - 1]!;
+    expect(out.dough![out.dough!.length - 1]!.sales).toBe(last.sales);
   });
 
   it('reports "nothing suggested yet" as null, never as a zero', () => {
@@ -787,10 +787,10 @@ describe('the app can read the suggestion back for its graph', () => {
     const out = read(script);
     // Today's bible is known; the suggestion is not. A 0 here would draw a
     // line along the floor and read as "the new bible says make none".
-    expect(out.dough[0].old.indi).toBe(bibles.regular.rows[0].indi);
-    expect(out.dough[0].new.indi).toBeNull();
+    expect(out.dough![0]!.old.indi).toBe(bibles.regular.rows[0]!.indi);
+    expect(out.dough![0]!.new.indi).toBeNull();
     // No peach days at all — that bible is simply empty, not zeroed.
-    expect(out.peach.every((row) => row.new.indi === null)).toBe(true);
+    expect(out.peach!.every((row) => row.new.indi === null)).toBe(true);
   });
 
   it('answers with an empty list rather than throwing when a tab is missing', () => {
@@ -848,7 +848,7 @@ describe("temps script — the graph's last-few readings per station", () => {
       { date: '2026-08-16', time: '21:15', slot: 'Night', temp: 40 },
     ]);
     // The freezer's readings stay below zero — never clamped or dropped.
-    expect(out.Freezer.map((r) => r.temp)).toEqual([-6, -5, -4]);
+    expect(out.Freezer!.map((r) => r.temp)).toEqual([-6, -5, -4]);
   });
 
   it('a station with fewer readings hands over what it has', () => {
@@ -876,8 +876,8 @@ describe("temps script — the graph's last-few readings per station", () => {
       items: [{ time: '21:40', slot: '2 PM', readings: [{ station: 'Slice', temp: 39 }] }],
     });
     const out = recent(script);
-    expect(out.Slice.map((r) => r.temp)).toEqual([37, 38, 39]);
-    expect(out.Slice[2]).toMatchObject({ slot: '2 PM', time: '21:40' });
+    expect(out.Slice!.map((r) => r.temp)).toEqual([37, 38, 39]);
+    expect(out.Slice![2]).toMatchObject({ slot: '2 PM', time: '21:40' });
   });
 
   it('asks for more with n, capped sanely', () => {
@@ -958,15 +958,84 @@ describe('dough script — the spreadsheet/script timezone trap', () => {
   });
 });
 
+describe("our own refusals vs Google's transient failures", () => {
+  // The catch in doPost sorts throws into two piles: a structural problem
+  // the owner can fix (a moved heading, a missing tab) is TERMINAL and told
+  // in plain words; anything else thrown mid-request is Google misbehaving
+  // and answers retryable-shaped, so the app's backoff ladder — not a red
+  // "SHEET REFUSED" nobody can act on — handles it.
+  it('dough: a Google hiccup mid-save answers retryable, and the next try lands', () => {
+    const script = freshDough();
+    const real = script.world.ss.getSheetByName.bind(script.world.ss);
+    let hiccups = 1;
+    script.world.ss.getSheetByName = (name: string) => {
+      if (hiccups > 0) {
+        hiccups--;
+        throw new Error('Service Spreadsheets failed while accessing document');
+      }
+      return real(name);
+    };
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: false, retryable: true });
+    expect(post(script, dayPayload('2026-08-01'))).toMatchObject({ ok: true });
+  });
+
+  it('temps: the same sorting applies', () => {
+    const script = freshTemps();
+    const real = script.world.ss.getSheetByName.bind(script.world.ss);
+    let hiccups = 1;
+    script.world.ss.getSheetByName = (name: string) => {
+      if (hiccups > 0) {
+        hiccups--;
+        throw new Error('Internal error');
+      }
+      return real(name);
+    };
+    const payload = {
+      type: 'temps', date: '2026-08-01',
+      items: [{ time: '07:02', slot: 'Morning', readings: [{ station: 'Pizza 1', temp: 38 }] }],
+    };
+    expect(post(script, payload)).toMatchObject({ ok: false, retryable: true });
+    expect(post(script, payload)).toMatchObject({ ok: true });
+  });
+
+  it('a body that is not JSON is terminal — resending it cannot make it JSON', () => {
+    const script = freshDough();
+    const out = script.fns.doPost({ postData: { contents: 'not json{' } }) as { getContent(): string };
+    const answer = JSON.parse(out.getContent()) as Record<string, unknown>;
+    expect(answer.ok).toBe(false);
+    expect(answer.retryable).toBeUndefined();
+  });
+});
+
 describe('dough script — the columns must be where the app thinks', () => {
   it('refuses the save when a heading has been renamed, and says which', () => {
     const script = freshDough();
     script.world.ss.getSheetByName('2PM Dough Count')!.setCell(1, 6, 'Indi Balls');
-    const answer = post(script, dayPayload('2026-08-01')) as { ok: boolean; error: string };
+    const answer = post(script, dayPayload('2026-08-01')) as { ok: boolean; retryable?: boolean; error: string };
     expect(answer.ok).toBe(false);
+    // A moved heading is OUR refusal — it must never be dressed as a network
+    // problem, or the app would retry it for ever instead of telling.
+    expect(answer.retryable).toBeUndefined();
     expect(answer.error).toContain('2PM Dough Count');
     expect(answer.error).toContain('F1');
     expect(answer.error).toContain('Indi Count');
+  });
+
+  it('a refusal on ANY tab means NOTHING is written — never a half-saved day', () => {
+    // Headings are checked for every tab BEFORE the first write. Without
+    // that, a save spanning several tabs used to write the healthy ones and
+    // then refuse — leaving a torn day behind until the next success.
+    const script = freshDough();
+    script.world.ss.getSheetByName('Dough Make (estimate)')!.setCell(1, 2, 'Indy Trays');
+    const answer = post(script, {
+      type: 'day', date: '2026-08-01',
+      tabs: [
+        ...dayPayload('2026-08-01').tabs, // healthy first tab…
+        { tab: 'Dough Make (estimate)', row: { Date: '2026-08-01', 'Indi Trays': 4 } }, // …broken second
+      ],
+    });
+    expect(answer).toMatchObject({ ok: false });
+    expect(script.world.ss.getSheetByName('2PM Dough Count')!.getLastRow()).toBe(1); // untouched
   });
 
   it('refuses rather than writing into a shifted column', () => {
@@ -1000,6 +1069,99 @@ describe('dough script — a stray value cannot push the next night into a gap',
       tabs: Record<string, { Date: string } | null>;
     };
     expect(answer.tabs['2PM Dough Count']?.Date).toBe('2026-08-02');
+  });
+});
+
+describe('blank rows clear, they never create (retracting a stale make)', () => {
+  it('an all-blank row clears the cells of a date that HAS a row', () => {
+    // The app always sends the derived tabs; when a figure stops being
+    // knowable (the batch choice went away) the row arrives all-blank and
+    // must RETRACT what an earlier save wrote — otherwise the self-building
+    // bible keeps reading the stale after-gang dough as that night's truth.
+    const script = freshDough();
+    post(script, {
+      type: 'day', date: '2026-08-01',
+      tabs: [
+        ...dayPayload('2026-08-01').tabs,
+        { tab: 'Estimated Dough After Gang', row: { Date: '2026-08-01', Indi: 64, Small: 378 } },
+      ],
+    });
+    const after = script.world.ss.getSheetByName('Estimated Dough After Gang')!;
+    expect(after.getCell(2, 2)).toBe(64);
+
+    post(script, {
+      type: 'day', date: '2026-08-01',
+      tabs: [
+        ...dayPayload('2026-08-01').tabs,
+        { tab: 'Estimated Dough After Gang', row: { Date: '2026-08-01', Indi: '', Small: '', Large: '', Sic: '', Boli: '' } },
+      ],
+    });
+    expect(after.getCell(2, 2)).toBe(''); // retracted
+    expect(after.getLastRow()).toBe(2); // the dated row itself stays
+  });
+
+  it('an all-blank row for a date with NO row is skipped — no date-only clutter', () => {
+    const script = freshDough();
+    post(script, {
+      type: 'day', date: '2026-08-01',
+      tabs: [
+        ...dayPayload('2026-08-01').tabs,
+        { tab: 'Estimated Dough After Gang', row: { Date: '2026-08-01', Indi: '', Small: '', Large: '', Sic: '', Boli: '' } },
+      ],
+    });
+    // Header only: clearing a row that never existed records nothing.
+    expect(script.world.ss.getSheetByName('Estimated Dough After Gang')!.getLastRow()).toBe(1);
+  });
+});
+
+describe('temps script — the same hardening the dough script earned', () => {
+  function reading(station: string, temp: number, date = '2026-08-01') {
+    return {
+      type: 'temps', date,
+      items: [{ time: '07:02', slot: 'Morning', readings: [{ station, temp }] }],
+    };
+  }
+
+  it('refuses (terminally) when a station tab heading has moved, writing NOTHING', () => {
+    const script = freshTemps();
+    script.world.ss.getSheetByName('Pizza 1')!.setCell(1, 2, 'AM');
+    const answer = post(script, reading('Pizza 1', 38)) as { ok: boolean; retryable?: boolean; error: string };
+    expect(answer.ok).toBe(false);
+    expect(answer.retryable).toBeUndefined(); // a moved heading is OUR refusal
+    expect(answer.error).toContain('Pizza 1');
+    // The pre-flight runs before the first write, so even the Log is clean.
+    expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(1);
+  });
+
+  it('refuses when the Overview station names have been reordered', () => {
+    const script = freshTemps();
+    script.world.ss.getSheetByName('Overview')!.setCell(2, 1, 'Freezer');
+    const answer = post(script, reading('Pizza 1', 38)) as { ok: boolean; error: string };
+    expect(answer.ok).toBe(false);
+    expect(answer.error).toContain('station names have moved');
+  });
+
+  it('a stray note far down a station tab cannot push the next day into a gap', () => {
+    const script = freshTemps();
+    post(script, reading('Pizza 1', 38, '2026-08-01')); // row 2
+    script.world.ss.getSheetByName('Pizza 1')!.setCell(400, 3, 'defrosted today');
+    post(script, reading('Pizza 1', 39, '2026-08-02'));
+    const sheet = script.world.ss.getSheetByName('Pizza 1')!;
+    expect(sheet.getCell(3, 1)).not.toBe(''); // row 3, not row 401
+    expect(sheet.getCell(3, 2)).toBe(39);
+  });
+
+  it("a stray note far down the Log cannot drag the graph's window off the data", () => {
+    const script = freshTemps();
+    post(script, reading('Pizza 1', 38));
+    script.world.ss.getSheetByName('Log')!.setCell(900, 5, 'checked by hand');
+    const answer = get(script, { action: 'recent' });
+    const stations = answer.stations as Record<string, { temp: number }[]>;
+    expect(stations['Pizza 1']).toHaveLength(1);
+    expect(stations['Pizza 1']![0]!.temp).toBe(38);
+    // …and the next save still appends right under the data, not at row 901.
+    post(script, reading('Pizza 1', 39, '2026-08-02'));
+    expect(script.world.ss.getSheetByName('Log')!.getCell(3, 5)).toBe(39);
   });
 });
 

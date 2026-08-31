@@ -73,35 +73,39 @@ export function LineChart(props: {
   const place = (pts: Point[]) => pts.map((p) => ({ x: sx(p.x), y: sy(p.y) }));
 
   // The gap between the two lines is the whole point of the chart, so it gets
-  // drawn rather than left for the eye to measure. Only where both exist.
+  // drawn rather than left for the eye to measure. Only where both series
+  // exist, and only at the sales figures both of them cover.
   const [first, second] = drawn;
   const shared =
-    drawn.length === 2
+    first && second
       ? allX.filter(
           (x) =>
             first.points.some((p) => p.x === x) && second.points.some((p) => p.x === x),
         )
       : [];
+  // Safe by construction: `at` is only called for x values `shared` proved
+  // present in both series.
   const at = (s: Series, x: number) => s.points.find((p) => p.x === x)!;
   const band =
-    shared.length > 1
+    first && second && shared.length > 1
       ? bandPath(
           place(shared.map((x) => at(first, x))),
           place(shared.map((x) => at(second, x))),
         )
       : '';
+  const bandColor = second?.color ?? 'var(--ink)';
 
   // End labels: the value only. The series name is the legend's job, and a name
   // at the line end would need more width than a phone has to spare.
   const ends = drawn
     .map((s) => {
-      const last = s.points[s.points.length - 1];
+      const last = s.points[s.points.length - 1]!; // drawn ⇒ points.length > 0
       return { series: s, x: sx(last.x), y: sy(last.y), value: last.y };
     })
     .sort((a, b) => a.y - b.y);
   const labelY = ends.map((e) => e.y);
-  if (ends.length === 2 && labelY[1] - labelY[0] < LABEL_MIN_GAP) {
-    const mid = (labelY[0] + labelY[1]) / 2;
+  if (labelY.length === 2 && labelY[1]! - labelY[0]! < LABEL_MIN_GAP) {
+    const mid = (labelY[0]! + labelY[1]!) / 2;
     const ceiling = PLOT.y1 + 4;
     let top = mid - LABEL_MIN_GAP / 2;
     let bottom = mid + LABEL_MIN_GAP / 2;
@@ -129,7 +133,9 @@ export function LineChart(props: {
     props.onActive(nearestIndex(allX, value));
   }
 
-  const activeX = props.activeIndex === null ? null : allX[props.activeIndex];
+  // An index that outlived its data (a reload shrank the series while a
+  // reading was up) resolves to null rather than crashing the readout.
+  const activeX = props.activeIndex === null ? null : (allX[props.activeIndex] ?? null);
 
   return (
     <svg
@@ -180,7 +186,7 @@ export function LineChart(props: {
         </g>
       ))}
 
-      {band && <path className="chart-band" d={band} style={{ ['--line' as string]: second.color }} />}
+      {band && <path className="chart-band" d={band} style={{ ['--line' as string]: bandColor }} />}
 
       {activeX !== null && (
         <line className="chart-crosshair" x1={sx(activeX)} y1={PLOT.y1} x2={sx(activeX)} y2={PLOT.y0} />
@@ -188,6 +194,7 @@ export function LineChart(props: {
 
       {drawn.map((s) => {
         const pts = place(s.points);
+        const end = pts[pts.length - 1]!; // drawn ⇒ points.length > 0
         const active = activeX === null ? null : s.points.find((p) => p.x === activeX);
         return (
           <g key={s.label} style={{ ['--line' as string]: s.color }}>
@@ -198,22 +205,27 @@ export function LineChart(props: {
             />
             {/* One marker at the end, ringed in the surface colour so it stays
                 legible where the two lines cross. */}
-            <circle className="chart-end" cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={4} />
+            <circle className="chart-end" cx={end.x} cy={end.y} r={4} />
             {active && <circle className="chart-active" cx={sx(active.x)} cy={sy(active.y)} r={4.5} />}
           </g>
         );
       })}
 
-      {ends.map((e, i) => (
-        <g key={e.series.label}>
-          {Math.abs(labelY[i] - e.y) > 1 && (
-            <line className="chart-leader" x1={e.x + 5} y1={e.y} x2={PLOT.x1 + 10} y2={labelY[i]} />
-          )}
-          <text className="chart-end-label" x={PLOT.x1 + 12} y={labelY[i] + 3}>
-            {fmtValue(e.value)}
-          </text>
-        </g>
-      ))}
+      {ends.map((e, i) => {
+        const y = labelY[i]!; // labelY is built index-for-index from ends
+        return (
+          <g key={e.series.label}>
+            {/* A leader line only when the label was pushed off its point —
+                an untouched label needs no explanation. */}
+            {Math.abs(y - e.y) > 1 && (
+              <line className="chart-leader" x1={e.x + 5} y1={e.y} x2={PLOT.x1 + 10} y2={y} />
+            )}
+            <text className="chart-end-label" x={PLOT.x1 + 12} y={y + 3}>
+              {fmtValue(e.value)}
+            </text>
+          </g>
+        );
+      })}
 
       <line className="chart-axis" x1={PLOT.x0} y1={PLOT.y0} x2={PLOT.x1} y2={PLOT.y0} />
 

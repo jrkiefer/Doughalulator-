@@ -20,11 +20,13 @@ function mockFetch(impl: (typeof fetch) | 'reject' | 'hang') {
 }
 
 function jsonResponse(body: unknown, status = 200) {
-  return async () =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  return () =>
+    Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 }
 
 afterEach(() => {
@@ -73,7 +75,7 @@ describe('setup mistakes get a plain answer, not an endless retry', () => {
   });
 
   it('an HTML sign-in page instead of data names the real problem', async () => {
-    mockFetch(async () => new Response('<!doctype html><title>Sign in</title>', { status: 200 }));
+    mockFetch(() => Promise.resolve(new Response('<!doctype html><title>Sign in</title>', { status: 200 })));
     const outcome = await getJson('https://sheet.test/exec', { action: 'ping' });
     expect(outcome.kind).toBe('rejected');
     expect(outcome.kind === 'rejected' && outcome.reason).toMatch(/Anyone/);

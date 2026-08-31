@@ -1,3 +1,11 @@
+/**
+ * The top band: the sync status pill, the two-tap RESET, and the title.
+ *
+ * The pill is the app's one honest word about where the open date's numbers
+ * are — phone, sheet, in flight, or nowhere — fed by engine.status(), which
+ * summarises all three record types for the date. The label set matches the
+ * SyncState union one-for-one so a new state cannot ship without words.
+ */
 import type { SyncStatus } from '../../services/sync';
 
 const LABELS: Record<SyncStatus['state'], string> = {
@@ -12,6 +20,9 @@ const LABELS: Record<SyncStatus['state'], string> = {
 
 export function Header(props: { status: SyncStatus; resetArmed: boolean; onReset: () => void }) {
   const { status } = props;
+  // Two states carry more than their label: a refusal shows the sheet's own
+  // reason (that sentence is the whole point of telling-not-retrying), and a
+  // synced-but-phone-full record admits the phone half failed.
   const text =
     status.state === 'rejected' && status.reason
       ? `SHEET REFUSED: ${status.reason}`

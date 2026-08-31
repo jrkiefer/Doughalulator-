@@ -97,15 +97,25 @@ export interface SyncEngine {
    * clean. `replaces` names the record types this fetch speaks for: they are
    * cleared first, so a type the sheet has no row for ends up genuinely empty
    * instead of keeping a stale local copy. Types not listed (temps, which come
-   * from the other notebook) are left alone.
+   * from the other notebook) are left alone — content AND sync bookkeeping,
+   * so a dough fetch can never stamp an unsent temperature "synced".
+   *
+   * The dirty check is scoped the same way: only dirt on the types this fetch
+   * REPLACES blocks it. A half-typed temperature must not stop the dough side
+   * from refreshing — the fetch does not touch temps, so their dirt is not
+   * this fetch's business.
    */
   applyFetched(
     date: string,
     replaces: readonly RecordType[],
     apply: (entry: DateEntry) => void,
   ): 'replaced' | 'kept-dirty';
-  /** True when any of the date's records has unsynced typed content. */
-  isDirty(date: string): boolean;
+  /**
+   * True when any of the date's records has unsynced typed content. Pass
+   * `types` to ask about a subset — the LOAD FROM SHEET confirmation should
+   * warn only about edits that load would actually replace.
+   */
+  isDirty(date: string, types?: readonly RecordType[]): boolean;
   /** Force-load path: overwrite local with fetched content and mark clean. */
   overwrite(date: string, replaces: readonly RecordType[], apply: (entry: DateEntry) => void): void;
   /** Two-tap reset target: blank the date and make sure nothing ever posts. */
@@ -147,6 +157,13 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
   /** The sheets whose last attempt hit a network-class failure — per notebook,
    * so an unreachable temp log can never make the dough log look broken. */
   const offlineTargets = new Set<SyncTarget>();
+  /**
+   * The sheets a flush is talking to RIGHT NOW — per notebook, like
+   * `offlineTargets`, so the header can say SYNCING only about the notebook
+   * that is actually mid-send. With one shared flag, a slow temp save made
+   * the dough side read SYNCING over numbers that were already confirmed.
+   */
+  const inFlightTargets = new Set<SyncTarget>();
   let inFlight = false;
   let rerunAfterFlight = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -217,10 +234,16 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
   /**
    * Take a sheet fetch as the truth for the record types it speaks for.
    *
-   * Clearing those types FIRST is the whole point: the fetch only writes back
+   * Clearing those types FIRST is half the point: the fetch only writes back
    * the ones the sheet actually has a row for, so without this a record the
    * sheet doesn't hold would survive on screen and then get stamped synced —
    * a green badge over numbers the sheet has never seen.
+   *
+   * Stamping ONLY the replaced types is the other half. A type outside
+   * `replaces` (temps, during a dough fetch) keeps its bookkeeping untouched:
+   * stamping it too once marked a still-unsent temperature "synced" during a
+   * force-load, which quietly stood its retry down — the reading would never
+   * have reached the Temp Log unless it was edited again.
    */
   function takeFromSheet(
     date: string,
@@ -231,7 +254,7 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     for (const type of replaces) delete entry[type];
     apply(entry);
     const now = deps.now();
-    for (const type of TYPE_ORDER) {
+    for (const type of replaces) {
       const rec = metaOf(entry, type);
       if (rec) {
         rec.updatedAt = now;
@@ -342,9 +365,19 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     notify();
     try {
       const dates = [...new Set<string>([...deps.listDates(), ...memory.keys()])].sort();
-      // The two sheets are independent, so they sync at the same time.
+      // The two sheets are independent, so they sync at the same time — and
+      // each one wears its own in-flight flag for exactly as long as its own
+      // sends run, so SYNCING is only ever claimed about the notebook that is
+      // actually mid-send.
       const sawRetryable = await Promise.all(
-        TARGETS.map((target) => flushTarget(target, dates, opts)),
+        TARGETS.map(async (target) => {
+          inFlightTargets.add(target);
+          try {
+            return await flushTarget(target, dates, opts);
+          } finally {
+            inFlightTargets.delete(target);
+          }
+        }),
       );
       // A keepalive flush confirms NOTHING — it fires into a page that is going
       // away and never hears back. So it must not claim a sheet is reachable,
@@ -371,7 +404,17 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     Object.values(form).some((v) => v.trim() !== '');
 
   function recordHasContent(entry: DateEntry, type: RecordType): boolean {
-    if (type === 'day') return !!entry.day && (formHas(entry.day.form) || entry.day.rounding !== null);
+    // BOTH rounding taps are content, symmetrically: each is a decision the
+    // owner made that the other phone must be able to see. (Forecast rounding
+    // was once left out here, so a tap-only day never posted at all.)
+    if (type === 'day') {
+      return (
+        !!entry.day &&
+        (formHas(entry.day.form) ||
+          entry.day.rounding !== null ||
+          (entry.day.forecastRound ?? null) !== null)
+      );
+    }
     if (type === 'eon') return !!entry.eon && formHas(entry.eon.form);
     return !!entry.temps && Object.values(entry.temps.readings).some(formHas);
   }
@@ -382,21 +425,24 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
 
   return {
     getEntry,
-    edit: edit as SyncEngine['edit'],
+    edit: edit,
 
-    isDirty(date) {
+    isDirty(date, types = TYPE_ORDER) {
       const entry = getEntry(date);
-      return (
-        hasContent(entry) &&
-        TYPE_ORDER.some((type) => {
-          const rec = metaOf(entry, type);
-          return !!rec && rec.updatedAt > rec.syncedAt;
-        })
-      );
+      // "Dirty" needs both halves per type: unsynced bookkeeping AND typed
+      // content — an empty record with a fresh stamp is nothing to protect.
+      return types.some((type) => {
+        const rec = metaOf(entry, type);
+        return !!rec && rec.updatedAt > rec.syncedAt && recordHasContent(entry, type);
+      });
     },
 
     applyFetched(date, replaces, apply) {
-      if (this.isDirty(date)) return 'kept-dirty';
+      // Only dirt on the types this fetch REPLACES blocks it. A dough fetch
+      // never touches temps (content or bookkeeping — see takeFromSheet), so
+      // an unsent temperature is no reason to keep a stale dough copy, and
+      // the "phone copy kept" message must never point at the wrong notebook.
+      if (this.isDirty(date, replaces)) return 'kept-dirty';
       takeFromSheet(date, replaces, apply);
       return 'replaced';
     },
@@ -440,7 +486,8 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       if (dirty && waitingOnOffline) {
         return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
       }
-      if (dirty && inFlight) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
+      const sending = dirtyTargets(entry).some((t) => inFlightTargets.has(t));
+      if (dirty && sending) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
       if (dirty) return { state: 'saving', reason: null, phoneWriteFailed: failedPhone };
       return { state: 'synced', reason: null, phoneWriteFailed: failedPhone };
     },
@@ -458,7 +505,9 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       if (dirty && offlineTargets.has(TARGET_OF[type])) {
         return { state: 'offline', reason: null, phoneWriteFailed: failedPhone };
       }
-      if (dirty && inFlight) return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
+      if (dirty && inFlightTargets.has(TARGET_OF[type])) {
+        return { state: 'syncing', reason: null, phoneWriteFailed: failedPhone };
+      }
       if (dirty) return { state: 'saving', reason: null, phoneWriteFailed: failedPhone };
       return { state: 'synced', reason: null, phoneWriteFailed: failedPhone };
     },

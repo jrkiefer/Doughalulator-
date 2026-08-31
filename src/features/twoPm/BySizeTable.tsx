@@ -1,3 +1,10 @@
+/**
+ * The By Size card: one row per bible size walking the night left to right —
+ * HAVE → USE → LEFT → NEED → MAKE → TRAYS — with the set-out alert above it
+ * when tonight dips into tomorrow's dough, and the Boli row (a top-up, never
+ * in the bible) styled to line its tray count up under the TRAYS column.
+ * Every figure is read off the engine's record; nothing is computed here.
+ */
 import { defaultConfig } from '../../config';
 import type { BibleSizeKey, DoughDayRecord } from '../../core/types';
 import { fmtMaybe } from '../shared/counts';
