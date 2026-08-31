@@ -699,17 +699,20 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* Rounding up means firing the mixer for trays the plan didn't ask for, so it
-   speaks up in the accent red; rounding down means less work, so it reads
-   green. An even night keeps the quiet default above. */
+/* Up is green, down is red — the same direction language the EON outlook and
+   the bible-comparison readout already speak (a surplus is green, a shortfall
+   red). Rounding UP means extra dough on the bench and tomorrow comfortably
+   covered; rounding DOWN sheds trays the plan did ask for, which is the one
+   that can leave you short, so it is the one that speaks up. An even night
+   keeps the quiet default above. */
 .status-chip.up {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  color: var(--good);
 }
 
 .status-chip.down {
-  background: color-mix(in srgb, var(--good) 12%, transparent);
-  color: var(--good);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .rounding-row {
@@ -836,8 +839,8 @@ button:focus-visible {
 }
 
 /* The ROUND column: what the batch rule added or trimmed to reach whole mixer
-   runs. Same colour language as the Day's Work status chip — the accent when
-   it asks for more work, green when it takes work away — so the two cards
+   runs. Same colour language as the Day's Work status chip directly above it —
+   green for trays gained, the accent for trays given up — so the two cards
    read as one story. A counted size it left alone sits quiet at 0. */
 .bysize td.round-cell {
   font-variant-numeric: tabular-nums;
@@ -855,12 +858,12 @@ button:focus-visible {
 }
 
 .bysize td.round-cell.up {
-  color: var(--accent);
+  color: var(--good);
   font-weight: 700;
 }
 
 .bysize td.round-cell.down {
-  color: var(--good);
+  color: var(--accent);
   font-weight: 700;
 }
 
