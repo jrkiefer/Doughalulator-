@@ -211,6 +211,15 @@ build less.**
 
 ## Things a review already found — don't reintroduce them
 
+- **The two 2 PM cards must read their trays from ONE place** (`twoPm/trayPlan.ts`, pure and
+  tested). They worked it out separately once and drifted: the Day's Work pills showed the trays
+  AFTER the batch rounding while the By Size table showed the plain bible plan, so a night that
+  rounded up read "LG 16" on one card and "LG 15" on the next with nothing to join them (owner's
+  screenshot, Aug 2026). The table now draws all three parts — PLAN, ROUND, FINAL — and FINAL is
+  the tinted column, the same figure the pills show. `round` is measured as **final − plan**, never
+  the option's requested delta: `buildBatchOption` floors Small and Large at zero trays, so a deep
+  round-down can move less than it asked to, and reporting the request would promise a trim that
+  never happened.
 - **A total summed from `?? 0` is not the same as an answer.** `totalTrays` stays `null` until at
   least one size is counted: with every size contributing zero, "nothing to make" reads as a
   finished decision when the truth is "nobody has counted yet". Any new roll-up needs the same care.

@@ -831,6 +831,46 @@ button:focus-visible {
   font-weight: 700;
 }
 
+/* The ROUND column: what the batch rule added or trimmed to reach whole mixer
+   runs. Same colour language as the Day's Work status chip — the accent when
+   it asks for more work, green when it takes work away — so the two cards
+   read as one story. A counted size it left alone sits quiet at 0. */
+.bysize td.round-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bysize td.round-cell.up {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.bysize td.round-cell.down {
+  color: var(--good);
+  font-weight: 700;
+}
+
+.bysize td.round-cell.flat {
+  color: var(--ink-mute);
+}
+
+/* Nine columns is a squeeze on the narrowest phones. Tightening the cell
+   padding and dropping a point off the figures buys the room; --trays-col and
+   the Boli row below the table both track --cell-pad, so they follow along. */
+@media (max-width: 380px) {
+  .bysize {
+    --cell-pad: 2px;
+  }
+
+  .bysize td {
+    font-size: 12px;
+  }
+
+  .bysize th {
+    letter-spacing: 0.06em;
+  }
+}
+
 .bysize .boli-row {
   display: flex;
   align-items: center;

@@ -2,6 +2,7 @@ import { defaultConfig } from '../../config';
 import type { BatchOption, DoughDayRecord, Maybe, RoundDirection } from '../../core/types';
 import { SectionHead } from '../shell/SectionHead';
 import { RoundingPills } from './RoundingPills';
+import { trayPlan } from './trayPlan';
 
 export type Rounding = 'down' | 'up' | null;
 
@@ -74,18 +75,16 @@ export function DaysWork(props: {
       : record.chosenBatchOption === 'down'
         ? record.batchDown
         : record.batchUp;
-  const trays = chosen ? chosen.finalTraysToMake : { ...record.trays, boli: record.boliTrays };
+  // The trays these pills show, and the deltas the note reports, come from the
+  // SAME helper the By Size table draws its PLAN/ROUND/FINAL columns from —
+  // the two cards worked this out separately once and drifted apart.
+  const lines = trayPlan(record);
   const closed = record.flags.closedTomorrow;
   const ready = record.totalTrays !== null;
   // How far the batch count moved off the plain plan, and where those trays
-  // went. Small/Large deltas come from the FINAL trays so a floored round-down
-  // reports what was really trimmed.
-  const note = chosen
-    ? splitNote(
-        (chosen.finalTraysToMake.small ?? 0) - (record.trays.small ?? 0),
-        (chosen.finalTraysToMake.large ?? 0) - (record.trays.large ?? 0),
-      )
-    : '';
+  // went. The helper measures each delta as final − plan, so a floored
+  // round-down reports what was really trimmed rather than what was asked for.
+  const note = chosen ? splitNote(lines.small.round, lines.large.round) : '';
   const tail = note ? ` · ${note}` : '';
   // Not ready splits two ways, and saying the wrong one is worse than saying
   // nothing: the sales card comes first on the page, so between filling it in
@@ -99,11 +98,11 @@ export function DaysWork(props: {
       <div className="card">
         <span className="micro">TRAYS</span>
         <div className="tray-pills">
-          <TrayPill name="INDI" color="var(--indi)" value={pillValue(trays.indi)} />
-          <TrayPill name="SM" color="var(--small)" value={pillValue(trays.small)} />
-          <TrayPill name="LG" color="var(--large)" value={pillValue(trays.large)} />
+          <TrayPill name="INDI" color="var(--indi)" value={pillValue(lines.indi.final)} />
+          <TrayPill name="SM" color="var(--small)" value={pillValue(lines.small.final)} />
+          <TrayPill name="LG" color="var(--large)" value={pillValue(lines.large.final)} />
           <TrayPill name="SIC" color="var(--sic)" value={pillValue(record.sicBalls, ' BALLS')} />
-          <TrayPill name="BOLI" color="var(--boli)" value={pillValue(record.boliTrays)} />
+          <TrayPill name="BOLI" color="var(--boli)" value={pillValue(lines.boli.final)} />
         </div>
         {missing.length > 0 && missing.length < 5 && (
           <p className="days-work-note">
