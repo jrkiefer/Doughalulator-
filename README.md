@@ -142,30 +142,38 @@ calculation engine, so past dates are filled in. Things worth knowing:
 
 ---
 
-### Selling or moving this app — the whole handover, in order
+### Giving the app its own accounts — when you're ready, in this order
 
-Everything below already appears somewhere on this page; this list is the order to do it in when
-the app changes hands (or the notebooks move to a different Google account). Nothing else is
-attached to the old owner.
+The app currently lives on your personal Google and GitHub accounts. To let it stand on its own —
+a Gmail address and a GitHub account that exist only for it, so nothing depends on your personal
+sign-ins — this is the whole job, in order. Everything stays the same restaurant: the bibles, the
+stations and every number in `src/config/` are already right and don't change.
 
-1. **Two new Google spreadsheets** in the new owner's account. In each: Extensions → Apps Script,
-   paste the matching file from `apps-script/` (`dough/Code.gs`, `temps/Code.gs`), run `setup()`
-   once, then Deploy → New deployment → Web app, "Execute as: Me", "Access: Anyone". Copy the two
-   `/exec` addresses.
-2. **Point the app at them:** the two addresses in `src/services/sheets.ts`. This is the only
-   wiring there is.
-3. **Host it yourself:** fork or transfer this repo, turn on GitHub Pages (the workflow in
-   `.github/` publishes `main` automatically), and the live address changes with it. Phones then
-   add the new address to their home screens.
-4. **Make the data yours.** The bibles in `src/data/` and every number in `src/config/` (stations,
-   balls per tray, the $13,000 slow-day gate, batch size…) are THIS restaurant's. A new kitchen
-   needs its own bible tables and its own constants — that is data entry plus a config edit, no
-   engine changes.
-5. **History is portable too:** past records live in the notebooks, and
-   `scripts/import-history.ts` can replay records into a fresh Dough Log (dry → live → verify).
+1. **Make the two new accounts.** One Gmail for the app, and a GitHub account that signs up with
+   that Gmail. Put both in the password manager — the app has no password of its own, so these
+   two logins are the only keys to anything.
+2. **Move the two notebooks, don't rebuild them.** In Drive, share each notebook to the new Gmail
+   and then transfer ownership to it. Both notebooks keep every night you have ever recorded, and
+   the script inside each one travels with it. (Making a copy from the new account works too, and
+   also keeps the rows — transferring is tidier because the link stays the same.)
+3. **Re-deploy each script from the NEW account — this is the step that actually cuts the cord.**
+   A web app keeps running as whoever deployed it, so until this is done the notebooks are still
+   being written to by your personal account. Signed in as the app's account: open each notebook →
+   Extensions → Apps Script → Deploy → **New** deployment → Web app, "Execute as: Me",
+   "Access: Anyone". That mints **new `/exec` addresses** — copy both.
+4. **Tell the app the new addresses:** the two constants in `src/services/sheets.ts`. That is the
+   only wiring in the whole app, and this one edit is the only code change any of this needs.
+5. **Move the repo.** Transfer this repository to the new GitHub account (Settings → Transfer),
+   which keeps every commit and the deploy workflow. Turn GitHub Pages back on there; pushing to
+   `main` publishes as before. The live address becomes
+   `https://<new-account>.github.io/Doughalulator-/`.
+6. **Re-add the app on each phone**, since the address changed: open the new link, Add to Home
+   Screen, delete the old tile. Nothing needs typing into the app — the addresses are built in, so
+   a phone that opens the new link is already connected.
 
-There is no license file in this repo; ownership travels with whatever the sale agreement says,
-so put it in writing there.
+Worth knowing while you do it: run **Dough Tools → Check the log** in the moved notebook afterwards
+as a quick "everything still lines up" pass, and keep the old notebooks around read-only for a
+week or two before deleting anything.
 
 ## Everyday things worth knowing
 
@@ -244,7 +252,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
-| **1.27.0** | The production-readiness pass, done after a full line-by-line review. **Four real fixes:** a force-load can no longer quietly mark an unsent temperature as saved; "Up to date ✓" now also compares the forecast-rounding tap, so a tap made on the other phone loads properly; a rounding tap alone now counts as something worth saving (both pills, symmetrically); and a half-typed temperature no longer blocks the dough side from refreshing. **The notebooks got tougher:** a save now checks every page's headings before writing anything, so a moved heading can never leave a half-saved day; a make that gets un-decided is now cleared off the sheet instead of lingering where the self-building bible would read it; Google's own hiccups now retry quietly instead of showing a red refusal nobody can act on; and the Temp Log got the same protections the Dough Log already had (moved headings refused, stray notes unable to derail saves or the graph). **New on screen:** a reminder on the date card after midnight (last night is yesterday's date — tap ◀), and if the app ever crashes it now shows a calm "nothing typed has been lost — reload" card instead of a blank page. **Under the hood, for whoever maintains this next:** proper home-screen icons and app identity (no more grey screenshot tile on iPhone), the whole toolchain brought current (React 19, Vite 8, Vitest 4, TypeScript 5.9, pinned to Node 22), stricter compiler and lint settings that read the actual types, dead styles and dead code removed, the one-off importer's stale Boli check fixed, and a step-by-step handover list added above for if the app ever changes hands. All 310 tests pass. |
+| **1.27.0** | The production-readiness pass, done after a full line-by-line review. **Four real fixes:** a force-load can no longer quietly mark an unsent temperature as saved; "Up to date ✓" now also compares the forecast-rounding tap, so a tap made on the other phone loads properly; a rounding tap alone now counts as something worth saving (both pills, symmetrically); and a half-typed temperature no longer blocks the dough side from refreshing. **The notebooks got tougher:** a save now checks every page's headings before writing anything, so a moved heading can never leave a half-saved day; a make that gets un-decided is now cleared off the sheet instead of lingering where the self-building bible would read it; Google's own hiccups now retry quietly instead of showing a red refusal nobody can act on; and the Temp Log got the same protections the Dough Log already had (moved headings refused, stray notes unable to derail saves or the graph). **New on screen:** a reminder on the date card after midnight (last night is yesterday's date — tap ◀), and if the app ever crashes it now shows a calm "nothing typed has been lost — reload" card instead of a blank page. **Under the hood, for whoever maintains this next:** proper home-screen icons and app identity (no more grey screenshot tile on iPhone), the whole toolchain brought current (React 19, Vite 8, Vitest 4, TypeScript 5.9, pinned to Node 22), stricter compiler and lint settings that read the actual types, dead styles and dead code removed, the one-off importer's stale Boli check fixed, and a step-by-step list added above for the day you move the app onto its own Gmail and GitHub account. All 310 tests pass. |
 | **1.26.1** | Breathing room between the station buttons and the red too-high box on the temp graph. And both of the repo's documents — this page and `CLAUDE.md` — were trimmed to hold only information about the app and its code: stale references cleaned out, the folder list corrected. |
 | **1.26.0** | The temps tab cleaned up on your marked screenshots. The graph's **danger zone is now 40–50** (the scale tops out at 50), and anything above 50 shows as an arrow out the top plus a **red warning box above the graph** — same style as the set-out dough alert — naming the station, the figure and when ("Pizza 1: 66° Night 8/20"). The words no longer sit inside the graph where lines crossed them out. The tap-to-read line is gone — **History now simply shows each station's last known temp**, one clean line each — and the temperature entry rows sit tighter so the list reads as one card. |
 | **1.25.0** | The Station Temps tab got four asks in one go. **Every temp now wears its own save tag**: type or change a reading and its little chip goes *saving…* then *saved* the moment the Temp Log has it — before this, the tag watched the whole day including the dough numbers, so a saved temperature could sit there looking unsaved just because the dough side was busy. **History on this tab is now temp history**: each station's last three readings in plain words, newest in bold — the same figures the graph draws. **Today's temps starts open** — no tap to reach the boxes. And behind the scenes, each tab's code now lives fully in its own folder (2 PM, EON, Temps each own their whole page), so future changes to one tab can't trip over another. |
