@@ -220,6 +220,23 @@ build less.**
   the option's requested delta: `buildBatchOption` floors Small and Large at zero trays, so a deep
   round-down can move less than it asked to, and reporting the request would promise a trim that
   never happened.
+- **The forecast rounding is ONE switch drawn in two places** (v1.29.0): the foot of the Sales card
+  and the Dough Bible drawer. Both mount `RoundingPills` against the same `record.rounding.forecast`
+  / `forecastAuto` and the same `onForecastRound`, and neither owns any state — the direction is
+  still resolved once per record before both lookups. Do not give the Sales card a `salesLeftRound`
+  of its own: tonight's use and tomorrow's need would round opposite ways and every tray after them
+  is judged on the mixture. The card's `BIBLE ROW n` reads `record.tonightRowMatched`, never a fresh
+  `lookupBibleRow` — the engine returns null there whenever `salesLeft` is null or ≤ 0, while the
+  raw lookup happily clamps 0 to the book's first row and would print a confident figure for a night
+  nobody has counted. The wording is flat on purpose: the lookup only SOMETIMES rounds — an exact
+  row does not move, both ends clamp, and a round-down over `maxRoundDownGap` takes the row ABOVE
+  (≈36% of regular-bible figures, ≈11% of peach). "ROUNDED DOWN TO" would be a lie on all three;
+  "BIBLE ROW" is true on every night, and the row sitting above sales-left is what shows the cap bit.
+- **The two rounding pills are one either/or box** (`.rounding-row .pills`). Left loose in the row
+  they wrap independently, because `.rounding-row .label` carries `margin-right: auto` and eats the
+  free space: the Day's Work row really did drop "Round down" onto a line of its own, where it read
+  as an unrelated button. The Graphs drawer's rows hold their pills directly and are deliberately
+  outside that selector.
 - **A total summed from `?? 0` is not the same as an answer.** `totalTrays` stays `null` until at
   least one size is counted: with every size contributing zero, "nothing to make" reads as a
   finished decision when the truth is "nobody has counted yet". Any new roll-up needs the same care.

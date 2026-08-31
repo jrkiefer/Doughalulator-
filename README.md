@@ -46,8 +46,13 @@ built in, so any phone that opens the page is already working.
 7. **Quiet days round down.** When both forecasts are under $13,000 the bible rounds down to the row
    below rather than up — but never by more than $400, because that is more dough than one step
    should ever shed. Every other night rounds up. The **Rounding** pair of buttons to overrule that
-   lives in the Dough Bible drawer — the rounding decides which bible row a look-up lands on,
-   so it sits with the bible.
+   now sits in two places — at the foot of the **Sales & Forecast** card, and in the **Dough Bible**
+   drawer where it has always been. They are one switch, not two: tap either and both move, because
+   the same choice decides tonight's row and tomorrow's. Under **Sales left tonight** the card
+   prints `BIBLE ROW` and the figure, so you can see which line of the book that money is looked up
+   against. On a night when the $400 limit stops a round-down, that row simply stays *above* your
+   sales-left figure — the number shows you the limit held, rather than the card telling you it
+   rounded down when it didn't.
 8. **Sicilian never drops to nothing.** If fewer than 8 are on hand, at least 1 gets made.
 9. **Boli** is never in the bible. Its rule is simply: top the count back up to 6 trays.
 
@@ -252,6 +257,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.29.0** | The **Rounding** buttons are now on the **Sales & Forecast** card as well as in the Dough Bible drawer, and **Sales left tonight** shows the bible line it is read against — *BIBLE ROW 6,000*. It is one switch in two places, not two switches: tap either pair and both move. The wording is deliberately flat — never *rounded up* or *rounded down* — because the look-up does not always round: a figure sitting exactly on a row does not move, the ends of the book clamp both ways, and a round-down of more than $400 quietly takes the row above. Printing the row is true on all of those nights, and it finally shows why a tapped **Round down** sometimes changes nothing. The two buttons also stopped splitting across two lines, on this card and on **The Day's Work**, where *Round down* had been dropping onto a line of its own and reading as an unrelated button. |
 | **1.28.3** | The bible's name (*Peach Dough Bible* / *Bible '26*) now sits **centred** over its table instead of tucked against the left edge, so it reads as the title of the book below it. |
 | **1.28.2** | The rounding colours were backwards and are now switched: **rounding up reads green** and **rounding down reads red**, on both the batch chip and the ROUND column. Up means extra dough on the bench; down sheds trays the plan asked for, which is the one that can leave you short — so that is the one that speaks up. It also matches the rest of the app, where the EON outlook already shows a surplus in green and a shortfall in red. |
 | **1.28.1** | The **By Size** table was hard to read across — eight right-aligned figures with nothing between them ran together. Every other column (USE, NEED, PLAN) now carries a very light **steel** stripe, header included, so the eye can follow a row straight across. The colour is deliberately a desaturated blue-grey, well clear of the five dough colours, so a stripe can never be mistaken for a size. |

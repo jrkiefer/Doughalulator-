@@ -29,11 +29,18 @@ export function TwoPmPage(props: {
   return (
     <>
       <div className="band">
+        {/* `tonightRowSales` is the row the engine landed on, and the three
+            rounding values below it are the very ones the Dough Bible drawer
+            is handed at the foot of this page — one switch, drawn twice. */}
         <SalesCard
           form={form}
           onChange={props.onFormChange}
           salesLeft={record.salesLeft}
           negativeSalesLeft={record.flags.negativeSalesLeft}
+          tonightRowSales={record.tonightRowMatched?.sales ?? null}
+          forecastRound={record.rounding.forecast}
+          forecastAuto={record.rounding.forecastAuto}
+          onForecastRound={props.onForecastRound}
           synced={props.synced}
         />
         <CountCards

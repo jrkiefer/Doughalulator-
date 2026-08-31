@@ -504,6 +504,28 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* The sales-left figure and the bible line it is read against, stacked hard
+   right so they read as one answer rather than two facts. */
+.computed-row .figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+/* Which line of the bible that figure looks up on. --ink-soft, NOT
+   --ink-mute: on the field fill the mute grey measures 4.07:1, under the 4.5
+   floor for text this size, and this is a figure meant to be read off a
+   phone in a kitchen — not a decoration. */
+.rounds-to {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
 .warning {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -727,6 +749,16 @@ button:focus-visible {
 
 .rounding-row .label {
   margin-right: auto;
+}
+
+/* The two pills are ONE either/or choice, so they wrap as one box. Loose in
+   the row they wrapped independently — the label's auto margin above eats
+   every pixel of free space — and the Day's Work row really did drop
+   "Round down" onto a line of its own. Scoped to RoundingPills; the Graphs
+   drawer's rows hold their pills directly and are untouched. */
+.rounding-row .pills {
+  display: flex;
+  gap: 8px;
 }
 
 .days-work-note {

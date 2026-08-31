@@ -23,18 +23,25 @@ export function RoundingPills(props: {
       {props.isAuto && props.active !== null && (
         <span className="auto-tag">{props.autoText ?? 'AUTO'}</span>
       )}
-      <button
-        className={`pill pill-sm${props.active === 'up' ? ' active' : ''}`}
-        onClick={() => props.onPick('up')}
-      >
-        Round up
-      </button>
-      <button
-        className={`pill pill-sm${props.active === 'down' ? ' active' : ''}`}
-        onClick={() => props.onPick('down')}
-      >
-        Round down
-      </button>
+      {/* The pair travels as ONE box. Loose in the row they wrapped
+          independently — the label's auto margin eats the free space — and
+          the Day's Work row really did drop "Round down" onto a line of its
+          own, where it read as an unrelated button rather than the other
+          half of a choice. */}
+      <span className="pills">
+        <button
+          className={`pill pill-sm${props.active === 'up' ? ' active' : ''}`}
+          onClick={() => props.onPick('up')}
+        >
+          Round up
+        </button>
+        <button
+          className={`pill pill-sm${props.active === 'down' ? ' active' : ''}`}
+          onClick={() => props.onPick('down')}
+        >
+          Round down
+        </button>
+      </span>
     </div>
   );
 }
