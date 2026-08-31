@@ -1550,8 +1550,11 @@ button:focus-visible {
   color: var(--accent);
 }
 
+/* Centred: it names the whole book below it rather than labelling the row it
+   sits on, so it reads as a title over the table instead of a stray caption. */
 .bible-viewer .bible-name {
   padding: 0 2px 10px;
+  text-align: center;
 }
 
 .bible-viewer table {
