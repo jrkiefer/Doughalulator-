@@ -65,8 +65,8 @@ means *unknown*, which is not the same thing, and the app treats it that way thr
 
 Both live in the owner's Google account.
 
-1. **Hot Tomato Dough Log** — every 2 PM and end-of-night record, one row per day across thirteen
-   tabs, plus read-only copies of both bibles and the two self-building "New Bieblerb" tabs.
+1. **Hot Tomato Dough Log** — every 2 PM and end-of-night record, one row per day across ten
+   record tabs, plus read-only copies of both bibles and the two self-building "New Bieblerb" tabs.
 2. **Hot Tomato Temp Log** — an Overview of the latest temperatures, one tab per station, and a Log
    tab that keeps every reading ever taken, with clock times, forever.
 
@@ -106,27 +106,37 @@ The app works out every number and writes it into the right tab. The notebook is
 it holds no formulas, so nothing in it can break.
 
 - **The 2 PM save** fills `2PM Dough Count`, `Look up Dough Use for PM`,
-  `Look up Dough Use Tomorrow`, `Dough Make (estimate)`, `Final Make Amount`,
-  `Estimated Dough After Gang` and `AM Dough Use`.
-- **The EON save** fills `EON Dough Count`, `PM Dough Use`, and that night's line on
-  `New Bieblerb` (or `New Peach Bieblerb`).
+  `Look up Dough Use Tomorrow`, `Dough Make (estimate)`, `Final Make Amount` and
+  `Estimated Dough After Gang`.
+- **The EON save** fills `EON Dough Count`.
 - Change any one number and the whole day is worked out and saved again. Each number shows a small
   green **saved** tag once it has reached the notebook.
-- **The new bible builds itself.** After each end-of-night save, the notebook's own machine works
-  out every recorded day's *whole* dough use — the morning (yesterday's close-count minus the
-  2 PM count — yesterday exactly, so a day after a closed day is left out rather than guessed
-  at) plus the night (the after-gang dough minus the closing count) — rewrites its history from
-  that, and fits a line through all of it. Three
-  days in it starts suggesting, and it sharpens from there with nothing to press. A day with no
-  takings is left out, and a day it can only half-see is left out rather than under-counted.
+- **The notebook fills the three use pages itself** — `AM Dough Use`, `PM Dough Use` and
+  `All Day Dough Use` — after every end-of-night save, for every recorded night, from the counts.
+  The morning is yesterday's close-count minus the 2 PM count, against the takings by 2 PM
+  (yesterday exactly, so a day after a closed day is left out rather than guessed at). The night is
+  the after-gang dough minus the closing count, against the takings since 2 PM. All day is the two
+  added, against the night's total. Every night gets a row on each page, and the **Ignored** column
+  says in words what that night could not teach and why: *no close yesterday*, *no after-gang
+  figure*, *no takings*, a size *not counted*, a count that rose overnight (*negative* — a
+  miscount, not dough), or a night far outside the usual dough-per-dollar (*outlier*). The figures
+  are still written down; only the line-fitting skips them.
+- **The new bible builds itself from all three pages together.** One line per size through every
+  morning, night and whole day that has takings to sit against — three kinds of point, not one,
+  which is why the regular bible now has twenty-odd points behind each size where it had four or
+  five, and why a night whose morning was miscounted still counts for its evening. Three nights in
+  it starts suggesting, and it sharpens from there with nothing to press. The block at the far
+  right of each `New Bieblerb` page says how many points and nights each size's line rests on and
+  how many nights were left out as outliers.
 - **Correcting a number by hand: which ones stick.** Fix a **count or a sales figure** on
   `2PM Dough Count` or `EON Dough Count`, then open that date in the app and tap **LOAD FROM
   SHEET** — the app takes the correction and works the whole day out again from it. Those two tabs
-  are the only ones it reads. Everything else — the two look-ups, the make, the final make, the
-  dough after gang — are *results*, so a number changed there is simply replaced the next time that
-  date saves. Correct the count, not the answer.
-- A night whose end-of-night sales came in below the 2 PM figure leaves its PM-takings cell blank
-  rather than showing a negative.
+  are the only ones it reads. Everything else is a *result*: the two look-ups, the make, the final
+  make and the dough after gang are replaced the next time that date saves, and the three use pages
+  and the two `New Bieblerb` pages are rewritten after every close. Correct the count, not the
+  answer.
+- A night whose end-of-night sales came in below the 2 PM figure has no takings since 2 PM to
+  measure against: its PM row still shows the dough and says *no takings*.
 - **The closing Boli count is on screen only.** The end-of-night page asks for it and the outlook
   card uses it, but `EON Dough Count` has no Boli column, so it is never written down and comes
   back blank if you reload that date. That is deliberate — it keeps your Dough Log's layout exactly
@@ -257,6 +267,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.30.0** | The Dough Log gained an **All Day Dough Use** page, and the notebook now fills it and the **AM** and **PM** pages itself after every close, for every night on record, straight from the counts — so a morning no longer goes missing when the close was typed on one phone and the 2 PM count on another. Each row has an **Ignored** column that says in words what that night could not teach and why (a day after a closed day, no after-gang figure, no takings, a size not counted, a count that rose overnight, or a night far outside the usual dough-per-dollar). The **new bible now learns from all three pages together** — every morning, night and whole day is its own point — and skips the outliers and the miscounts. On the regular bible that took the Small line from a nonsense downward slope to within 2% of the hand bible, and gave every size twenty-odd points where it had four or five. Half-day points pull the very low end of a line down a little (peach Indi reads 10 at $3,000 against the book's 20); the graph shows exactly that gap and is otherwise unchanged. **This one needs the one-off update inside the Dough Log**, in this order: open the sheet → Extensions → Apps Script → paste in the new `Code.gs` → Save; back in the sheet, **Dough Tools → Re-run setup** (adds the All Day page and the Ignored headings), then **Dough Tools → Refresh new-bible suggestions** (fills the three pages for every recorded night); then Deploy → Manage deployments → pencil → *New version* → Deploy — the **existing** deployment, so the address stays the same. |
 | **1.29.0** | The **Rounding** buttons are now on the **Sales & Forecast** card as well as in the Dough Bible drawer, and **Sales left tonight** shows the bible line it is read against — *BIBLE ROW 6,000*. It is one switch in two places, not two switches: tap either pair and both move. The wording is deliberately flat — never *rounded up* or *rounded down* — because the look-up does not always round: a figure sitting exactly on a row does not move, the ends of the book clamp both ways, and a round-down of more than $400 quietly takes the row above. Printing the row is true on all of those nights, and it finally shows why a tapped **Round down** sometimes changes nothing. The two buttons also stopped splitting across two lines, on this card and on **The Day's Work**, where *Round down* had been dropping onto a line of its own and reading as an unrelated button. |
 | **1.28.3** | The bible's name (*Peach Dough Bible* / *Bible '26*) now sits **centred** over its table instead of tucked against the left edge, so it reads as the title of the book below it. |
 | **1.28.2** | The rounding colours were backwards and are now switched: **rounding up reads green** and **rounding down reads red**, on both the batch chip and the ROUND column. Up means extra dough on the bench; down sheds trays the plan asked for, which is the one that can leave you short — so that is the one that speaks up. It also matches the rest of the app, where the EON outlook already shows a surplus in green and a shortfall in red. |

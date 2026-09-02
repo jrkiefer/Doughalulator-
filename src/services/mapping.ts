@@ -7,7 +7,7 @@
  * (blank = auto), never the direction the night resolved to.
  */
 import type { AppConfig } from '../config';
-import type { AmUse, Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
+import type { Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
 
 /** One tab's worth of a save: the row is merged into the tab by Date. */
 export interface TabWrite {
@@ -28,21 +28,18 @@ export const TOMORROW_LOOKUP_TAB = 'Look up Dough Use Tomorrow';
 export const MAKE_TAB = 'Dough Make (estimate)';
 export const FINAL_MAKE_TAB = 'Final Make Amount';
 export const AFTER_TAB = 'Estimated Dough After Gang';
-export const AM_USE_TAB = 'AM Dough Use';
-export const PM_USE_TAB = 'PM Dough Use';
-/** The tabs whose history the new-bible suggestion is fitted from. */
-export const BIBLE_BUILD_TABS = { regular: 'New Bieblerb', peach: 'New Peach Bieblerb' } as const;
+// The three use tabs (AM, PM, All Day) and the two New Bieblerb tabs are the
+// Dough Log's own: its script derives every night's use from the recorded
+// counts after each close and rewrites them in full. The app writes none of
+// them (v1.30.0) — a phone-local morning figure once vanished on a second
+// phone, and the fit now eats three kinds of point the app never held.
 
 /**
  * Everything the 2 PM save writes: the counts as typed, then each step of the
  * afternoon's maths in its own tab, ending with the dough that will be
  * standing after the dough gang has made it.
- *
- * `amUse` is yesterday's close against this afternoon's count — it belongs to
- * the 2 PM save because both of its inputs are known by then, so a night that
- * never got an EON entry doesn't strand it.
  */
-export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | null): TabWrite[] {
+export function dayRecordToTabWrites(record: DoughDayRecord): TabWrite[] {
   const d = record.date;
   const chosen =
     record.chosenBatchOption === 'down'
@@ -143,34 +140,15 @@ export function dayRecordToTabWrites(record: DoughDayRecord, amUse?: AmUse | nul
         Boli: cellOf(chosen ? chosen.finalDough.boliTotal : null),
       },
     },
-    // The morning's use rides with the 2 PM save (both of its inputs are known
-    // by then). Same retraction rule: no yesterday means BLANKS, clearing any
-    // morning figure a previously-cached yesterday once produced.
-    {
-      tab: AM_USE_TAB,
-      row: {
-        Date: d,
-        'AM Sales $': cellOf(amUse ? amUse.sales : null),
-        'AM Indi Use': cellOf(amUse ? amUse.use.indi : null),
-        'AM Small Use': cellOf(amUse ? amUse.use.small : null),
-        'AM Large Use': cellOf(amUse ? amUse.use.large : null),
-        'AM Sic Use': cellOf(amUse ? amUse.use.sic : null),
-        'Bible Used': amUse ? record.bibleUsed : '',
-      },
-    },
   );
 
   return writes;
 }
 
-/** Everything the EON save writes: the final count, and what the night used. */
-export function eonRecordToTabWrites(
-  record: EonRecord,
-  bible?: string,
-  amUse?: AmUse | null,
-): TabWrite[] {
+/** Everything the EON save writes: the final count. The night's use is the Dough Log's to derive. */
+export function eonRecordToTabWrites(record: EonRecord): TabWrite[] {
   const d = record.date;
-  const writes: TabWrite[] = [
+  return [
     {
       tab: EON_TAB,
       row: {
@@ -183,53 +161,6 @@ export function eonRecordToTabWrites(
       },
     },
   ];
-
-  // The night's use always travels — as blanks when it is unknowable (no
-  // batch choice standing), which CLEARS a use recorded earlier and since
-  // retracted. The script skips an all-blank row for a date that has none.
-  const pm = record.pmUse;
-  writes.push({
-    tab: PM_USE_TAB,
-    row: {
-      Date: d,
-      // A night whose final sales came in under the 2 PM figure has no
-      // meaningful PM takings — the owner's own sheet showed NA() here.
-      'PM Sales $': pm === null || (record.pmSales !== null && record.pmSales < 0) ? '' : cellOf(record.pmSales),
-      'PM Indi Use': cellOf(pm ? pm.indi : null),
-      'PM Small Use': cellOf(pm ? pm.small : null),
-      'PM Large Use': cellOf(pm ? pm.large : null),
-      'PM Sic Use': cellOf(pm ? pm.sic : null),
-      'Bible Used': pm ? (bible ?? record.bibleUsed ?? '') : '',
-    },
-  });
-
-  // Tonight's line on the bible this date used — the history the suggested
-  // bible is fitted from. Total use is the morning's plus the night's.
-  // The same fallback as the row above: on a night with no 2 PM record there is
-  // no day-record bible, and only the EON record knows which one applied.
-  const season = (bible ?? record.bibleUsed) === 'peach' ? 'peach' : 'regular';
-  const nightly = (size: 'indi' | 'small' | 'large' | 'sic') => {
-    const am = amUse?.use[size] ?? null;
-    const pm = record.pmUse?.[size] ?? null;
-    if (am === null && pm === null) return '';
-    return (am ?? 0) + (pm ?? 0);
-  };
-  // Only a night with real takings can teach the bible anything.
-  if (record.finalSales !== null && record.finalSales > 0) {
-    writes.push({
-      tab: BIBLE_BUILD_TABS[season],
-      row: {
-        Date: record.date,
-        'Total Sales': record.finalSales,
-        Indi: nightly('indi'),
-        Small: nightly('small'),
-        Large: nightly('large'),
-        Sic: nightly('sic'),
-      },
-    });
-  }
-
-  return writes;
 }
 
 /**

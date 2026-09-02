@@ -17,14 +17,17 @@
  *
  *   the 2 PM save  -> 2PM Dough Count, Look up Dough Use for PM / Tomorrow,
  *                     Dough Make (estimate), Final Make Amount,
- *                     Estimated Dough After Gang, AM Dough Use
- *   the EON save   -> EON Dough Count, PM Dough Use, and tonight's row on the
- *                     matching New Bieblerb tab
+ *                     Estimated Dough After Gang
+ *   the EON save   -> EON Dough Count
  *
- * The one exception is the new-bible suggestion: after each EON save the
- * script fits a line through every night recorded on those tabs and rewrites
- * the suggested column, because that needs the whole history rather than one
- * night's numbers.
+ * The one exception is the self-building bible. After each EON save this
+ * script derives every recorded night's dough use from those tabs three ways
+ * - the morning (AM Dough Use), the night (PM Dough Use) and the two added
+ * (All Day Dough Use) - rewrites those three tabs in full, saying in words
+ * what it left out and why, and fits one line through all three kinds of
+ * point to rewrite the suggested column on the New Bieblerb tabs. That needs
+ * the whole history rather than one night's numbers, which is why it lives
+ * here and not in the app.
  *
  * Correcting a number by hand stays corrected until the app saves that date
  * again; pull it back with LOAD FROM SHEET to recalculate from it.
@@ -51,6 +54,7 @@ var T_FINAL = 'Final Make Amount';
 var T_AFTER = 'Estimated Dough After Gang';
 var T_AM = 'AM Dough Use';
 var T_PM_USE = 'PM Dough Use';
+var T_DAY_USE = 'All Day Dough Use';
 var BIBLE_TABS = { dough: 'Dough Bible', peach: 'Peach Bible' };
 var PEACH_START = '07-01';
 var PEACH_END = '08-31';
@@ -73,15 +77,28 @@ TABS[T_FINAL] = ['Date', 'Indi Trays', 'Small Trays', 'Large Trays', 'Sic (balls
 TABS[T_AFTER] = ['Date', 'Indi', 'Small', 'Large', 'Sic', 'Boli'];
 TABS[T_EON] = ['Date', 'EON Sales', 'EON Indi Count', 'EON Small Count', 'EON Large Count',
   'EON Sic Count'];
+// The three use tabs are the script's own (v1.30.0): rewritten in full after
+// every close from the recorded counts. 'Ignored' says, in words, what the
+// fit left out of that night and why - blank means every size was used.
 TABS[T_AM] = ['Date', 'AM Sales $', 'AM Indi Use', 'AM Small Use', 'AM Large Use', 'AM Sic Use',
-  'Bible Used'];
+  'Bible Used', 'Ignored'];
 TABS[T_PM_USE] = ['Date', 'PM Sales $', 'PM Indi Use', 'PM Small Use', 'PM Large Use', 'PM Sic Use',
-  'Bible Used'];
+  'Bible Used', 'Ignored'];
+TABS[T_DAY_USE] = ['Date', 'All Day Sales $', 'All Day Indi Use', 'All Day Small Use',
+  'All Day Large Use', 'All Day Sic Use', 'Bible Used', 'Ignored'];
+
+/** The three kinds of point the bible is fitted from, and the tab each is recorded on. */
+var USE_KINDS = ['am', 'pm', 'day'];
+var USE_TABS = { am: T_AM, pm: T_PM_USE, day: T_DAY_USE };
+var SIZE_LABEL = { indi: 'Indi', small: 'Small', large: 'Large', sic: 'Sic' };
 
 /**
- * The self-building bible tabs. Columns A-F accumulate one row per night (the
- * app writes them); the blocks from H on hold the current thresholds beside a
- * freshly fitted suggestion, recomputed from that history after every EON save.
+ * The self-building bible tabs. Columns A-F hold one row per night with
+ * takings - the All Day figures, rewritten by the script after every close
+ * (older phones still post a row of their own there; it is overwritten). The
+ * blocks from H on hold the current thresholds beside a freshly fitted
+ * suggestion, and the block from X on says how many points and nights each
+ * size's line rests on and how many were left out as outliers.
  */
 // Keyed to match BIBLE_TABS, so each builder can find its own bible mirror.
 var BIBLE_BUILD_TABS = { dough: 'New Bieblerb', peach: 'New Peach Bieblerb' };
@@ -94,6 +111,9 @@ var BIBLE_BUILD_HEADERS = ['Date', 'Total Sales', 'Indi', 'Small', 'Large', 'Sic
 var BIBLE_BUILD_BLOCK = { indi: 8, small: 12, large: 16, sic: 20 };
 /** Column holding each size's nightly total use, in A-F. */
 var BIBLE_BUILD_USE = { indi: 3, small: 4, large: 5, sic: 6 };
+/** Column (1-based) of the per-size stats block, and its headings. */
+var BIBLE_BUILD_STATS_COL = 24; // X
+var BIBLE_BUILD_STATS_HEADERS = ['Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored'];
 
 /** Columns that may legitimately hold negatives - everything else must be >= 0. */
 var NEGATIVE_OK = {};
@@ -599,9 +619,9 @@ function writeBibles(payload) {
  * single save.
  */
 function refreshBibleBuilds() {
-  rebuildBibleHistories();
+  var points = rebuildBibleHistories();
   Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
-    refreshBibleBuild(key);
+    refreshBibleBuild(key, points[key]);
   });
 }
 
@@ -614,31 +634,13 @@ var USE_COLS = {
 };
 
 /**
- * Rewrite each Bieblerb tab's A-F history from the recorded tabs, so the fit
- * eats whole days worked out HERE rather than whatever one phone could see.
+ * Rewrite the three use tabs and each Bieblerb tab's A-F history from the
+ * recorded tabs, so the fit eats nights worked out HERE rather than whatever
+ * one phone could see. Returns the points the fit is made from, per bible.
  *
- * The app also writes an AM + PM total per night (kept for old cached phones),
- * but its morning half comes from that phone's own copy of yesterday - enter
- * the EON on one phone and the next day's 2 PM on another, or wipe a phone,
- * and the morning silently vanished, leaving the evening recorded as if it
- * were the whole day. Every input already sits in this notebook:
- *
- *   AM use = YESTERDAY'S EON count - today's 2 PM count
- *   PM use = Estimated Dough After Gang - tonight's EON count
- *
- * Yesterday exactly (owner's rule, Aug 2026 - "just to be extra safe"): a
- * day whose previous close is older than one day abstains rather than
- * guesses - which is also precisely the app's own on-screen AM rule
- * (computeAmUse). No lookback across closed days.
- *
- * Per size: both halves known -> their sum; either missing or negative (a
- * count that ROSE is a miscount, not negative use) -> that size abstains for
- * the day, a blank cell the fit skips - never a half-day passed off as whole.
- * A day needs takings (EON Sales > 0) to teach the bible anything. Days split
- * regular/peach by the 2 PM row's Bible cell, falling back to the date rule.
- *
- * Note this makes Erase all data mean what it says for the suggestion too:
- * the next refresh rebuilds this history from the emptied log.
+ * Older phones still post their own AM Dough Use / PM Dough Use rows and a
+ * New Bieblerb row; they are accepted (never reject a stale cache) and then
+ * overwritten by this rewrite, so there is no deploy-order hazard either way.
  */
 function rebuildBibleHistories() {
   var ss = SpreadsheetApp.getActive();
@@ -656,35 +658,16 @@ function rebuildBibleHistories() {
     index[name] = byDate;
   });
 
-  var histories = { dough: [], peach: [] };
-  Object.keys(index[T_EON]).sort().forEach(function (date) {
-    var eonRow = index[T_EON][date];
-    var sales = numOrNull(eonRow[1]);
-    if (sales === null || sales <= 0) return;
+  var derived = deriveUse(index);
 
-    var twopmRow = index[T_IN][date] || null;
-    var afterRow = index[T_AFTER][date] || null;
-    var lastEonRow = index[T_EON][addDaysIso(date, -1)] || null;
-
-    var out = { Date: date, sales: sales, any: false };
-    Object.keys(USE_COLS).forEach(function (size) {
-      var cols = USE_COLS[size];
-      var am = halfUse(lastEonRow, cols.eon, twopmRow, cols.twopm);
-      var pm = halfUse(afterRow, cols.after, eonRow, cols.eon);
-      out[size] = am === null || pm === null ? '' : am + pm;
-      if (out[size] !== '') out.any = true;
-    });
-    if (!out.any) return; // nothing usable - no row at all
-
-    var bible = twopmRow ? String(twopmRow[10]).toLowerCase() : '';
-    var key = bible === 'peach' ? 'peach' : bible === 'regular' ? 'dough' : isPeachDate(date) ? 'peach' : 'dough';
-    histories[key].push([out.Date, out.sales, out.indi, out.small, out.large, out.sic]);
+  USE_KINDS.forEach(function (kind) {
+    writeUseTab(ss, USE_TABS[kind], TABS[USE_TABS[kind]], derived.rows[kind]);
   });
 
   Object.keys(BIBLE_BUILD_TABS).forEach(function (key) {
     var sheet = ss.getSheetByName(BIBLE_BUILD_TABS[key]);
     if (!sheet) return;
-    var rows = histories[key];
+    var rows = derived.history[key];
     var stale = sheet.getLastRow();
     if (stale >= 2) sheet.getRange(2, 1, stale - 1, 6).clearContent();
     if (rows.length) {
@@ -692,16 +675,190 @@ function rebuildBibleHistories() {
       sheet.getRange(2, 1, rows.length, 6).setValues(rows);
     }
   });
+
+  return derived.points;
 }
 
-/** One half of a day's use: before - after, both present, never negative. */
-function halfUse(beforeRow, beforeCol, afterRow, afterCol) {
-  if (!beforeRow || !afterRow) return null;
+/**
+ * Every recorded night's dough use, three ways, from the recorded tabs:
+ *
+ *   AM use  = YESTERDAY'S EON count - today's 2 PM count   against the 2 PM takings
+ *   PM use  = Estimated Dough After Gang - tonight's EON   against the takings since 2 PM
+ *   All Day = the two added                                against the night's takings
+ *
+ * Every input already sits in this notebook, which is the point: the app's
+ * own morning figure came from one phone's copy of yesterday, and vanished on
+ * a second phone or after a wipe.
+ *
+ * Yesterday exactly (owner's rule, Aug 2026 - "just to be extra safe"): a
+ * morning whose previous close is older than one day abstains rather than
+ * guesses. No lookback across closed days. That is also the app's own
+ * on-screen AM rule (computeAmUse).
+ *
+ * Each of the three kinds is its own data point for the fit - a morning is a
+ * complete observation of dough against takings even when the night was never
+ * closed out, and a night whose morning was miscounted still has its evening.
+ * A half is dropped on its own: no row, a blank count, or a count that ROSE
+ * (a miscount, not negative use). The All Day point needs both halves. A
+ * point also needs takings on its own scale (2 PM sales, sales since 2 PM,
+ * the night's total) to sit against.
+ *
+ * Then, per bible, size and kind, a wild night is left out: dough per $1,000
+ * outside 1.5x the middle spread of that kind's nights (four or more of them,
+ * and only when that spread is not zero - a spread of nothing cannot pick an
+ * outlier, and Sicilian is often 0). Its figures are still written; the
+ * Ignored column just says so.
+ *
+ * Every measured value is written to the tabs. Cells are blank only where a
+ * half is unknowable, and the sales cell where there were no takings. The
+ * Ignored column carries the reasons, in words: row-level ones first (no
+ * close yesterday, no after-gang figure, no takings), then per size (Small
+ * negative, Large not counted, Indi outlier). Nights split regular/peach by
+ * the 2 PM row's Bible cell, falling back to the date rule.
+ */
+function deriveUse(index) {
+  var dates = {};
+  Object.keys(index[T_IN]).forEach(function (d) { dates[d] = true; });
+  Object.keys(index[T_EON]).forEach(function (d) { dates[d] = true; });
+
+  var sizes = Object.keys(USE_COLS);
+  var nights = {};
+  var candidates = { dough: {}, peach: {} };
+  var points = { dough: {}, peach: {} };
+  ['dough', 'peach'].forEach(function (bucket) {
+    sizes.forEach(function (size) {
+      candidates[bucket][size] = { am: [], pm: [], day: [] };
+      points[bucket][size] = { kept: [], am: 0, pm: 0, day: 0, dropped: 0 };
+    });
+  });
+
+  Object.keys(dates).sort().forEach(function (date) {
+    var twopmRow = index[T_IN][date] || null;
+    var eonRow = index[T_EON][date] || null;
+    var afterRow = index[T_AFTER][date] || null;
+    var lastEonRow = index[T_EON][addDaysIso(date, -1)] || null;
+
+    var bible = twopmRow ? String(twopmRow[10]).toLowerCase() : '';
+    var bucket = bible === 'peach' ? 'peach' : bible === 'regular' ? 'dough' : isPeachDate(date) ? 'peach' : 'dough';
+
+    // Each kind's takings, on its own scale.
+    var amSales = twopmRow ? numOrNull(twopmRow[2]) : null; // col C, Current Sales
+    var eonSales = eonRow ? numOrNull(eonRow[1]) : null; // col B, EON Sales
+    var pmSales = amSales !== null && eonSales !== null ? eonSales - amSales : null;
+    var sales = { am: amSales, pm: pmSales, day: eonSales };
+
+    // What rules a whole kind out before any size is looked at.
+    var why = { am: [], pm: [], day: [] };
+    var has = { am: !!twopmRow, pm: !!eonRow, day: !!eonRow };
+    if (has.am) {
+      if (!lastEonRow) why.am.push('no close yesterday');
+      if (amSales === null || amSales <= 0) why.am.push('no takings');
+    }
+    if (has.pm) {
+      if (!afterRow) why.pm.push('no after-gang figure');
+      if (pmSales === null || pmSales <= 0) why.pm.push('no takings');
+      if (!lastEonRow) why.day.push('no close yesterday');
+      if (!afterRow) why.day.push('no after-gang figure');
+      if (eonSales === null || eonSales <= 0) why.day.push('no takings');
+    }
+
+    var use = { am: {}, pm: {}, day: {} };
+    var marks = { am: [], pm: [], day: [] };
+    sizes.forEach(function (size) {
+      var cols = USE_COLS[size];
+      var am = half(lastEonRow, cols.eon, twopmRow, cols.twopm);
+      var pm = half(afterRow, cols.after, eonRow, cols.eon);
+      use.am[size] = am.use;
+      use.pm[size] = pm.use;
+      use.day[size] = am.use !== null && pm.use !== null ? am.use + pm.use : null;
+      // A missing row is already explained at row level; a blank or risen
+      // count is news about that size.
+      if (has.am && am.why && am.why !== 'no row') marks.am.push(SIZE_LABEL[size] + ' ' + am.why);
+      if (has.pm && pm.why && pm.why !== 'no row') marks.pm.push(SIZE_LABEL[size] + ' ' + pm.why);
+      if (has.day && use.day[size] === null) {
+        if (am.why && am.why !== 'no row') marks.day.push(SIZE_LABEL[size] + ' AM ' + am.why);
+        else if (pm.why && pm.why !== 'no row') marks.day.push(SIZE_LABEL[size] + ' PM ' + pm.why);
+      }
+      USE_KINDS.forEach(function (kind) {
+        if (has[kind] && why[kind].length === 0 && use[kind][size] !== null) {
+          candidates[bucket][size][kind].push({ date: date, sales: sales[kind], use: use[kind][size] });
+        }
+      });
+    });
+
+    nights[date] = { bucket: bucket, has: has, sales: sales, use: use, why: why, marks: marks };
+  });
+
+  // The outlier pass: per bible, size and kind, against that kind's own nights.
+  ['dough', 'peach'].forEach(function (bucket) {
+    sizes.forEach(function (size) {
+      USE_KINDS.forEach(function (kind) {
+        var list = candidates[bucket][size][kind];
+        var ratio = function (p) { return p.use / (p.sales / 1000); };
+        var fences = outlierFences(list.map(ratio));
+        list.forEach(function (p) {
+          if (fences && (ratio(p) < fences.lo || ratio(p) > fences.hi)) {
+            nights[p.date].marks[kind].push(SIZE_LABEL[size] + ' outlier');
+            points[bucket][size].dropped += 1;
+          } else {
+            points[bucket][size].kept.push([p.sales, p.use, p.date]);
+            points[bucket][size][kind] += 1;
+          }
+        });
+      });
+    });
+  });
+
+  var rows = { am: [], pm: [], day: [] };
+  var history = { dough: [], peach: [] };
+  var cell = function (v) { return v === null ? '' : v; };
+  Object.keys(nights).sort().forEach(function (date) {
+    var n = nights[date];
+    var bibleLabel = n.bucket === 'peach' ? 'peach' : 'regular';
+    USE_KINDS.forEach(function (kind) {
+      if (!n.has[kind]) return;
+      var takings = n.sales[kind] !== null && n.sales[kind] > 0 ? n.sales[kind] : '';
+      rows[kind].push([
+        date, takings,
+        cell(n.use[kind].indi), cell(n.use[kind].small), cell(n.use[kind].large), cell(n.use[kind].sic),
+        bibleLabel, n.why[kind].concat(n.marks[kind]).join(', '),
+      ]);
+    });
+    // The A-F history: nights with takings and at least one whole-day size.
+    var anyDay = sizes.some(function (size) { return n.use.day[size] !== null; });
+    if (n.has.day && n.sales.day !== null && n.sales.day > 0 && anyDay) {
+      history[n.bucket].push([date, n.sales.day,
+        cell(n.use.day.indi), cell(n.use.day.small), cell(n.use.day.large), cell(n.use.day.sic)]);
+    }
+  });
+
+  return { rows: rows, history: history, points: points };
+}
+
+/** One half of a night's use: before - after. Says why when it cannot. */
+function half(beforeRow, beforeCol, afterRow, afterCol) {
+  if (!beforeRow || !afterRow) return { use: null, why: 'no row' };
   var before = numOrNull(beforeRow[beforeCol - 1]);
   var after = numOrNull(afterRow[afterCol - 1]);
-  if (before === null || after === null) return null;
+  if (before === null || after === null) return { use: null, why: 'not counted' };
   var used = before - after;
-  return used < 0 ? null : used; // a count that rose is a miscount, not use
+  return used < 0 ? { use: null, why: 'negative' } : { use: used, why: '' }; // a count that rose is a miscount
+}
+
+/**
+ * Rewrite one use tab in full: headings (which also heals a tab from before
+ * the Ignored column), then every night ascending. clearContent, not clear():
+ * clear() would also strip the date format and the frozen heading row.
+ */
+function writeUseTab(ss, name, headers, rows) {
+  var sheet = makeTab(ss, name);
+  var last = sheet.getLastRow();
+  if (last >= 2) sheet.getRange(2, 1, last - 1, headers.length).clearContent();
+  writeHeaders(sheet, headers);
+  if (rows.length) {
+    ensureRows(sheet, rows.length + 1);
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
 }
 
 /** 'YYYY-MM-DD' plus a day count, timezone-proof (pure string-and-UTC maths). */
@@ -717,28 +874,28 @@ function isPeachDate(iso) {
   return md >= PEACH_START && md <= PEACH_END;
 }
 
-function refreshBibleBuild(key) {
+/**
+ * Fit one line per size through every surviving point of all three kinds -
+ * mornings, nights and whole days together - and write the suggestion at each
+ * of the mirror's thresholds beside the current bible. A size needs three
+ * distinct nights behind it before its column says anything; under that any
+ * line is noise. The block from X records what each line rests on.
+ */
+function refreshBibleBuild(key, sizePoints) {
   var ss = SpreadsheetApp.getActive();
   var sheet = ss.getSheetByName(BIBLE_BUILD_TABS[key]);
   var mirror = ss.getSheetByName(BIBLE_TABS[key]);
   if (!sheet || !mirror || mirror.getLastRow() < 2) return;
 
-  // Every night recorded on this bible: sales against total use, per size.
-  var last = sheet.getLastRow();
-  var history = last >= 2 ? sheet.getRange(2, 1, last - 1, 6).getValues() : [];
   var thresholds = mirror.getRange(2, 1, mirror.getLastRow() - 1, 5).getValues();
-
+  var stats = [];
   Object.keys(BIBLE_BUILD_BLOCK).forEach(function (size, sizeIndex) {
-    var points = [];
-    history.forEach(function (row) {
-      var sales = Number(row[1]);
-      var use = Number(row[BIBLE_BUILD_USE[size] - 1]);
-      if (row[1] !== '' && row[BIBLE_BUILD_USE[size] - 1] !== '' && isFinite(sales) && isFinite(use)) {
-        points.push([sales, use]);
-      }
-    });
-    // Under three nights any line is noise, so the column stays blank.
-    var fit = points.length >= 3 ? theilSen(points) : null;
+    var p = (sizePoints && sizePoints[size]) || { kept: [], am: 0, pm: 0, day: 0, dropped: 0 };
+    var points = p.kept.map(function (k) { return [k[0], k[1]]; });
+    var nights = {};
+    p.kept.forEach(function (k) { nights[k[2]] = true; });
+    var nightCount = Object.keys(nights).length;
+    var fit = nightCount >= 3 ? theilSen(points) : null;
     var block = thresholds.map(function (row) {
       var sales = Number(row[0]);
       var current = row[sizeIndex + 1];
@@ -749,7 +906,13 @@ function refreshBibleBuild(key) {
       ensureRows(sheet, block.length + 1);
       sheet.getRange(2, BIBLE_BUILD_BLOCK[size], block.length, 3).setValues(block);
     }
+    stats.push([SIZE_LABEL[size], points.length, nightCount, p.am, p.pm, p.day, p.dropped]);
   });
+
+  sheet.getRange(1, BIBLE_BUILD_STATS_COL, 1, BIBLE_BUILD_STATS_HEADERS.length)
+    .setValues([BIBLE_BUILD_STATS_HEADERS]).setFontWeight('bold');
+  ensureRows(sheet, stats.length + 1);
+  sheet.getRange(2, BIBLE_BUILD_STATS_COL, stats.length, BIBLE_BUILD_STATS_HEADERS.length).setValues(stats);
 }
 
 /**
@@ -826,6 +989,22 @@ function median(values) {
   var sorted = values.slice().sort(function (a, b) { return a - b; });
   var mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * The fences a wild value falls outside: 1.5x the middle spread past the
+ * quartiles (quartiles by median-of-halves). Null under four values, and null
+ * when the spread is zero - identical values cannot say which one is odd.
+ */
+function outlierFences(values) {
+  if (values.length < 4) return null;
+  var sorted = values.slice().sort(function (a, b) { return a - b; });
+  var mid = Math.floor(sorted.length / 2);
+  var q1 = median(sorted.slice(0, mid));
+  var q3 = median(sorted.slice(sorted.length % 2 ? mid + 1 : mid));
+  var iqr = q3 - q1;
+  if (iqr <= 0) return null;
+  return { lo: q1 - 1.5 * iqr, hi: q3 + 1.5 * iqr };
 }
 
 // ----- read path -----

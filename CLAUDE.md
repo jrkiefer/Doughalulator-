@@ -22,6 +22,9 @@ build less.**
    restoring.
 5. Two documents, and only two: this file and `README.md`. No further markdown in the repo —
    knowledge goes in whichever of these two owns it.
+6. **The repo is public. Real sales figures never enter a test fixture.** Backend fixtures use the
+   100-ball / 1% arithmetic in `fullDay`; any check against the owner's real nights is a one-off
+   replay in the scratchpad, never committed.
 
 ## Folder rules
 
@@ -102,10 +105,11 @@ build less.**
 - **2 PM session** — the afternoon count + calculation: what we have, what tonight will use, what tomorrow needs, what to make, and the batch count (the remainder rule settles round down / round up on its own; the pills override it).
 - **salesLeft** — today's forecast − current sales: the selling still to come tonight.
 - **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
-- **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. **PM sales is still computed and still written to the sheet, it is just not drawn** — the owner asked for the display gone, not the number.
+- **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. **PM sales is still computed, it is just not drawn** — the owner asked for the display gone, not the number; the Dough Log derives its own copy for the `PM Dough Use` tab.
 - **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure until something is typed; a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back.
-- **PM use** — dough used since 2 PM = the chosen option's final dough − EON count. Computed by the app (`pmUse` on `EonRecord`); a count that ROSE reads blank, not negative — that means a miscount.
-- **AM use** — dough used before 2 PM = yesterday's EON count − this morning's count, via `computeAmUse`. Blank when yesterday has no EON record (a closed day).
+- **PM use** — dough used since 2 PM = the chosen option's final dough − EON count. `pmUse` on `EonRecord` is the app's reference definition; a count that ROSE reads blank, not negative — that means a miscount. The RECORDED copy on the `PM Dough Use` tab is the Dough Log's own, derived from the counts after every close (v1.30.0) — the app writes none of the three use tabs.
+- **AM use** — dough used before 2 PM = yesterday's EON count − this morning's count; `computeAmUse` is the reference definition. Blank when yesterday has no EON record (a closed day). Recorded on `AM Dough Use` by the Dough Log, same as PM.
+- **All Day use** (v1.30.0) — AM + PM for the same date, both halves known and non-negative, against the night's takings; the `All Day Dough Use` tab. The self-building bible learns from all three kinds of point together.
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
 - **Temp slots** — before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night.
 - **Past midnight** (v1.27.0) — a close finished after 12:00 AM belongs to the evening that just
@@ -154,8 +158,8 @@ build less.**
   true. Same deployment rule as the dough script: paste, then UPDATE THE EXISTING deployment.
 - **`action: 'bibles'`** (`readBibleBuilds` in `dough/Code.gs`) is the only read that reaches the
   `New Bieblerb` tabs — `loadTabIndex()` walks `TABS`, which excludes them and the bible mirrors.
-  It pairs each threshold's current value with its suggestion. A size under the three-night gate
-  is written `''` up there and MUST come back `null`: `Number('')` is 0, which would draw a
+  It pairs each threshold's current value with its suggestion. A size under the gate (three
+  distinct nights with a usable point, v1.30.0) is written `''` up there and MUST come back `null`: `Number('')` is 0, which would draw a
   suggestion of "make none" instead of "nothing to suggest yet". Adding a read action needs the
   owner to paste the script in and **update the EXISTING deployment** — a new deployment mints a
   new `/exec` address and the app loses the sheet on the spot.
@@ -178,24 +182,52 @@ build less.**
 - **Blank ≠ zero end to end**: `toNumOrNull` in forms, `Maybe` in core, empty cells in payloads
   (they CLEAR sheet cells), blanks hydrate back as blanks on load.
 - Saves are **merge-upserts by Date**, and since v1.27.0 **blank rows clear, they never create**:
-  the derived tabs (`Final Make Amount`, `Estimated Dough After Gang`, `AM Dough Use`,
-  `PM Dough Use`) travel on EVERY save — all-blank when their figure is unknowable — so a make
+  the derived tabs (`Final Make Amount`, `Estimated Dough After Gang`) travel on EVERY save —
+  all-blank when their figure is unknowable — so a make
   saved earlier and then un-decided is RETRACTED from the sheet rather than left for the
   self-building bible to read as truth. The script skips an all-blank row for a date that has
   none, so this never appends date-only clutter.
 - **The app is the only calculator.** The Dough Log holds no formulas — every number is worked out
-  here and written into place. The one exception is the self-building bible (v1.20.0): after every
-  EON save, `rebuildBibleHistories()` in `dough/Code.gs` derives each day's WHOLE use from the
-  recorded tabs — AM = YESTERDAY'S EON count − 2 PM count (yesterday exactly, owner's rule Aug
-  2026 "just to be extra safe": a gap abstains, no lookback across closed days — the same rule
-  as the app's own `computeAmUse`); PM = Estimated Dough After Gang − EON count — rewrites the `New Bieblerb` A–F history from it, and refits Theil–Sen. Per size, BOTH
-  halves must be known and non-negative (a count that rose is a miscount) or the size ABSTAINS
-  for the day: never a half day passed off as whole. Days need takings; the bucket comes from the
-  2 PM row's Bible cell, falling back to the date rule. This replaced the app's phone-local sum,
-  whose AM half silently vanished on a second phone or after a wipe and understated the day. The
-  app STILL appends its own row (kept for stale phone caches — never reject it); the rebuild
-  overwrites it, so there is no deploy-order hazard in either direction. A consequence made
-  deliberate: Erase all data now truly erases the fit history on the next refresh.
+  here and written into place. The one exception is the self-building bible, and since v1.30.0
+  **the three use tabs are the script's**: after every EON save, `rebuildBibleHistories()` in
+  `dough/Code.gs` runs `deriveUse()` over the recorded tabs (`2PM Dough Count`, `Estimated Dough
+  After Gang`, `EON Dough Count` — never the use tabs themselves) and rewrites `AM Dough Use`,
+  `PM Dough Use` and `All Day Dough Use` in full, one row per recorded night, then refits. The app
+  writes NONE of those three tabs and no `New Bieblerb` row (a phone-local morning once vanished
+  on a second phone or after a wipe and understated the day). Three kinds of point per night per
+  size: AM = YESTERDAY'S EON count − 2 PM count against the 2 PM row's Current Sales (yesterday
+  exactly, owner's rule Aug 2026 "just to be extra safe": a gap abstains, no lookback across
+  closed days — the same rule as the app's own `computeAmUse`); PM = Estimated Dough After Gang −
+  EON count against EON Sales − Current Sales; All Day = the two added against EON Sales. A half
+  drops on its own (no row, blank count, or a count that ROSE — a miscount); the All Day point
+  needs both halves; each point needs takings on its own scale, so a morning still counts on a
+  night whose sales were never typed. Then per (bible, size, kind) an outlier rule: dough per
+  $1,000 outside 1.5× the middle spread past the quartiles (`outlierFences`, median-of-halves;
+  needs ≥ 4 points and a spread > 0 — a spread of zero cannot pick an outlier, and Sicilian is
+  often 0). ONE pooled Theil–Sen per bible per size over every surviving point of all three kinds
+  — the owner's words: "am pm and all day all as separate data and all together". Gate: ≥ 3
+  distinct nights with a usable point. Every measured value is written; outliers are only marked.
+  The `Ignored` column carries the reasons in words (row-level first — no close yesterday, no
+  after-gang figure, no takings — then per size: Small negative, Large not counted, Indi
+  outlier). Bucket from the 2 PM row's Bible cell, falling back to the date rule. A stats block
+  from column X of each build tab records Points / Nights / AM / PM / All Day / Ignored per size.
+  Measured on the real log before shipping: whole-day-only left the regular bible 4–5 nights and a
+  NEGATIVE Small slope; pooled gives 23–26 points from 15–18 nights (peach 53–61 from 29–31),
+  mean |suggested − hand bible| Small 1.9% / Large 9.6% / Indi 17% / Sic 30% (peach 5.6 / 13.9 /
+  19.8 / 38%). A common-slope model was tried and is worse on regular. Known and accepted:
+  half-day points pull the LOW end down (peach Indi 10 at $3,000 vs the book's 20) because a
+  half-day's baseline use is half a day's — the graph shows that gap; don't "fix" it by dropping
+  half-days. `action=bibles` and the graph are unchanged. OLD PHONES still post `AM Dough Use`,
+  `PM Dough Use` and `New Bieblerb` A–F rows: `headersFor` keeps validating them (the A–F
+  slice(0,6); the 8-column use headers are supersets), they are never rejected, and the next
+  rebuild overwrites them. `writeUseTab` rewrites each use tab's headings on every rebuild, which
+  is what heals a notebook from before the `Ignored` column — until the first rebuild after a
+  paste, a 7-heading tab would refuse an old phone's row (and with it that whole two-phase 2 PM
+  save), so the README runbook is: paste → Re-run setup → Refresh new-bible suggestions →
+  update the EXISTING deployment. Rebuild runs on EON saves and the menu item only: a 2 PM save
+  flushes many times an afternoon, and the rebuild walks the whole log every time, so a
+  never-closed night's morning is picked up at the next close. A consequence made deliberate:
+  Erase all data empties the three use tabs and the fit history on the next refresh.
 - **No secrets** (v1.4.0, owner's explicit request), and since v1.12.0 **no Settings page either**:
   both `/exec` addresses are constants in `src/services/sheets.ts`. A per-device Settings page meant
   a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is
@@ -253,10 +285,10 @@ build less.**
 - **`mirrorBibles()` runs at boot for a reason.** `refreshBibleBuild()` gives up silently when a
   bible mirror tab is empty, so without a re-send the self-building bible would just stop after an
   Erase all data. The script no-ops on an unchanged hash.
-- **A fetch's bible must fall back to the EON record's own.** On a night with no 2 PM record there
-  is no day-record bible, and `eonRecordToTabWrites` picks the self-building bible tab from it —
-  getting that wrong files a peach night under the regular bible, silently. Every test but one
-  passes the bible explicitly, so the undefined path needs its own.
+- **A night's bible bucket is the script's call, not the app's** (v1.30.0). `eonRecordToTabWrites`
+  no longer picks a Bieblerb tab at all; `deriveUse` buckets every night from the 2 PM row's Bible
+  cell, falling back to the date rule — which is the same answer the app gave, and one place
+  instead of two. A night with no 2 PM row falls to the date rule.
 - **A keepalive flush confirms nothing, and must not be allowed to say otherwise.** It fires into a
   page that is going away and never hears back, so it may not mark a record synced (it already
   didn't), may not clear the offline flags, and may not stand down a pending retry. Any new
@@ -352,9 +384,9 @@ build less.**
 1. The EON check INCLUDES Boli against its 36-ball target (0 on a closed tomorrow).
 7. **The app resolves the batch direction; the pills override it** (Aug 2026). This REPLACED
    "the owner taps one, the engine never picks" — the owner re-chose the other app's behaviour,
-   twice, in writing. A consequence they accepted: `Final Make Amount`, `Estimated Dough After
-   Gang` and `PM Dough Use` now fill without a tap, because a direction always exists. That
-   supersedes the old default #3 below.
+   twice, in writing. A consequence they accepted: `Final Make Amount` and `Estimated Dough After
+   Gang` (and, derived from the latter by the script, the PM use) now fill without a tap, because
+   a direction always exists. That supersedes the old default #3 below.
 2. Night temps slot stays "after 17:00".
 5. **Temps are typed, never copied forward** (Aug 2026). LOAD LAST TEMPS was removed: it wrote the
    previous readings straight into the current slot with the current clock time, i.e. it filed

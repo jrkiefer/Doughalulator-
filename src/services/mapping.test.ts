@@ -66,7 +66,6 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
       'Dough Make (estimate)',
       'Final Make Amount',
       'Estimated Dough After Gang',
-      'AM Dough Use',
     ]);
     // Google truncates a tab name at 31 characters; two that truncate alike
     // silently collide, which is how the previous build lost a whole tab.
@@ -149,34 +148,12 @@ describe('dayRecordToTabWrites — the whole afternoon, tab by tab', () => {
     expect(make['Trays Total']).toBe(dayRecord.totalTrays);
   });
 
-  it('the morning use rides with the 2 PM save when yesterday closed out', () => {
-    const amUse = {
-      sales: 4500,
-      use: { indi: 5, small: 12, large: 9, sic: 1, boli: null },
-    };
-    const row = dayRecordToTabWrites(dayRecord, amUse).find((w) => w.tab === 'AM Dough Use')!.row;
-    expect(row).toEqual({
-      Date: '2026-01-15',
-      'AM Sales $': 4500,
-      'AM Indi Use': 5,
-      'AM Small Use': 12,
-      'AM Large Use': 9,
-      'AM Sic Use': 1,
-      'Bible Used': 'regular',
-    });
-    // No yesterday → an ALL-BLANK row, never zeros: blanks retract a morning
-    // figure a previously-cached yesterday once produced, and the script
-    // skips the row entirely when the date has none.
-    const bare = dayRecordToTabWrites(dayRecord).find((w) => w.tab === 'AM Dough Use')!.row;
-    const values = Object.entries(bare).filter(([k]) => k !== 'Date').map(([, v]) => v);
-    expect(values.every((v) => v === '')).toBe(true);
-  });
 });
 
-describe('eonRecordToTabWrites — the close, and what the night used', () => {
-  it('writes the final count and the PM use', () => {
-    const writes = eonRecordToTabWrites(eonRecord, 'regular');
-    expect(writes.map((w) => w.tab)).toContain('EON Dough Count');
+describe('eonRecordToTabWrites — the close', () => {
+  it('writes the final count and nothing else — the use tabs and the Bieblerb pages are the Dough Log’s', () => {
+    const writes = eonRecordToTabWrites(eonRecord);
+    expect(writes.map((w) => w.tab)).toEqual(['EON Dough Count']);
     const eon = writes.find((w) => w.tab === 'EON Dough Count')!.row;
     expect(eon).toEqual({
       Date: '2026-01-15',
@@ -186,6 +163,14 @@ describe('eonRecordToTabWrites — the close, and what the night used', () => {
       'EON Large Count': 154,
       'EON Sic Count': 2,
     });
+  });
+});
+
+describe('what the app leaves to the Dough Log', () => {
+  it('never writes a use tab or a Bieblerb page — the script derives those from the counts', () => {
+    const theirs = ['AM Dough Use', 'PM Dough Use', 'All Day Dough Use', 'New Bieblerb', 'New Peach Bieblerb'];
+    const tabs = [...dayRecordToTabWrites(dayRecord), ...eonRecordToTabWrites(eonRecord)].map((w) => w.tab);
+    for (const tab of theirs) expect(tabs).not.toContain(tab);
   });
 });
 
@@ -312,62 +297,4 @@ describe('reverse mapping (loading)', () => {
   });
 });
 
-describe("the night's line on the self-building bible", () => {
-  it('records total sales and the whole day’s use — morning plus night', () => {
-    const amUse = { sales: 4500, use: { indi: 5, small: 12, large: 9, sic: 1, boli: null } };
-    const writes = eonRecordToTabWrites(eonRecord, 'regular', amUse);
-    const line = writes.find((w) => w.tab === 'New Bieblerb')!.row;
-    expect(line.Date).toBe('2026-01-15');
-    expect(line['Total Sales']).toBe(7900);
-    // Whatever the morning used plus whatever the night used.
-    expect(line.Indi).toBe(5 + (eonRecord.pmUse?.indi ?? 0));
-  });
 
-  it('a peach night builds the peach bible instead', () => {
-    const writes = eonRecordToTabWrites(eonRecord, 'peach', null);
-    expect(writes.map((w) => w.tab)).toContain('New Peach Bieblerb');
-    expect(writes.map((w) => w.tab)).not.toContain('New Bieblerb');
-  });
-
-  it('a peach night with NO 2 PM record still builds the peach bible', () => {
-    // The path the app actually takes when the owner does an end-of-night
-    // entry on a day they never filled in at 2 PM: engine.ts passes
-    // `dayRecord?.bibleUsed`, which is undefined, so the only thing that knows
-    // it is peach season is the EON record itself. Every other test here hands
-    // the bible in explicitly, which is exactly how this got missed.
-    const eonOnly = runEonCalculation(
-      {
-        date: '2026-07-15', // peach season: July 1 – Aug 31
-        counts: counts({ indiSingles: 20, smallSingles: 40, largeSingles: 30, sicSingles: 2 }),
-        finalSalesRaw: 7.9,
-        manualTomorrowForecastRaw: 8.2,
-      },
-      null,
-      bibles,
-      defaultConfig,
-    );
-    expect(eonOnly.bibleUsed).toBe('peach');
-    const tabs = eonRecordToTabWrites(eonOnly, undefined, null).map((w) => w.tab);
-    expect(tabs).toContain('New Peach Bieblerb');
-    expect(tabs).not.toContain('New Bieblerb');
-  });
-
-  it('a night with no final sales adds nothing to the history', () => {
-    const noSales = { ...eonRecord, finalSales: null };
-    expect(eonRecordToTabWrites(noSales, 'regular', null).map((w) => w.tab))
-      .not.toContain('New Bieblerb');
-  });
-});
-
-describe('nights whose numbers do not line up', () => {
-  it('leaves PM takings blank rather than recording a negative', () => {
-    const odd = { ...eonRecord, pmSales: -2400 };
-    const row = eonRecordToTabWrites(odd, 'regular').find((w) => w.tab === 'PM Dough Use')!.row;
-    expect(row['PM Sales $']).toBe('');
-  });
-
-  it('a night with no takings teaches the bible nothing', () => {
-    const zero = { ...eonRecord, finalSales: 0 };
-    expect(eonRecordToTabWrites(zero, 'regular').map((w) => w.tab)).not.toContain('New Bieblerb');
-  });
-});

@@ -247,8 +247,14 @@ describe('dough script — a plain record, no formulas to break', () => {
     expect(ss.getSheetByName('Estimated Dough After Gang')!.headerRow(6)[0]).toBe('Date');
     // Every tab name has to survive Google's 31-character cap.
     for (const name of ss.sheets.keys()) expect(name.length).toBeLessThanOrEqual(31);
-    expect(ss.getSheetByName('AM Dough Use')!.headerRow(7)[2]).toBe('AM Indi Use');
-    expect(ss.getSheetByName('PM Dough Use')!.headerRow(7)[2]).toBe('PM Indi Use');
+    expect(ss.getSheetByName('AM Dough Use')!.headerRow(8)[2]).toBe('AM Indi Use');
+    expect(ss.getSheetByName('AM Dough Use')!.headerRow(8)[7]).toBe('Ignored');
+    expect(ss.getSheetByName('PM Dough Use')!.headerRow(8)[2]).toBe('PM Indi Use');
+    expect(ss.getSheetByName('PM Dough Use')!.headerRow(8)[7]).toBe('Ignored');
+    expect(ss.getSheetByName('All Day Dough Use')!.headerRow(8)).toEqual([
+      'Date', 'All Day Sales $', 'All Day Indi Use', 'All Day Small Use', 'All Day Large Use',
+      'All Day Sic Use', 'Bible Used', 'Ignored',
+    ]);
     // The app is the only calculator: nothing in this sheet computes anything.
     for (const sheet of ss.sheets.values()) {
       expect(sheet.formulas.size).toBe(0);
@@ -542,8 +548,10 @@ describe('a wipe erases data without stripping the sheet formatting', () => {
  * sits at 100 balls, so the arithmetic is checkable at a glance:
  *   AM use = last EON (100) − 2 PM count (100 − am) = am
  *   PM use = after gang (100 + pm) − tonight's EON (100) = pm
- * and the day's whole use per size is exactly `use`. Tonight's closing 100
- * seeds tomorrow's morning, so consecutive days chain like real ones.
+ * and the day's whole use per size is exactly `use`. Half the takings are in
+ * by 2 PM, so the morning, the night and the whole day all run at the same
+ * dough-per-dollar rate and the pooled fit stays hand-checkable. Tonight's
+ * closing 100 seeds tomorrow's morning, so consecutive days chain like real ones.
  */
 function fullDay(script: LoadedScript, date: string, sales: number, use: number, bible?: string) {
   const am = Math.floor(use / 2);
@@ -553,7 +561,7 @@ function fullDay(script: LoadedScript, date: string, sales: number, use: number,
     date,
     tabs: [
       { tab: '2PM Dough Count',
-        row: { Date: date, 'Indi Count': 100 - am, 'Small Count': 100 - am,
+        row: { Date: date, 'Current Sales': sales / 2, 'Indi Count': 100 - am, 'Small Count': 100 - am,
           'Large Count': 100 - am, 'Sic Count': 100 - am, ...(bible ? { Bible: bible } : {}) } },
       { tab: 'Estimated Dough After Gang',
         row: { Date: date, Indi: 100 + pm, Small: 100 + pm, Large: 100 + pm, Sic: 100 + pm } },
@@ -568,6 +576,23 @@ function fullDay(script: LoadedScript, date: string, sales: number, use: number,
           'EON Large Count': 100, 'EON Sic Count': 100 } },
     ],
   });
+}
+
+/** A use tab's row for a date, as displayed — dates are not at fixed rows on every tab. */
+function useRow(script: LoadedScript, tab: string, date: string): string[] {
+  const sheet = script.world.ss.getSheetByName(tab)!;
+  for (let r = 2; r <= sheet.getLastRow(); r++) {
+    const row = sheet.rowByIndex(r, 8);
+    if (row[0] === date) return row;
+  }
+  throw new Error(`${tab} has no row for ${date}`);
+}
+
+/** The stats block (from column X) for one size on a Bieblerb tab. */
+function stats(script: LoadedScript, tab: string, size: 'Indi' | 'Small' | 'Large' | 'Sic'): string[] {
+  const sheet = script.world.ss.getSheetByName(tab)!;
+  const row = 2 + ['Indi', 'Small', 'Large', 'Sic'].indexOf(size);
+  return sheet.rowByIndex(row, 30).slice(23);
 }
 
 /** A bare closing count with no takings: feeds the next morning, is no point itself. */
@@ -603,6 +628,16 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(build.getCell(2, 6)).toBe(40);
     expect(build.getCell(4, 2)).toBe(8000);
     expect(build.getCell(4, 5)).toBe(80);
+    // The three use tabs hold the same night three ways, each against its own
+    // takings, with nothing ignored.
+    expect(useRow(script, 'AM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '2000', '20', '20', '20', '20', 'regular', '']);
+    expect(useRow(script, 'PM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '2000', '20', '20', '20', '20', 'regular', '']);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '4000', '40', '40', '40', '40', 'regular', '']);
+    // Three nights, three kinds each: nine points behind every size's line.
+    expect(stats(script, 'New Bieblerb', 'Indi')).toEqual(['Indi', '9', '3', '3', '3', '3', '0']);
     // And the suggestion columns fill beside the current bible.
     const first = bibles.regular.rows[0]!;
     expect(build.getCell(2, 8)).toBe(first.sales); // X Sales
@@ -612,9 +647,24 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(build.getCell(2, 13)).toBe(first.small);
     expect(build.getCell(2, 21)).toBe(first.sic);
 
-    // And it keeps sharpening: a fourth day at a different rate moves it.
+    // One day at double the rate cannot drag a median-of-slopes line off nine
+    // points that agree — that steadiness is the point of the fit.
     fullDay(script, '2026-09-05', 10000, 200, 'regular');
+    expect(build.getCell(2, 10)).toBe(Math.round(first.sales * 0.01));
+    // Two of them can: the line keeps sharpening as the record grows.
+    fullDay(script, '2026-09-06', 9000, 180, 'regular');
     expect(build.getCell(2, 10)).not.toBe(Math.round(first.sales * 0.01));
+    expect(stats(script, 'New Bieblerb', 'Indi')).toEqual(['Indi', '15', '5', '5', '5', '5', '0']);
+  });
+
+  it('two nights are six points and still no suggestion — the gate counts nights', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    fullDay(script, '2026-09-02', 4000, 40, 'regular');
+    fullDay(script, '2026-09-03', 6000, 60, 'regular');
+    expect(stats(script, 'New Bieblerb', 'Small')).toEqual(['Small', '6', '2', '2', '2', '2', '0']);
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 14)).toBe(''); // New Small
   });
 
   it('peach days build the peach suggestion by date, leaving the regular one alone', () => {
@@ -640,6 +690,7 @@ describe('the new bible builds itself as whole days accumulate', () => {
 
   it('a count that ROSE overnight makes that size abstain, not go negative', () => {
     const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
     seedEon(script, '2026-09-01');
     fullDay(script, '2026-09-02', 4000, 40, 'regular');
     // Day 3: Small\'s 2 PM count is ABOVE last night\'s close — a miscount.
@@ -647,7 +698,7 @@ describe('the new bible builds itself as whole days accumulate', () => {
       type: 'day', date: '2026-09-03',
       tabs: [
         { tab: '2PM Dough Count',
-          row: { Date: '2026-09-03', 'Indi Count': 80, 'Small Count': 120,
+          row: { Date: '2026-09-03', 'Current Sales': 3000, 'Indi Count': 80, 'Small Count': 120,
             'Large Count': 80, 'Sic Count': 80, Bible: 'regular' } },
         { tab: 'Estimated Dough After Gang',
           row: { Date: '2026-09-03', Indi: 120, Small: 120, Large: 120, Sic: 120 } },
@@ -663,6 +714,16 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(build.getCell(3, 2)).toBe(6000);
     expect(build.getCell(3, 3)).toBe(40); // Indi: AM 20 + PM 20
     expect(build.getCell(3, 4)).toBe(''); // Small abstains — never a negative half
+    // The morning says which size and why; the evening's Small was fine and
+    // stands on its own; the whole day cannot be summed for Small.
+    expect(useRow(script, 'AM Dough Use', '2026-09-03'))
+      .toEqual(['2026-09-03', '3000', '20', '', '20', '20', 'regular', 'Small negative']);
+    expect(useRow(script, 'PM Dough Use', '2026-09-03'))
+      .toEqual(['2026-09-03', '3000', '20', '20', '20', '20', 'regular', '']);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-03'))
+      .toEqual(['2026-09-03', '6000', '40', '', '40', '40', 'regular', 'Small AM negative']);
+    // Small keeps one morning, two evenings and one whole day: 4 points from 2 nights.
+    expect(stats(script, 'New Bieblerb', 'Small')).toEqual(['Small', '4', '2', '1', '2', '1', '0']);
   });
 
   it("the morning must come from the day before — any gap abstains (owner's rule)", () => {
@@ -680,16 +741,24 @@ describe('the new bible builds itself as whole days accumulate', () => {
     fullDay(script, '2026-09-04', 9000, 90, 'regular');
     expect(build.getCell(3, 1)).toBe('');
     expect(build.getCell(3, 2)).toBe('');
+    // The tabs say so in words, and the evening of the 4th still counts.
+    expect(useRow(script, 'AM Dough Use', '2026-09-04'))
+      .toEqual(['2026-09-04', '4500', '', '', '', '', 'regular', 'no close yesterday']);
+    expect(useRow(script, 'PM Dough Use', '2026-09-04'))
+      .toEqual(['2026-09-04', '4500', '45', '45', '45', '45', 'regular', '']);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-04'))
+      .toEqual(['2026-09-04', '9000', '', '', '', '', 'regular', 'no close yesterday']);
   });
 
-  it('a day the gang total never reached abstains too — no half-day points', () => {
+  it('a day the gang total never reached has no evening and no whole day — but keeps its morning', () => {
     const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
     seedEon(script, '2026-09-01');
     // 2 PM count and EON exist; Estimated Dough After Gang was never written.
     post(script, {
       type: 'day', date: '2026-09-02',
       tabs: [{ tab: '2PM Dough Count',
-        row: { Date: '2026-09-02', 'Indi Count': 80, 'Small Count': 80,
+        row: { Date: '2026-09-02', 'Current Sales': 2000, 'Indi Count': 80, 'Small Count': 80,
           'Large Count': 80, 'Sic Count': 80, Bible: 'regular' } }],
     });
     post(script, {
@@ -699,6 +768,105 @@ describe('the new bible builds itself as whole days accumulate', () => {
           'EON Small Count': 60, 'EON Large Count': 60, 'EON Sic Count': 60 } }],
     });
     expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 1)).toBe('');
+    expect(useRow(script, 'AM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '2000', '20', '20', '20', '20', 'regular', '']);
+    expect(useRow(script, 'PM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '2000', '', '', '', '', 'regular', 'no after-gang figure']);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '4000', '', '', '', '', 'regular', 'no after-gang figure']);
+    expect(stats(script, 'New Bieblerb', 'Indi')).toEqual(['Indi', '1', '1', '1', '0', '0', '0']);
+  });
+
+  it("an AM point stands when the night's sales were never typed", () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    post(script, {
+      type: 'day', date: '2026-09-02',
+      tabs: [
+        { tab: '2PM Dough Count',
+          row: { Date: '2026-09-02', 'Current Sales': 2000, 'Indi Count': 80, 'Small Count': 80,
+            'Large Count': 80, 'Sic Count': 80, Bible: 'regular' } },
+        { tab: 'Estimated Dough After Gang',
+          row: { Date: '2026-09-02', Indi: 120, Small: 120, Large: 120, Sic: 120 } },
+      ],
+    });
+    // Closed out with counts but the takings never typed.
+    seedEon(script, '2026-09-02');
+    // The morning is a complete observation on its own …
+    expect(useRow(script, 'AM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '2000', '20', '20', '20', '20', 'regular', '']);
+    // … the evening and the whole day are measured but cannot sit against takings.
+    expect(useRow(script, 'PM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '', '20', '20', '20', '20', 'regular', 'no takings']);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '', '40', '40', '40', '40', 'regular', 'no takings']);
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 1)).toBe('');
+    expect(stats(script, 'New Bieblerb', 'Large')).toEqual(['Large', '1', '1', '1', '0', '0', '0']);
+  });
+
+  it('a wild night is written, marked as an outlier, and left out of the fit', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    fullDay(script, '2026-09-02', 4000, 40, 'regular');
+    fullDay(script, '2026-09-03', 5000, 52, 'regular');
+    fullDay(script, '2026-09-04', 6000, 60, 'regular');
+    fullDay(script, '2026-09-05', 7000, 68, 'regular');
+    fullDay(script, '2026-09-06', 8000, 80, 'regular');
+    fullDay(script, '2026-09-07', 10000, 100, 'regular');
+    // Ten times the usual dough per dollar — a sales figure typed a digit
+    // short, most likely. Its figures stay on the record; only the fit skips it.
+    fullDay(script, '2026-09-08', 900, 90, 'regular');
+    const marks = 'Indi outlier, Small outlier, Large outlier, Sic outlier';
+    expect(useRow(script, 'AM Dough Use', '2026-09-08'))
+      .toEqual(['2026-09-08', '450', '45', '45', '45', '45', 'regular', marks]);
+    expect(useRow(script, 'PM Dough Use', '2026-09-08'))
+      .toEqual(['2026-09-08', '450', '45', '45', '45', '45', 'regular', marks]);
+    expect(useRow(script, 'All Day Dough Use', '2026-09-08'))
+      .toEqual(['2026-09-08', '900', '90', '90', '90', '90', 'regular', marks]);
+    // Six nights of three kinds stay; the wild night's three points are out.
+    for (const size of ['Indi', 'Small', 'Large', 'Sic'] as const) {
+      expect(stats(script, 'New Bieblerb', size)).toEqual([size, '18', '6', '6', '6', '6', '3']);
+    }
+    // And the line still says one per cent.
+    const first = bibles.regular.rows[0]!;
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe(Math.round(first.sales * 0.01));
+  });
+
+  it('the outlier fences: quartiles by halves, nothing under four values, nothing on a zero spread', () => {
+    const script = freshDough();
+    expect(script.fns.outlierFences([9, 10, 10, 11, 12, 60])).toEqual({ lo: 7, hi: 15 });
+    expect(script.fns.outlierFences([10, 10, 10, 10])).toBeNull();
+    expect(script.fns.outlierFences([1, 2, 3])).toBeNull();
+  });
+
+  it('the use tabs are rewritten in full after every close and heal their own headings', () => {
+    const script = freshDough();
+    seedEon(script, '2026-09-01');
+    fullDay(script, '2026-09-02', 4000, 40, 'regular');
+    const am = script.world.ss.getSheetByName('AM Dough Use')!;
+    // A notebook from before the Ignored column: its heading is missing.
+    am.setCell(1, 8, '');
+    // The next close rewrites the tab, heading and all …
+    fullDay(script, '2026-09-03', 6000, 60, 'regular');
+    expect(am.headerRow(8)[7]).toBe('Ignored');
+    // … and a row an old phone posts against the healed heading is accepted,
+    // then superseded by the rebuild that follows the next close.
+    const answer = post(script, {
+      type: 'day', date: '2026-09-03',
+      tabs: [{ tab: 'AM Dough Use',
+        row: { Date: '2026-09-03', 'AM Sales $': 999, 'AM Indi Use': 999, 'AM Small Use': 999,
+          'AM Large Use': 999, 'AM Sic Use': 999, 'Bible Used': 'regular' } }],
+    });
+    expect(answer.ok).toBe(true);
+    expect(useRow(script, 'AM Dough Use', '2026-09-03')[2]).toBe('999');
+    fullDay(script, '2026-09-04', 8000, 80, 'regular');
+    expect(useRow(script, 'AM Dough Use', '2026-09-03'))
+      .toEqual(['2026-09-03', '3000', '30', '30', '30', '30', 'regular', '']);
+    // One row per recorded night, ascending, nothing else.
+    expect(am.getLastRow()).toBe(1 + 3);
+    expect(am.rowByIndex(2, 1)[0]! < am.rowByIndex(3, 1)[0]!).toBe(true); // both rows exist: asserted above
   });
 
   it('a row posted by an old cached phone is accepted, then superseded by the rebuild', () => {
@@ -721,6 +889,9 @@ describe('the new bible builds itself as whole days accumulate', () => {
         { tab: 'EON Dough Count',
           row: { Date: '2026-09-02', 'EON Sales': 4000, 'EON Indi Count': 100,
             'EON Small Count': 100, 'EON Large Count': 100, 'EON Sic Count': 100 } },
+        { tab: 'PM Dough Use',
+          row: { Date: '2026-09-02', 'PM Sales $': 999, 'PM Indi Use': 999, 'PM Small Use': 999,
+            'PM Large Use': 999, 'PM Sic Use': 999, 'Bible Used': 'regular' } },
         { tab: 'New Bieblerb',
           row: { Date: '2026-09-02', 'Total Sales': 9999, Indi: 999, Small: 999, Large: 999, Sic: 999 } },
       ],
@@ -729,6 +900,10 @@ describe('the new bible builds itself as whole days accumulate', () => {
     const build = script.world.ss.getSheetByName('New Bieblerb')!;
     expect(build.getCell(2, 2)).toBe(4000); // the derived day, not the posted one
     expect(build.getCell(2, 3)).toBe(40); // AM 20 + PM 20
+    // The PM row too: derived figures, and no 2 PM takings on that row means
+    // the evening cannot sit against takings of its own.
+    expect(useRow(script, 'PM Dough Use', '2026-09-02'))
+      .toEqual(['2026-09-02', '', '20', '20', '20', '20', 'regular', 'no takings']);
   });
 
   it('Erase all data really erases the fit history on the next refresh', () => {
@@ -745,6 +920,8 @@ describe('the new bible builds itself as whole days accumulate', () => {
     script.fns.refreshBibleBuilds();
     expect(build.getCell(2, 2)).toBe(''); // history gone with the log
     expect(build.getCell(2, 10)).toBe(''); // and nothing suggested any more
+    expect(script.world.ss.getSheetByName('AM Dough Use')!.getLastRow()).toBe(1); // headings only
+    expect(script.world.ss.getSheetByName('All Day Dough Use')!.getLastRow()).toBe(1);
   });
 });
 

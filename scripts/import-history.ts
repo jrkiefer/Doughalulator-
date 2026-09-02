@@ -7,9 +7,10 @@
  * Recorded reality always wins over recomputation: counts, sales, batches
  * made, and post-make final dough are written verbatim from the history file;
  * the engine only fills the derived tabs (the two look-ups, the make, the
- * final make, the dough after gang, the AM/PM use). Dates whose "final
- * dough" was never truly recorded get NO after-gang row — a made-up number
- * would poison the derived dough-use figures.
+ * final make, the dough after gang). The AM / PM / All Day use tabs are the
+ * Dough Log's own — its script derives them from these rows after every
+ * close. Dates whose "final dough" was never truly recorded get NO after-gang
+ * row — a made-up number would poison the derived dough-use figures.
  *
  * Run with vite-node (ships with vitest):
  *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode dry
@@ -23,8 +24,8 @@
 import { readFileSync } from 'node:fs';
 import { get, loadScript, post } from '../apps-script/test/harness';
 import { defaultConfig } from '../src/config';
-import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation } from '../src/core';
-import type { AmUse, BibleId, DoughDayRecord } from '../src/core/types';
+import { runDoughCalculation, runEonCalculation } from '../src/core';
+import type { BibleId, DoughDayRecord } from '../src/core/types';
 import { bibles } from '../src/data/bibles';
 import { emptyEonForm, type EonForm } from '../src/features/eon/formState';
 import { parseCounts, toNumOrNull } from '../src/features/shared/counts';
@@ -82,34 +83,6 @@ const dates = Object.keys(history).sort();
 
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
 
-/** Yesterday's closing count, in balls — what the morning's use is measured from. */
-function eonHaveOn(date: string) {
-  const counts = history[date]?.eon?.counts;
-  if (!counts) return null;
-  return computeHave(
-    parseCounts({
-      ...emptyEonForm,
-      indiSingles: str(counts.indi),
-      smallSingles: str(counts.small),
-      largeSingles: str(counts.large),
-      sicSingles: str(counts.sic),
-      boliSingles: str(counts.boli),
-    }),
-    cfg,
-  );
-}
-
-/** The morning's use for a date: last night's close against this afternoon's count. */
-function amUseFor(date: string, record: DoughDayRecord): AmUse | null {
-  // Dates in the history file are 'YYYY-MM-DD' — the split's three parts are
-  // asserted rather than re-validated on every call.
-  const [y, m, d] = date.split('-').map(Number);
-  const prev = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
-  const yesterday = eonHaveOn(prev);
-  if (!yesterday) return null;
-  return computeAmUse(yesterday, record.have, record.currentSales);
-}
-
 function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payload: Payload } | null {
   const t = e.twoPm;
   if (!t) return null;
@@ -150,7 +123,7 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
   const record: DoughDayRecord = { ...base, chosenBatchOption: rounding };
   // The app is the calculator: the make, the batches and the final dough are
   // all worked out here and written into place. The sheet holds no formulas.
-  const tabs = dayRecordToTabWrites(record, amUseFor(date, record));
+  const tabs = dayRecordToTabWrites(record);
   return { record, payload: { type: 'day', date, tabs } };
 }
 
@@ -182,11 +155,7 @@ function buildEon(date: string, e: HistoryEntry, dayRecord: DoughDayRecord | nul
   return {
     type: 'eon',
     date,
-    tabs: eonRecordToTabWrites(
-      record,
-      dayRecord?.bibleUsed ?? e.twoPm?.bible,
-      dayRecord ? amUseFor(date, dayRecord) : null,
-    ),
+    tabs: eonRecordToTabWrites(record),
   };
 }
 

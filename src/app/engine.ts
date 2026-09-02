@@ -4,7 +4,7 @@
  * the payloads the two notebooks expect — App.tsx below is only the screen.
  */
 import { defaultConfig, type BibleId } from '../config';
-import { computeAmUse, computeHave, runDoughCalculation, runEonCalculation, selectBibleId } from '../core';
+import { runDoughCalculation, runEonCalculation, selectBibleId } from '../core';
 import type { DoughDayRecord } from '../core/types';
 import { bibles } from '../data/bibles';
 import { emptyEonForm } from '../features/eon/formState';
@@ -12,7 +12,7 @@ import { parseCounts, toNumOrNull } from '../features/shared/counts';
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { postJson } from '../services/client';
-import { addDays, syncBibles, type FetchedDay } from '../services/doughService';
+import { syncBibles, type FetchedDay } from '../services/doughService';
 import {
   clearEntry,
   freshMeta,
@@ -67,19 +67,6 @@ export function buildDayRecord(
   );
 }
 
-/**
- * Dough used before 2 PM: last night's close against this afternoon's count.
- * Yesterday's EON lives in the phone's own store; without it the morning's
- * use is simply unknown (a closed day), which is what blank means here.
- */
-function amUseFor(date: string, record: DoughDayRecord) {
-  const yesterday = loadEntry(addDays(date, -1));
-  const eonForm = yesterday?.eon?.form;
-  if (!eonForm || !formHasContent(eonForm)) return null;
-  const eonHave = computeHave(parseCounts({ ...emptyEonForm, ...eonForm }), cfg);
-  return computeAmUse(eonHave, record.have, record.currentSales);
-}
-
 /** Write a sheet fetch into a date's entry (form-shaped; blanks stay blank). */
 export function applyFetchedToEntry(entry: DateEntry, fetched: FetchedDay, date: string): void {
   const now = Date.now();
@@ -119,7 +106,7 @@ export const engine = createSyncEngine({
       if (!day || (!formHasContent(day.form) && !tapped)) return null;
       const form = { ...emptyTwoPmForm, ...day.form };
       const record = buildDayRecord(date, form, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null);
-      return { type: 'day', date, tabs: dayRecordToTabWrites(record, amUseFor(date, record)) };
+      return { type: 'day', date, tabs: dayRecordToTabWrites(record) };
     }
     if (type === 'eon') {
       const eon = entry.eon;
@@ -145,7 +132,7 @@ export const engine = createSyncEngine({
         bibles,
         cfg,
       );
-      return { type: 'eon', date, tabs: eonRecordToTabWrites(record, dayRecord?.bibleUsed, dayRecord ? amUseFor(date, dayRecord) : null) };
+      return { type: 'eon', date, tabs: eonRecordToTabWrites(record) };
     }
     return entry.temps ? tempsEntryToPayload(date, entry.temps, cfg) : null;
   },
