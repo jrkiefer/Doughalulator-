@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultConfig, type BibleId } from '../config';
 import { selectBibleId, slotForTime, type TempSlot } from '../core';
 import { EonPage } from '../features/eon/EonPage';
@@ -30,6 +30,15 @@ function nowHhMm(): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * The calendar day the KITCHEN is on: before `smallHours.before` (05:00) it is
+ * still last night, because a close finished after midnight belongs to the
+ * evening that just ended.
+ */
+function workingDay(): string {
+  return nowHhMm() < cfg.smallHours.before ? addDays(todayIso(), -1) : todayIso();
+}
+
 function inPeachWindow(date: string): boolean {
   const md = date.slice(5);
   return md >= cfg.peachSeason.start && md <= cfg.peachSeason.end;
@@ -50,6 +59,15 @@ export default function App() {
   const [resetArmed, setResetArmed] = useState(false);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [, setTick] = useState(0);
+  // The date on screen right now, for async work that must not land its
+  // answer on a different date from the one it started on.
+  const activeDate = useRef(date);
+  // What the CLOCK last said, so coming back to the app moves only what the
+  // clock itself put there — never a slot or date chosen by hand. The dates
+  // are a list because in the small hours the clock vouches for two: the
+  // calendar day the app opens on AND last night, the one a close belongs to.
+  const clockSlot = useRef<TempSlot | null>(null);
+  const clockDays = useRef<string[]>([]);
 
   const rehydrate = useCallback((forDate: string) => {
     const entry = engine.getEntry(forDate);
@@ -70,9 +88,15 @@ export default function App() {
     setLoadArmed(false);
   }
 
+  useEffect(() => {
+    activeDate.current = date;
+  }, [date]);
+
   // Boot: sweep pre-rename caches, forget long-finished dates, resend anything
   // dirty, wire the retry triggers.
   useEffect(() => {
+    clockSlot.current = slotForTime(nowHhMm(), cfg);
+    clockDays.current = [todayIso(), workingDay()];
     sweepStaleKeys();
     pruneOldDates(addDays(todayIso(), -KEEP_DAYS));
     engine.start();
@@ -84,11 +108,38 @@ export default function App() {
     const onFocusOut = (event: FocusEvent) => {
       if (event.target instanceof HTMLInputElement) void engine.flush();
     };
+    // Coming back is when the clock may have moved under a phone that kept the
+    // app in memory: reopened at 2 PM still on the Morning slot (2 PM readings
+    // would overwrite the morning's), or the next afternoon still on
+    // yesterday's date. Both are re-asked of the clock — but only what the
+    // clock put there moves (owner's choice, Oct 2026): a slot tapped by hand
+    // in the same period stays, and a date picked on purpose stays.
+    const onReturn = () => {
+      // The small hours touch NOTHING. The working day is still last night, so
+      // the date must not move; and the slot must not either, or 12:30 AM
+      // readings would land in last night's MORNING column (the clock says
+      // "before 11:00"). Not even the remembered values move — a phone woken
+      // at 1 AM must still know, that afternoon, what the clock last put there.
+      if (nowHhMm() < cfg.smallHours.before) return;
+      const slot = slotForTime(nowHhMm(), cfg);
+      if (slot !== clockSlot.current) {
+        clockSlot.current = slot;
+        setTempSlot(slot);
+      }
+      const day = todayIso();
+      const vouched = clockDays.current;
+      clockDays.current = [day];
+      setDate((d) => (d !== day && vouched.includes(d) ? day : d));
+    };
     // Leaving fires and forgets; coming BACK is the likeliest moment of all for
     // the signal to have returned, so it gets a real flush that can confirm.
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') void engine.flush({ keepalive: true });
-      else void engine.flush();
+      if (document.visibilityState === 'hidden') {
+        void engine.flush({ keepalive: true });
+      } else {
+        onReturn();
+        void engine.flush();
+      }
     };
     const onPageHide = () => void engine.flush({ keepalive: true });
     window.addEventListener('online', onOnline);
@@ -109,12 +160,16 @@ export default function App() {
   // owner lands on, not every day they pass through.
   useEffect(() => {
     let alive = true;
-    const seqBefore = engine.editSeq(date);
+    const seqBefore = engine.changeSeq(date);
     const timer = setTimeout(() => {
       void fetchDate(date).then((result) => {
         if (!alive || result.kind !== 'loaded') return;
-        // Keystroke guard: typing during the fetch discards the fetched record.
-        if (engine.editSeq(date) !== seqBefore) return;
+        // Stale guard: typing during the fetch, OR a save confirmed during it,
+        // discards the fetched record. The second matters as much as the
+        // first — the sheet may have answered from BEFORE a save that was
+        // already in flight, and once that save confirmed, the record looked
+        // clean and the older sheet copy replaced the newer numbers.
+        if (engine.changeSeq(date) !== seqBefore) return;
         const applied = engine.applyFetched(date, DOUGH_SHEET_RECORDS, (entry) =>
           applyFetchedToEntry(entry, result.day, date),
         );
@@ -133,7 +188,10 @@ export default function App() {
     [date, form, rounding, bibleOverride, forecastRound],
   );
   const status = engine.status(date);
-  const synced = status.state === 'synced';
+  // Each page's "saved" tags speak for the record that page edits — never the
+  // whole date's, or a busy temp side would make saved dough look unsaved.
+  const daySaved = engine.recordStatus(date, 'day').state === 'synced';
+  const eonSaved = engine.recordStatus(date, 'eon').state === 'synced';
   const activeBible = bibleOverride ?? selectBibleId(date, cfg);
 
   // Just after midnight the calendar has already turned but the SHIFT hasn't:
@@ -212,7 +270,16 @@ export default function App() {
     }
     setLoadArmed(false);
     setLoadMsg('Loading…');
+    const seq = engine.changeSeq(date);
     const result = await fetchDate(date);
+    // The owner moved to another date while this loaded: its answer belongs to
+    // a date no longer on screen, so it must not be painted there.
+    if (activeDate.current !== date) return;
+    // A save confirmed (or a number was typed) while it loaded: the answer may
+    // predate it, and applying it would put older numbers back.
+    if (engine.changeSeq(date) !== seq) {
+      return setLoadMsg('Something changed while loading — tap LOAD FROM SHEET again.');
+    }
     if (result.kind === 'empty') return setLoadMsg('The sheet has no row for this date.');
     if (result.kind === 'unreachable') return setLoadMsg("Can't reach the sheet — check your connection.");
     if (result.kind === 'rejected') return setLoadMsg(`Sheet said no: ${result.reason}`);
@@ -284,7 +351,7 @@ export default function App() {
           onRounding={editRounding}
           onForecastRound={editForecastRound}
           onPickDate={setDate}
-          synced={synced}
+          synced={daySaved}
         />
       )}
       {mode === 'eon' && (
@@ -296,7 +363,7 @@ export default function App() {
           onFormChange={editEon}
           onForecastRound={editForecastRound}
           onPickDate={setDate}
-          synced={synced}
+          synced={eonSaved}
         />
       )}
       {mode === 'temps' && (

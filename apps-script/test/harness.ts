@@ -138,7 +138,8 @@ export class FakeSheet {
   /** Columns formatted as dates — writes of date-like text become Date objects. */
   dateColumns = new Set<number>();
   hidden = false;
-  private maxRows = 1000; // a fresh Google sheet's row ceiling
+  private maxRows = 1000; // a fresh Google sheet's row ceiling…
+  private maxCols = 26; // …and its column ceiling (A–Z)
 
   constructor(
     public name: string,
@@ -175,7 +176,17 @@ export class FakeSheet {
       const column = a.trim().charCodeAt(0) - 64; // 'A2:A' → 1
       return new ColumnRange(this, column);
     }
-    return new FakeRange(this, a, b!, c ?? 1, d ?? 1);
+    const [row, col, numRows, numCols] = [a, b!, c ?? 1, d ?? 1];
+    // Google THROWS for a range that is empty or runs past the sheet's edge —
+    // rows AND columns. Modelled, not assumed: the fake once let a write land
+    // in column AD of a 26-column tab, and the tests could never see it.
+    if (row < 1 || col < 1 || numRows < 1 || numCols < 1) {
+      throw new Error('The coordinates or dimensions of the range are invalid.');
+    }
+    if (row + numRows - 1 > this.maxRows || col + numCols - 1 > this.maxCols) {
+      throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
+    }
+    return new FakeRange(this, row, col, numRows, numCols);
   }
 
   /** The last row holding anything — content, not history, exactly like Sheets. */
@@ -191,6 +202,15 @@ export class FakeSheet {
   /** Grow the sheet, as Apps Script does when a write needs more room. */
   insertRowsAfter(after: number, count: number) {
     if (after >= this.maxRows) this.maxRows += count;
+    return this;
+  }
+
+  getMaxColumns() {
+    return this.maxCols;
+  }
+
+  insertColumnsAfter(after: number, count: number) {
+    if (after >= this.maxCols) this.maxCols += count;
     return this;
   }
 

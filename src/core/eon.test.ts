@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from '../config';
 import { runDoughCalculation } from './dough';
-import { computeAmUse, runEonCalculation } from './eon';
+import { runEonCalculation } from './eon';
 import { bibles, counts } from './testHelpers';
-import type { EonInputs, PerSizeMaybe } from './types';
+import type { EonInputs } from './types';
 
 function runEon(partial: Partial<EonInputs>, dayRecord: Parameters<typeof runEonCalculation>[1] = null) {
   return runEonCalculation(
@@ -48,16 +48,13 @@ const eonCounts = counts({
 describe('runEonCalculation with a day record', () => {
   const record = runEon({ counts: eonCounts, finalSalesRaw: 12.4 }, makeDayRecord());
 
-  it('pmSales comes from shorthand final sales minus 2 PM current sales', () => {
+  it('final sales are expanded from shorthand', () => {
     expect(record.finalSales).toBe(12400);
-    expect(record.pmSales).toBe(12400 - 4500);
   });
 
-  it('the tomorrow check now covers all five sizes — Boli against its 36-ball target', () => {
-    expect(record.eonLeft).toEqual({ indi: 8, small: 31, large: 37, sic: -1 });
+  it('the tomorrow check covers all five sizes — Boli against its 36-ball target', () => {
     expect(record.boliNeed).toBe(36);
-    expect(record.boliLeft).toBe(0); // exactly six trays on hand
-    expect(record.outlook!.rows.boli.trays).toBe(0);
+    expect(record.outlook!.rows.boli).toMatchObject({ have: 36, need: 36, diff: 0, trays: 0 });
   });
 
   it('the outlook gives each size the gap in balls and in nearest trays', () => {
@@ -75,14 +72,12 @@ describe('runEonCalculation with a day record', () => {
       makeDayRecord(),
     );
     // 27 balls − 36 target = −9 → nearest tray is −2 (9/6 = 1.5 → 2).
-    expect(short.boliLeft).toBe(-9);
     expect(short.outlook!.rows.boli).toMatchObject({ diff: -9, trays: -2 });
   });
 
-  it('blank final sales → pmSales stays null', () => {
+  it('blank final sales stay null, never a fabricated zero', () => {
     const blank = runEon({ counts: eonCounts }, makeDayRecord());
     expect(blank.finalSales).toBeNull();
-    expect(blank.pmSales).toBeNull();
   });
 
   it('an uncounted size shows null in the check, not a fake shortage', () => {
@@ -90,10 +85,9 @@ describe('runEonCalculation with a day record', () => {
       { counts: counts({ smallTrays: 19, smallSingles: 4 }), finalSalesRaw: 12.4 },
       makeDayRecord(),
     );
-    expect(partial.eonLeft!.small).toBe(31);
-    expect(partial.eonLeft!.indi).toBeNull();
+    expect(partial.outlook!.rows.small.diff).toBe(31);
     expect(partial.outlook!.rows.indi).toMatchObject({ have: null, diff: null, trays: null });
-    expect(partial.boliLeft).toBeNull();
+    expect(partial.outlook!.rows.boli.diff).toBeNull();
   });
 });
 
@@ -101,8 +95,8 @@ describe('runEonCalculation without a day record', () => {
   it('no manual forecast → the check is simply unavailable', () => {
     const record = runEon({ counts: eonCounts, finalSalesRaw: 12.4 });
     expect(record.eonHave).toEqual({ indi: 34, small: 156, large: 154, sic: 2, boli: 36 });
-    expect(record.pmSales).toBeNull();
     expect(record.need).toBeNull();
+    expect(record.outlook).toBeNull();
     expect(record.flags.tomorrowCheckAvailable).toBe(false);
   });
 
@@ -122,14 +116,13 @@ describe('runEonCalculation without a day record', () => {
     expect(record.bibleUsed).toBe('peach');
     expect(record.need).toEqual({ indi: 30, small: 188, large: 137, sic: 4 });
     // have 24 / 160 / 120 / 2 against that need
-    expect(record.eonLeft).toEqual({ indi: -6, small: -28, large: -17, sic: -2 });
     const r = record.outlook!.rows;
+    expect([r.indi.diff, r.small.diff, r.large.diff]).toEqual([-6, -28, -17]);
     expect(r.indi.trays).toBe(-1); // 6/11 = 0.55 → 1
     expect(r.small.trays).toBe(-4); // 28/8 = 3.5 → 4
     expect(r.large.trays).toBe(-3); // 17/6 = 2.83 → 3
     expect(r.sic).toMatchObject({ diff: 0, trays: 0 }); // clamped, never −2
-    expect(record.boliLeft).toBe(30 - 36);
-    expect(r.boli.trays).toBe(-1); // 6/6 = 1
+    expect(r.boli).toMatchObject({ diff: 30 - 36, trays: -1 }); // 6/6 = 1
   });
 
   it('a manual forecast of 0 means closed tomorrow: zero need everywhere including Boli', () => {
@@ -141,7 +134,8 @@ describe('runEonCalculation without a day record', () => {
     expect(record.flags.closedTomorrow).toBe(true);
     expect(record.need).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
     expect(record.boliNeed).toBe(0);
-    expect(record.eonLeft).toEqual({ indi: 34, small: 156, large: 154, sic: 2 });
+    const r = record.outlook!.rows;
+    expect([r.indi.diff, r.small.diff, r.large.diff, r.sic.diff]).toEqual([34, 156, 154, 2]);
     expect(record.outlook!.shortfallBalls).toBe(0);
   });
 
@@ -242,99 +236,3 @@ describe('the outlook forecast box overrides the 2 PM figure', () => {
     expect(record.need).toEqual({ indi: 0, small: 0, large: 0, sic: 0 });
   });
 });
-
-describe('dough used before 2 PM (computeAmUse)', () => {
-  const have = (over: Partial<PerSizeMaybe> = {}): PerSizeMaybe => ({
-    indi: 40, small: 200, large: 150, sic: 6, boli: 30, ...over,
-  });
-
-  it('is last night’s close less this afternoon’s count, per size', () => {
-    const am = computeAmUse(have(), have({ indi: 25, small: 160, large: 120, sic: 4, boli: 24 }), 3000);
-    expect(am.sales).toBe(3000);
-    expect(am.use).toEqual({ indi: 15, small: 40, large: 30, sic: 2, boli: 6 });
-  });
-
-  it('a day whose yesterday never closed out has no morning use at all', () => {
-    const am = computeAmUse(null, have(), 3000);
-    expect(am.use).toEqual({ indi: null, small: null, large: null, sic: null, boli: null });
-    expect(am.sales).toBe(3000); // the sales figure is still known
-  });
-
-  it('a count that went UP overnight is a miscount, not negative use', () => {
-    const am = computeAmUse(have({ small: 100 }), have({ small: 160 }), 3000);
-    expect(am.use.small).toBeNull();
-    expect(am.use.indi).toBe(0); // the sizes that did not move still read zero
-  });
-
-  it('a size either side never counted stays blank', () => {
-    const am = computeAmUse(have({ sic: null }), have({ boli: null }), 3000);
-    expect(am.use.sic).toBeNull();
-    expect(am.use.boli).toBeNull();
-    expect(am.use.indi).toBe(0);
-  });
-});
-
-describe('dough used after 2 PM (pmUse on the EON record)', () => {
-  it('is the night’s final dough less the closing count', () => {
-    const day = { ...dayRecordFor(), chosenBatchOption: 'up' as const };
-    const final = day.batchUp!.finalDough;
-    const record = runEonCalculation(
-      {
-        date: '2026-01-15',
-        counts: counts({
-          indiSingles: (final.indiTotal ?? 0) - 10,
-          smallSingles: (final.smallTotal ?? 0) - 30,
-          largeSingles: (final.largeTotal ?? 0) - 20,
-          sicSingles: (final.sicTotal ?? 0) - 1,
-          boliSingles: (final.boliTotal ?? 0) - 6,
-        }),
-        finalSalesRaw: 9000,
-      },
-      day,
-      bibles,
-      defaultConfig,
-    );
-    expect(record.pmUse).toEqual({ indi: 10, small: 30, large: 20, sic: 1, boli: 6 });
-  });
-
-  it('without a tapped batch choice there is no final dough to measure against', () => {
-    const record = runEonCalculation(
-      { date: '2026-01-15', counts: counts({ indiSingles: 10 }), finalSalesRaw: 9000 },
-      { ...dayRecordFor(), chosenBatchOption: null },
-      bibles,
-      defaultConfig,
-    );
-    expect(record.pmUse).toBeNull();
-  });
-
-  it('a closing count above the final dough is a miscount, left blank', () => {
-    const day = { ...dayRecordFor(), chosenBatchOption: 'up' as const };
-    const record = runEonCalculation(
-      {
-        date: '2026-01-15',
-        counts: counts({ indiSingles: (day.batchUp!.finalDough.indiTotal ?? 0) + 5 }),
-        finalSalesRaw: 9000,
-      },
-      day,
-      bibles,
-      defaultConfig,
-    );
-    expect(record.pmUse!.indi).toBeNull();
-  });
-});
-
-function dayRecordFor() {
-  return runDoughCalculation(
-    {
-      date: '2026-01-15',
-      counts: counts({
-        indiSingles: 15, smallSingles: 43, largeSingles: 26, sicSingles: 1, boliSingles: 13,
-      }),
-      todayForecastRaw: 7200,
-      currentSalesRaw: 4500,
-      tomorrowForecastRaw: 9100,
-    },
-    bibles,
-    defaultConfig,
-  );
-}

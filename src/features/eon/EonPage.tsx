@@ -4,9 +4,10 @@
  * the Dough Bible. App.tsx only decides WHICH tab is showing.
  *
  * The EON record is computed right here on every render — pure and cheap —
- * from the form plus the day record App passes down. The engine's own copy
- * (built in engine.ts for the sheet payload) runs the same function on the
- * same inputs, so screen and sheet can never disagree.
+ * from the form plus the day record App passes down. The sheet payload
+ * (engine.ts) carries only the closing count and final sales, which come
+ * straight from the form, so screen and sheet can never disagree on them.
+ * The outlook is screen-only.
  */
 import { defaultConfig, type BibleId } from "../../config";
 import { runEonCalculation } from "../../core";
@@ -67,15 +68,16 @@ export function EonPage(props: {
     cfg,
   );
 
-  // The box shows the afternoon's forecast until something is typed here; from
-  // then on the typed figure is what counts, and clearing it hands back.
+  // Until something is typed here the afternoon's forecast drives the numbers,
+  // and the box shows it as its PLACEHOLDER — not its value. As the value it
+  // snapped back the moment the box was backspaced to empty, so it could never
+  // be cleared and retyped. Empty still hands back to the 2 PM figure.
   const manualTyped = form.manualTomorrowForecast.trim() !== "";
   const twoPmRaw =
     dayRecord?.tomorrowForecastRaw === null ||
     dayRecord?.tomorrowForecastRaw === undefined
       ? ""
       : String(dayRecord.tomorrowForecastRaw);
-  const forecastShown = manualTyped ? form.manualTomorrowForecast : twoPmRaw;
   // The label reports what actually drove the numbers below, not merely what is
   // in the box: half-typed text like "." is not yet a forecast, and the card
   // must never claim "Manual entry" over figures still coming from the 2 PM save.
@@ -156,7 +158,8 @@ export function EonPage(props: {
                 type="text"
                 inputMode="decimal"
                 aria-label="TOMORROW'S FORECAST"
-                value={forecastShown}
+                value={form.manualTomorrowForecast}
+                placeholder={twoPmRaw}
                 onChange={numericChangeHandler({ decimal: true }, (v) =>
                   props.onFormChange({ manualTomorrowForecast: v }),
                 )}

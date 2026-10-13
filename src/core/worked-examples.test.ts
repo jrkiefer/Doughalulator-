@@ -171,15 +171,13 @@ describe('worked example — the EON session', () => {
     expect(record.eonHave).toEqual({ indi: 34, small: 156, large: 154, sic: 2, boli: 36 });
   });
 
-  it('pmSales = final sales − 2 PM current sales: 7,900 − 4,500 = 3,400', () => {
-    expect(record.pmSales).toBe(3400);
+  it('final sales 7.9 → $7,900', () => {
+    expect(record.finalSales).toBe(7900);
   });
 
   it("checks all five sizes against tomorrow — Boli against its 36-ball target", () => {
     // Indi 34−26 = 8 · Small 156−125 = 31 · Large 154−117 = 37 · Sic 2−3 = −1 · Boli 36−36 = 0
     expect(record.needSource).toBe('dayRecord');
-    expect(record.eonLeft).toEqual({ indi: 8, small: 31, large: 37, sic: -1 });
-    expect(record.boliLeft).toBe(0);
     // The outlook the card draws: nearest tray, Sicilian clamped at 0.
     const r = record.outlook!.rows;
     expect(r.indi).toMatchObject({ diff: 8, trays: 1 }); // 8/11 = 0.73 → 1

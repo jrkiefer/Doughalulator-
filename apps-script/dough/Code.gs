@@ -2,8 +2,8 @@
  * Hot Tomato Dough Log — Google Apps Script.
  *
  * Setup: paste into the sheet's Apps Script editor, run setup() once, deploy
- * as a web app (execute as Me, access: Anyone), then give the app that URL in
- * Settings. There is no password to set.
+ * as a web app (execute as Me, access: Anyone), then put that /exec address in
+ * the app's src/services/sheets.ts. There is no password to set.
  *
  * THERE IS NO KEY. Anyone holding the /exec address can read this notebook or
  * write to it, which is the owner's deliberate choice for simplicity. Because
@@ -115,9 +115,15 @@ var BIBLE_BUILD_USE = { indi: 3, small: 4, large: 5, sic: 6 };
 var BIBLE_BUILD_STATS_COL = 24; // X
 var BIBLE_BUILD_STATS_HEADERS = ['Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored'];
 
-/** Columns that may legitimately hold negatives - everything else must be >= 0. */
+/**
+ * Columns that may legitimately hold negatives - everything else must be >= 0.
+ * Sales Left goes negative on a lunch rush (sales already past the forecast),
+ * and the app writes it to BOTH tabs that carry it. Allowing it on only one
+ * once refused the whole 2 PM save on exactly those days.
+ */
 var NEGATIVE_OK = {};
 NEGATIVE_OK[T_IN] = { 'Sales Left': true };
+NEGATIVE_OK[T_PM] = { 'Sales Left': true };
 
 /** Tabs the previous layout used, retired by this one. */
 var RETIRED_TABS = ['Summary', 'Dough Count', 'Sales', 'Use Tonight', 'Left', 'Need Tomorrow',
@@ -256,7 +262,7 @@ function checkLog() {
     ui.ButtonSet.OK);
 }
 
-/** Erase every data row, after asking twice. Menu-only — never over the web. */
+/** Erase every data row, after asking first. Menu-only — never over the web. */
 function eraseAllData() {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.alert(
@@ -575,6 +581,16 @@ function ensureRows(sheet, lastRow) {
 }
 
 /**
+ * The same for columns: a new tab stops at Z (26), and a range past it throws
+ * just as one past the last row does. The bible-building stats block runs to
+ * AD, so without this every close answered "retry" after it had already saved.
+ */
+function ensureCols(sheet, lastCol) {
+  var max = sheet.getMaxColumns();
+  if (lastCol > max) sheet.insertColumnsAfter(max, lastCol - max);
+}
+
+/**
  * Mirror the app's two bible tables into their read-only tabs, in the owner's
  * format: headings on row 1, thresholds from row 2. Skipped when the content
  * hash is unchanged, so a save almost never pays for this.
@@ -692,8 +708,8 @@ function rebuildBibleHistories() {
  *
  * Yesterday exactly (owner's rule, Aug 2026 - "just to be extra safe"): a
  * morning whose previous close is older than one day abstains rather than
- * guesses. No lookback across closed days. That is also the app's own
- * on-screen AM rule (computeAmUse).
+ * guesses. No lookback across closed days. This is the ONE definition of the
+ * day's use - the app keeps no copy of it (removed in 1.31.0).
  *
  * Each of the three kinds is its own data point for the fit - a morning is a
  * complete observation of dough against takings even when the night was never
@@ -909,6 +925,7 @@ function refreshBibleBuild(key, sizePoints) {
     stats.push([SIZE_LABEL[size], points.length, nightCount, p.am, p.pm, p.day, p.dropped]);
   });
 
+  ensureCols(sheet, BIBLE_BUILD_STATS_COL + BIBLE_BUILD_STATS_HEADERS.length - 1);
   sheet.getRange(1, BIBLE_BUILD_STATS_COL, 1, BIBLE_BUILD_STATS_HEADERS.length)
     .setValues([BIBLE_BUILD_STATS_HEADERS]).setFontWeight('bold');
   ensureRows(sheet, stats.length + 1);

@@ -16,6 +16,6 @@ export {
 export { computeHave, computeCountedSizes } from './counting';
 export { traysForNeeds, batchesForNeeds, perTraySizes } from './bibleCompare';
 export { runDoughCalculation, buildBatchOption, splitTrayDelta } from './dough';
-export { runEonCalculation, computeAmUse } from './eon';
+export { runEonCalculation } from './eon';
 export { slotForTime, type TempSlot } from './tempSlots';
 export type * from './types';

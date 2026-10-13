@@ -3,7 +3,6 @@ import { getBible, lookupBibleRow, rowToNeeds, selectBibleId } from './bible';
 import { computeCountedSizes, computeHave } from './counting';
 import { normalizeSales } from './sales';
 import type {
-  AmUse,
   Bibles,
   EonOutlook,
   DoughDayRecord,
@@ -11,7 +10,6 @@ import type {
   EonRecord,
   Maybe,
   PerBibleSizeMaybe,
-  PerSizeMaybe,
   SizeKey,
 } from './types';
 
@@ -34,29 +32,9 @@ export function runEonCalculation(
   const countedSizes = computeCountedSizes(eonInputs.counts);
   const eonHave = computeHave(eonInputs.counts, config);
   const finalSales = norm(eonInputs.finalSalesRaw);
-
-  const pmSales =
-    finalSales !== null && dayRecord !== null && dayRecord.currentSales !== null
-      ? finalSales - dayRecord.currentSales
-      : null;
-
-  // What the night got through: the dough standing after the make, less what
-  // was counted at close. Only knowable once a batch choice has been tapped.
-  const chosen =
-    dayRecord === null || dayRecord.chosenBatchOption === null
-      ? null
-      : dayRecord.chosenBatchOption === 'down'
-        ? dayRecord.batchDown
-        : dayRecord.batchUp;
-  const pmUse: PerSizeMaybe | null = chosen
-    ? {
-        indi: usedSince(chosen.finalDough.indiTotal, eonHave.indi),
-        small: usedSince(chosen.finalDough.smallTotal, eonHave.small),
-        large: usedSince(chosen.finalDough.largeTotal, eonHave.large),
-        sic: usedSince(chosen.finalDough.sicTotal, eonHave.sic),
-        boli: usedSince(chosen.finalDough.boliTotal, eonHave.boli),
-      }
-    : null;
+  // The night's dough use (AM, PM, All Day) is NOT worked out here: the Dough
+  // Log derives it from the recorded counts after every close (deriveUse in
+  // apps-script/dough/Code.gs), which is the one definition of it.
 
   // Where tomorrow's need comes from. A figure typed here WINS over the 2 PM
   // one: the box on the EON page shows the afternoon's forecast, and the whole
@@ -102,19 +80,10 @@ export function runEonCalculation(
   const checkAvailable = need !== null;
   const boliNeed: Maybe = checkAvailable ? (closedTomorrow ? 0 : config.boliTargetTrays * bpt.boli) : null;
 
-  let eonLeft: PerBibleSizeMaybe | null = null;
-  let boliLeft: Maybe = null;
   let outlook: EonOutlook | null = null;
   if (need) {
     const leftFor = (haveVal: Maybe, needVal: Maybe): Maybe =>
       haveVal === null || needVal === null ? null : haveVal - needVal;
-    eonLeft = {
-      indi: leftFor(eonHave.indi, need.indi),
-      small: leftFor(eonHave.small, need.small),
-      large: leftFor(eonHave.large, need.large),
-      sic: leftFor(eonHave.sic, need.sic),
-    };
-    boliLeft = leftFor(eonHave.boli, boliNeed);
 
     // What the outlook card draws: the gap per size, in balls and in trays.
     const rows = {} as EonOutlook['rows'];
@@ -158,8 +127,6 @@ export function runEonCalculation(
     eonHave,
     finalSalesRaw: eonInputs.finalSalesRaw,
     finalSales,
-    pmSales,
-    pmUse,
     needSource,
     manualTomorrowForecastRaw: manualRaw,
     manualTomorrowForecast,
@@ -168,44 +135,10 @@ export function runEonCalculation(
     tomorrowRowMatched,
     need,
     boliNeed,
-    eonLeft,
-    boliLeft,
     outlook,
     flags: {
       tomorrowCheckAvailable: checkAvailable,
       closedTomorrow,
     },
   };
-}
-
-/**
- * Dough that went out before 2 PM: what last night closed with, less what
- * this afternoon counted. Blank for any size either side did not record, and
- * blank altogether on a day whose yesterday has no EON record (a closed day)
- * — a count that rose overnight means a miscount, not negative use.
- */
-export function computeAmUse(
-  yesterdayEonHave: PerSizeMaybe | null,
-  todayHave: PerSizeMaybe,
-  amSales: Maybe,
-): AmUse {
-  const blank: PerSizeMaybe = { indi: null, small: null, large: null, sic: null, boli: null };
-  if (!yesterdayEonHave) return { sales: amSales, use: blank };
-  return {
-    sales: amSales,
-    use: {
-      indi: usedSince(yesterdayEonHave.indi, todayHave.indi),
-      small: usedSince(yesterdayEonHave.small, todayHave.small),
-      large: usedSince(yesterdayEonHave.large, todayHave.large),
-      sic: usedSince(yesterdayEonHave.sic, todayHave.sic),
-      boli: usedSince(yesterdayEonHave.boli, todayHave.boli),
-    },
-  };
-}
-
-/** Dough consumed between two counts. Null when unknown or when it went UP. */
-function usedSince(before: Maybe, after: Maybe): Maybe {
-  if (before === null || after === null) return null;
-  const used = before - after;
-  return used < 0 ? null : used;
 }

@@ -3,8 +3,12 @@
  * SpreadsheetApp/LockService world from harness.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { bibles } from '../../src/core/testHelpers';
-import { biblesToPayload } from '../../src/services/mapping';
+import { defaultConfig } from '../../src/config';
+import { runDoughCalculation } from '../../src/core';
+import { bibles, counts } from '../../src/core/testHelpers';
+import type { TempsEntry } from '../../src/services/local';
+import { biblesToPayload, dayRecordToTabWrites } from '../../src/services/mapping';
+import { tempsEntryToPayload } from '../../src/services/tempsService';
 import { get, loadScript, post, type LoadedScript } from './harness';
 
 
@@ -1390,5 +1394,110 @@ describe('dough script — Check the log', () => {
     const before = get(script, { action: 'date', date: '2026-08-01' });
     runCheck(script);
     expect(get(script, { action: 'date', date: '2026-08-01' })).toEqual(before);
+  });
+});
+
+describe('a lunch rush: current sales already past the forecast at 2 PM', () => {
+  // The engine keeps a negative sales-left (it is the "check your numbers"
+  // flag) and the app writes it to BOTH tabs that carry the column. The
+  // script once allowed the negative on only one of them, so the whole 2 PM
+  // save was refused - counts, make and after-gang with it.
+  it("the app's real 2 PM payload is accepted on every tab, negative included", () => {
+    const script = freshDough();
+    const record = runDoughCalculation(
+      {
+        date: '2026-10-13',
+        counts: counts({ smallTrays: 10, largeTrays: 10, sicSingles: 4, boliTrays: 5 }),
+        todayForecastRaw: 9,
+        currentSalesRaw: 9.5,
+        tomorrowForecastRaw: 12,
+      },
+      bibles,
+      defaultConfig,
+    );
+    expect(record.salesLeft).toBe(-500);
+    const answer = post(script, { type: 'day', date: '2026-10-13', tabs: dayRecordToTabWrites(record) });
+    expect(answer.ok).toBe(true);
+    const pm = get(script, { action: 'date', date: '2026-10-13' }).tabs as Record<string, Record<string, string>>;
+    expect(pm['Look up Dough Use for PM']!['Sales Left']).toBe('-500');
+    expect(pm['2PM Dough Count']!['Sales Left']).toBe('-500');
+  });
+});
+
+describe('the temp Log records each reading once', () => {
+  // Every save carries the WHOLE day (all three slots), so appending every
+  // reading it carries filed the morning again at 2 PM, and again at night,
+  // each copy stamped with a clock time nobody read it at.
+  function typeDay(script: LoadedScript, slots: ('morning' | 'midday')[]) {
+    const entry: TempsEntry = {
+      readings: { morning: {}, midday: {}, night: {} },
+      times: {},
+      updatedAt: 1,
+      syncedAt: 0,
+      ackHash: null,
+      rejectedReason: null,
+    };
+    for (const slot of slots) {
+      defaultConfig.stations.forEach((station, i) => {
+        entry.readings[slot][station] = String((slot === 'morning' ? 34 : 36) + (i % 4));
+        entry.times![slot] = `${slot === 'morning' ? '09' : '14'}:0${i}`;
+        const payload = tempsEntryToPayload('2026-10-13', entry, defaultConfig);
+        expect(post(script, payload!).ok).toBe(true); // one save per station typed
+      });
+    }
+    return entry;
+  }
+
+  it('typing a morning and an afternoon, saving after every station, logs 16 rows - not 136', () => {
+    const script = freshTemps();
+    typeDay(script, ['morning', 'midday']);
+    const log = script.world.ss.getSheetByName('Log')!;
+    expect(log.getLastRow() - 1).toBe(16);
+    // Each reading is logged once, at the time it was typed.
+    expect(log.rowByIndex(2, 5)).toEqual(['2026-10-13', '09:00', 'Morning', 'Pizza 1', '34']);
+    expect(log.rowByIndex(10, 5)).toEqual(['2026-10-13', '14:00', '2 PM', 'Pizza 1', '36']);
+  });
+
+  it('the same day sent again logs nothing new and still answers ok', () => {
+    const script = freshTemps();
+    const entry = typeDay(script, ['morning']);
+    const again = post(script, tempsEntryToPayload('2026-10-13', entry, defaultConfig)!);
+    expect(again).toMatchObject({ ok: true, saved: 8, logged: 0 });
+    expect(script.world.ss.getSheetByName('Log')!.getLastRow() - 1).toBe(8);
+  });
+
+  it("the graph's last three per station are three different moments", () => {
+    const script = freshTemps();
+    typeDay(script, ['morning', 'midday']);
+    const slice = (get(script, { action: 'recent' }).stations as Record<string, { slot: string }[]>).Slice!;
+    expect(slice.map((r) => r.slot)).toEqual(['Morning', '2 PM']);
+  });
+});
+
+describe('the sheet edge, columns as well as rows', () => {
+  // A tab made by setup() stops at column Z. The stats block from 1.30.0 runs
+  // X..AD, and a range past the edge THROWS in Google - which an EON save
+  // answers as "retry", for ever.
+  it('a fresh notebook takes a close and writes the stats block past Z', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    const build = script.world.ss.getSheetByName('New Bieblerb')!;
+    expect(build.getMaxColumns()).toBe(26);
+    const answer = post(script, {
+      type: 'eon',
+      date: '2026-09-01',
+      tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-09-01', 'EON Sales': 9000, 'EON Indi Count': 10 } }],
+    });
+    expect(answer.ok).toBe(true);
+    expect(build.getMaxColumns()).toBeGreaterThanOrEqual(30);
+    expect(build.rowByIndex(1, 30).slice(23)).toEqual(['Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored']);
+  });
+
+  it('the fake sheet refuses a range past its edge, exactly as Google does', () => {
+    const script = freshDough();
+    const sheet = script.world.ss.getSheetByName('2PM Dough Count')!;
+    expect(() => sheet.getRange(1, 27, 1, 1)).toThrow(/outside the dimensions/);
+    expect(() => sheet.getRange(1001, 1, 1, 1)).toThrow(/outside the dimensions/);
+    expect(() => sheet.getRange(2, 1, 0, 1)).toThrow();
   });
 });

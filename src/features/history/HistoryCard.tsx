@@ -10,7 +10,7 @@ const RECENT_NIGHTS = 3;
 
 function line(row: HistorySummary): string {
   const sales = row.finalSales !== '' ? `$${fmt(Number(row.finalSales))}` : '—';
-  const batches = row.batchesMade !== '' ? `${row.batchesMade} batches` : 'no batch tapped';
+  const batches = row.batchesMade !== '' ? `${row.batchesMade} batches` : 'no batch count';
   return `${sales} · ${batches}`;
 }
 

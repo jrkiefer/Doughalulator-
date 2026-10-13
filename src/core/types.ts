@@ -239,14 +239,6 @@ export interface EonRecord {
   eonHave: PerSizeMaybe;
   finalSalesRaw: Maybe;
   finalSales: Maybe;
-  /** finalSales − 2 PM current sales; null without both. */
-  pmSales: Maybe;
-  /**
-   * Dough used after 2 PM: the night's final dough − the EON count, per size.
-   * Needs a day record with a tapped batch choice; a negative means a
-   * miscount rather than a real figure, so it is left null.
-   */
-  pmUse: PerSizeMaybe | null;
   // Tomorrow check — all five sizes; Boli checks against its 36-ball target.
   needSource: 'dayRecord' | 'manualForecast' | null;
   manualTomorrowForecastRaw: Maybe;
@@ -258,8 +250,6 @@ export interface EonRecord {
   need: PerBibleSizeMaybe | null;
   /** Boli's need in balls: 0 when closed tomorrow, else the 36-ball target. */
   boliNeed: Maybe;
-  eonLeft: PerBibleSizeMaybe | null;
-  boliLeft: Maybe;
   /** Everything the outlook card draws; null until tomorrow's need is known. */
   outlook: EonOutlook | null;
   flags: {
@@ -293,10 +283,4 @@ export interface EonOutlook {
   shortTrays: number;
   /** False when not one size was counted, so the summary stays quiet. */
   anyCounted: boolean;
-}
-
-/** Dough used before 2 PM: yesterday's close − this afternoon's count. */
-export interface AmUse {
-  sales: Maybe;
-  use: PerSizeMaybe;
 }

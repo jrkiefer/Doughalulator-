@@ -112,23 +112,12 @@ export const engine = createSyncEngine({
       const eon = entry.eon;
       if (!eon || !formHasContent(eon.form)) return null;
       const eonForm = { ...emptyEonForm, ...eon.form };
-      // The EON maths leans on the afternoon's record when one exists. "Exists"
-      // uses the same bar as the day payload above: typed content or either
-      // rounding tap.
-      const day = entry.day;
-      const dayRecord =
-        day && (formHasContent(day.form) || day.rounding !== null || (day.forecastRound ?? null) !== null)
-          ? buildDayRecord(date, { ...emptyTwoPmForm, ...day.form }, day.rounding, day.bibleOverride ?? undefined, day.forecastRound ?? null)
-          : null;
+      // The EON save carries the closing count and the final sales — nothing
+      // from the afternoon (the Dough Log works out the night's use itself),
+      // so no day record is needed to build it.
       const record = runEonCalculation(
-        {
-          date,
-          counts: parseCounts(eonForm),
-          finalSalesRaw: toNumOrNull(eonForm.finalSales),
-          manualTomorrowForecastRaw: toNumOrNull(eonForm.manualTomorrowForecast),
-          bibleOverride: day?.bibleOverride ?? undefined,
-        },
-        dayRecord,
+        { date, counts: parseCounts(eonForm), finalSalesRaw: toNumOrNull(eonForm.finalSales) },
+        null,
         bibles,
         cfg,
       );

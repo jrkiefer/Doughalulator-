@@ -3,15 +3,19 @@
  *
  * Setup: same dance as the dough script — paste into the sheet's Apps Script
  * editor, run setup() once, deploy as a web app (execute as Me, access:
- * Anyone), then give the app that URL in Settings. There is no password.
+ * Anyone), then put that /exec address in the app's src/services/sheets.ts.
+ * There is no password.
  *
  * THERE IS NO KEY, by the owner's choice. So nothing destructive is reachable
  * over the web: erasing the log is a menu item inside the spreadsheet.
  *
  * Three kinds of tabs:
  *   Overview — one fixed row per station: the latest reading at a glance.
- *   Log      — append-only audit trail: every submission, with clock time,
- *              including corrections. Never edited, never merged.
+ *   Log      — append-only audit trail: every reading as it was taken, with
+ *              clock time, and every correction. A reading the station tab
+ *              already holds is NOT logged again — each save carries the
+ *              whole day, so logging all of it repeated the morning at 2 PM
+ *              and again at night. Never edited, never merged.
  *   One tab per station — Date | Morning | 2 PM | Night, merge-upsert by
  *              date; re-entering a slot overwrites the cell while Log
  *              keeps the original.
@@ -74,7 +78,7 @@ function onOpen() {
     .addToUi();
 }
 
-/** Erase every reading, after asking twice. Menu-only — never over the web. */
+/** Erase every reading, after asking first. Menu-only — never over the web. */
 function eraseAllData() {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.alert(
@@ -199,21 +203,8 @@ function doPost(e) {
     // Cell-by-cell writes were the slowest part of every save — each section
     // below batches its whole update into ranged writes instead.
 
-    // 1. Append-only audit trail: every reading, one ranged write, appended
-    // after the last DATED row so a stray note cannot open a gap.
-    var logRows = [];
-    body.items.forEach(function (item) {
-      item.readings.forEach(function (r) {
-        logRows.push([date, item.time, item.slot, r.station, r.temp]);
-        saved++;
-      });
-    });
-    var logStart = lastDatedRow(log) + 1;
-    ensureRows(log, logStart + logRows.length - 1);
-    log.getRange(logStart, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
-
-    // 2. Merge-upsert each station tab by date: overlay this save's slots on
-    // the current row and write the row back in one stroke per station.
+    // 1. Each station tab's row for this date, read ONCE: where it goes, and
+    // what it already holds. Nothing is written yet.
     var slotsByStation = {};
     body.items.forEach(function (item) {
       item.readings.forEach(function (r) {
@@ -221,30 +212,61 @@ function doPost(e) {
         slotsByStation[r.station][item.slot] = r.temp;
       });
     });
+    var stationRows = {};
     Object.keys(slotsByStation).forEach(function (station) {
       var sheet = ss.getSheetByName(station);
-      if (!sheet) return; // unknown station: still in the Log above
+      if (!sheet) return; // unknown station: Log only
       var rowIndex = findDateRow(sheet, date);
-      var values;
-      if (rowIndex === -1) {
-        // Append after the last DATED row, not getLastRow(): a stray note
-        // far down the tab must not push the next day past a gap.
-        rowIndex = lastDatedRow(sheet) + 1;
-        ensureRows(sheet, rowIndex);
-        values = STATION_HEADERS.map(function () { return ''; });
-      } else {
-        values = sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).getValues()[0];
-      }
-      values[0] = date;
+      var isNew = rowIndex === -1;
+      // Append after the last DATED row, not getLastRow(): a stray note far
+      // down the tab must not push the next day past a gap.
+      if (isNew) rowIndex = lastDatedRow(sheet) + 1;
+      var values = isNew
+        ? STATION_HEADERS.map(function () { return ''; })
+        : sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).getValues()[0];
+      stationRows[station] = { sheet: sheet, rowIndex: rowIndex, isNew: isNew, held: values.slice(), values: values };
+    });
+
+    // 2. The append-only audit trail: a reading is logged when it is NEW or
+    // CHANGED - one the station tab already holds for this date and slot is
+    // not logged again. Every save carries the whole day, so logging all of it
+    // filed the morning again at 2 PM and again at night, under clock times
+    // nobody read it at; a resend after a timeout or a page switch did the
+    // same. A correction is a change, so it still lands as the newer entry.
+    var logRows = [];
+    body.items.forEach(function (item) {
+      var col = STATION_HEADERS.indexOf(item.slot);
+      item.readings.forEach(function (r) {
+        saved++;
+        var row = stationRows[r.station];
+        var before = row ? row.held[col] : '';
+        var already = before !== '' && before !== null && Number(before) === r.temp;
+        if (!already) logRows.push([date, item.time, item.slot, r.station, r.temp]);
+      });
+    });
+    if (logRows.length) {
+      // After the last DATED row, so a stray note cannot open a gap. A
+      // zero-row range throws in Google, hence the guard.
+      var logStart = lastDatedRow(log) + 1;
+      ensureRows(log, logStart + logRows.length - 1);
+      log.getRange(logStart, 1, logRows.length, LOG_HEADERS.length).setValues(logRows);
+    }
+
+    // 3. Merge-upsert each station tab by date: overlay this save's slots on
+    // the row read above and write it back in one stroke per station.
+    Object.keys(stationRows).forEach(function (station) {
+      var row = stationRows[station];
+      if (row.isNew) ensureRows(row.sheet, row.rowIndex);
+      row.values[0] = date;
       Object.keys(slotsByStation[station]).forEach(function (slot) {
         var col = STATION_HEADERS.indexOf(slot);
         if (col < 1) return; // unknown slot: the Log above still has it
-        values[col] = slotsByStation[station][slot];
+        row.values[col] = slotsByStation[station][slot];
       });
-      sheet.getRange(rowIndex, 1, 1, STATION_HEADERS.length).setValues([values]);
+      row.sheet.getRange(row.rowIndex, 1, 1, STATION_HEADERS.length).setValues([row.values]);
     });
 
-    // 3. Refresh the Overview block in one ranged write (later slots win).
+    // 4. Refresh the Overview block in one ranged write (later slots win).
     // The name column was verified in the pre-flight above. A MISSING
     // Overview is skipped rather than refused: the Log above is the record,
     // and half a save beats none.
@@ -262,7 +284,7 @@ function doPost(e) {
       if (touched) overview.getRange(2, 2, STATIONS.length, 3).setValues(block);
     }
 
-    return jsonOut({ ok: true, saved: saved, date: date });
+    return jsonOut({ ok: true, saved: saved, logged: logRows.length, date: date });
   } catch (err) {
     // Our own guards refuse terminally; everything else is Google's moment.
     if (err && err.plainRefusal) return jsonOut({ ok: false, error: err.message });

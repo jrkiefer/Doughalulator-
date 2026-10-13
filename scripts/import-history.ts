@@ -4,18 +4,22 @@
  * app itself would have sent, so past dates land in the dough sheet as if the
  * app had been in use all along.
  *
- * Recorded reality always wins over recomputation: counts, sales, batches
- * made, and post-make final dough are written verbatim from the history file;
- * the engine only fills the derived tabs (the two look-ups, the make, the
- * final make, the dough after gang). The AM / PM / All Day use tabs are the
- * Dough Log's own — its script derives them from these rows after every
- * close. Dates whose "final dough" was never truly recorded get NO after-gang
- * row — a made-up number would poison the derived dough-use figures.
+ * Recorded reality always wins over recomputation: counts, sales and the
+ * batch direction actually made are written from the history file, and so is
+ * the post-make final dough (`finalDough`) wherever it was recorded. The
+ * engine fills only what was never written down: the two look-ups, the make,
+ * the final make, and the after-gang dough of a night with no recorded final.
+ * The AM / PM / All Day use tabs are the Dough Log's own — its script derives
+ * them from these rows after every close, which is exactly why a date whose
+ * final dough was never truly recorded (`finalDoughUnrecorded`) gets an
+ * all-BLANK after-gang row: blank clears a figure an earlier import invented
+ * and never creates a row, and a made-up number would poison the PM and
+ * All Day points the self-building bible is fitted from.
  *
- * Run with vite-node (ships with vitest):
- *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode dry
- *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode live   --url <exec>
- *   npx vite-node scripts/import-history.ts -- --json <history.json> --mode verify --url <exec>
+ * Run with tsx (fetched by npx on first use):
+ *   npx tsx scripts/import-history.ts --json <history.json> --mode dry
+ *   npx tsx scripts/import-history.ts --json <history.json> --mode live   --url <exec>
+ *   npx tsx scripts/import-history.ts --json <history.json> --mode verify --url <exec>
  *
  * `dry` replays everything through the in-process Apps Script harness (the
  * real Code.gs) and diffs the resulting fake sheet against the history file —
@@ -30,7 +34,12 @@ import { bibles } from '../src/data/bibles';
 import { emptyEonForm, type EonForm } from '../src/features/eon/formState';
 import { parseCounts, toNumOrNull } from '../src/features/shared/counts';
 import { emptyTwoPmForm, type TwoPmForm } from '../src/features/twoPm/formState';
-import { dayRecordToTabWrites, eonRecordToTabWrites, type TabWrite } from '../src/services/mapping';
+import {
+  AFTER_TAB,
+  dayRecordToTabWrites,
+  eonRecordToTabWrites,
+  type TabWrite,
+} from '../src/services/mapping';
 
 const cfg = defaultConfig;
 
@@ -99,18 +108,15 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
     sicSingles: str(t.counts.sic),
     boliSingles: str(t.counts.boli),
   };
-  const base = runDoughCalculation(
-    {
-      date,
-      counts: parseCounts(form),
-      todayForecastRaw: toNumOrNull(form.todayForecast),
-      currentSalesRaw: toNumOrNull(form.currentSales),
-      tomorrowForecastRaw: toNumOrNull(form.tomorrowForecast),
-      bibleOverride: t.bible,
-    },
-    bibles,
-    cfg,
-  );
+  const inputs = {
+    date,
+    counts: parseCounts(form),
+    todayForecastRaw: toNumOrNull(form.todayForecast),
+    currentSalesRaw: toNumOrNull(form.currentSales),
+    tomorrowForecastRaw: toNumOrNull(form.tomorrowForecast),
+    bibleOverride: t.bible,
+  };
+  const base = runDoughCalculation(inputs, bibles, cfg);
   // The recorded rounding note wins; otherwise recover the choice from which
   // option's batch count matches what was actually made.
   const rounding =
@@ -120,11 +126,29 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
       : base.batchUp?.batches === t.batchesMade
         ? 'up'
         : null);
-  const record: DoughDayRecord = { ...base, chosenBatchOption: rounding };
-  // The app is the calculator: the make, the batches and the final dough are
-  // all worked out here and written into place. The sheet holds no formulas.
-  const tabs = dayRecordToTabWrites(record);
+  // A known direction goes IN as the night's batch rounding, so the record —
+  // and its Batch Rounding column — says what was made. One that matches
+  // neither option is not the engine's to guess: no direction, so the final
+  // make and after-gang rows travel blank.
+  const record: DoughDayRecord = rounding
+    ? runDoughCalculation({ ...inputs, batchRound: rounding }, bibles, cfg)
+    : { ...base, chosenBatchOption: null };
+  const tabs = dayRecordToTabWrites(record).map((write) =>
+    write.tab === AFTER_TAB ? { ...write, row: recordedAfterGang(date, e) ?? write.row } : write,
+  );
   return { record, payload: { type: 'day', date, tabs } };
+}
+
+/**
+ * The after-gang row as RECORDED, when the history knows better than the
+ * engine: the real post-make figures, or all-blank for a night whose final
+ * dough was never written down. Null leaves the engine's own figure.
+ */
+function recordedAfterGang(date: string, e: HistoryEntry): TabWrite['row'] | null {
+  if (e.finalDoughUnrecorded) return { Date: date, Indi: '', Small: '', Large: '', Sic: '', Boli: '' };
+  const fd = e.finalDough;
+  if (!fd) return null;
+  return { Date: date, Indi: fd.indi, Small: fd.small, Large: fd.large, Sic: fd.sic, Boli: fd.boli };
 }
 
 function buildEon(date: string, e: HistoryEntry, dayRecord: DoughDayRecord | null): Payload | null {
@@ -199,6 +223,21 @@ function diffDate(date: string, e: HistoryEntry, sheet: SheetDate | null): strin
       });
       if (day['Bible'] !== t.bible) bad.push(`${date} bible: ${day['Bible']} != ${t.bible}`);
     }
+  }
+
+  const after = sheet ? sheet[AFTER_TAB] : null;
+  if (e.finalDoughUnrecorded) {
+    const invented = after && ['Indi', 'Small', 'Large', 'Sic', 'Boli'].some((k) => (after[k] ?? '') !== '');
+    if (invented) bad.push(`${date}: after-gang figures present, but the final dough was never recorded`);
+  } else if (e.finalDough) {
+    const fd = e.finalDough;
+    const cols: [string, number][] = [
+      ['Indi', fd.indi], ['Small', fd.small], ['Large', fd.large], ['Sic', fd.sic], ['Boli', fd.boli],
+    ];
+    if (!after) bad.push(`${date}: missing the after-gang row`);
+    else cols.forEach(([key, want]) => {
+      if (!near(after[key], want)) bad.push(`${date} after-gang ${key}: ${after[key]} != ${want}`);
+    });
   }
 
   if (e.eon) {

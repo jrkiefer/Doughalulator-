@@ -78,7 +78,7 @@ export function lookupBibleRow(
   if (sales >= last.sales) return last;
 
   if (direction === 'down') {
-    // Walk up from the bottom to the highest row at or below the figure —
+    // Walk down from the top to the highest row at or below the figure —
     // the row a round-down would land on — then apply the gap cap.
     for (let i = rows.length - 1; i >= 0; i--) {
       const row = rows[i]!;

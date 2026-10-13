@@ -41,12 +41,6 @@ const TARGETS: readonly SyncTarget[] = ['dough', 'temps'];
  */
 const RETRY_BASE_MS = 10_000;
 const RETRY_MAX_MS = 300_000;
-/**
- * Records whose payload is DERIVED from another record's content: the EON
- * check depends on the day record's tomorrow-need. Editing the source
- * re-dirties existing dependents so the recomputed math re-syncs too.
- */
-const DEPENDENTS: Partial<Record<RecordType, RecordType[]>> = { day: ['eon'] };
 
 export interface SyncDeps {
   now(): number;
@@ -120,8 +114,13 @@ export interface SyncEngine {
   overwrite(date: string, replaces: readonly RecordType[], apply: (entry: DateEntry) => void): void;
   /** Two-tap reset target: blank the date and make sure nothing ever posts. */
   reset(date: string): void;
-  /** Note that an edit landed while a fetch was in flight (keystroke guard §4). */
-  editSeq(date: string): number;
+  /**
+   * A per-date counter that moves whenever what a sheet fetch would be
+   * compared against changes: every edit, AND every CONFIRMED send. A fetch
+   * that started before either is stale — the sheet may have answered it
+   * from before a save that has since landed — so the screen drops it.
+   */
+  changeSeq(date: string): number;
   flush(opts?: { keepalive?: boolean }): Promise<void>;
   status(date: string): SyncStatus;
   /**
@@ -153,7 +152,7 @@ function metaOf(entry: DateEntry, type: RecordType): SyncMeta | undefined {
 export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine {
   const memory = new Map<string, DateEntry>();
   const phoneFailed = new Set<string>(); // `${date}` whose last phone write failed
-  const editSeqs = new Map<string, number>();
+  const changeSeqs = new Map<string, number>();
   /** The sheets whose last attempt hit a network-class failure — per notebook,
    * so an unreachable temp log can never make the dough log look broken. */
   const offlineTargets = new Set<SyncTarget>();
@@ -266,6 +265,10 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     notify();
   }
 
+  function bumpChangeSeq(date: string) {
+    changeSeqs.set(date, (changeSeqs.get(date) ?? 0) + 1);
+  }
+
   function edit(date: string, type: RecordType, apply: (rec: never) => void): void {
     const entry = getEntry(date);
     const now = deps.now();
@@ -276,16 +279,7 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
     apply(rec as never);
     rec.updatedAt = now;
     rec.rejectedReason = null; // an edit is a fresh attempt
-    // A change here changes math derived elsewhere: re-dirty existing
-    // dependents (never create one) so the whole picture re-syncs.
-    for (const dependent of DEPENDENTS[type] ?? []) {
-      const dep = entry[dependent];
-      if (dep) {
-        dep.updatedAt = now;
-        dep.rejectedReason = null;
-      }
-    }
-    editSeqs.set(date, (editSeqs.get(date) ?? 0) + 1);
+    bumpChangeSeq(date);
     persist(date);
     scheduleFlush();
     notify();
@@ -335,6 +329,9 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
           rec.syncedAt = editStamp;
           rec.ackHash = hash;
           persist(date);
+          // The sheet now holds this — any fetch already in the air may have
+          // been answered from before it, so it must not land.
+          bumpChangeSeq(date);
         } else if (outcome.kind === 'retryable') {
           // Network-class: keep dirty, stop bothering this sheet for now.
           return true;
@@ -464,8 +461,8 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
       notify();
     },
 
-    editSeq(date) {
-      return editSeqs.get(date) ?? 0;
+    changeSeq(date) {
+      return changeSeqs.get(date) ?? 0;
     },
 
     flush,

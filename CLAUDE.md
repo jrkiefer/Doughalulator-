@@ -73,7 +73,10 @@ build less.**
   cache. `Today's temps` opens by default (`defaultOpen` on `Collapsible`; a session's own
   tap still wins). Each temp input wears a save chip driven by
   `engine.recordStatus(date, 'temps')` — the temps record's OWN state, never the whole
-  date's, or a busy dough side makes a saved temperature look unsaved (it did).
+  date's, or a busy dough side makes a saved temperature look unsaved (it did). The dough
+  pages follow the same rule (v1.31.0): the 2 PM page's "saved" tags read
+  `recordStatus(date, 'day')`, the EON page's `recordStatus(date, 'eon')`. The header pill
+  is the one place that speaks for the whole date.
 - **The Graphs drawer stays SIMPLE (owner's choice, Aug 2026).** A Gap view, a Table view and a
   one-sentence summary were built, shipped in v1.18.0, and removed at the owner's ask in
   v1.19.0 — one chart, the pill rows and the tap readout are the whole surface. Don't re-add
@@ -105,17 +108,29 @@ build less.**
 - **2 PM session** — the afternoon count + calculation: what we have, what tonight will use, what tomorrow needs, what to make, and the batch count (the remainder rule settles round down / round up on its own; the pills override it).
 - **salesLeft** — today's forecast − current sales: the selling still to come tonight.
 - **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
-- **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. **PM sales is still computed, it is just not drawn** — the owner asked for the display gone, not the number; the Dough Log derives its own copy for the `PM Dough Use` tab.
-- **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure until something is typed; a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back.
-- **PM use** — dough used since 2 PM = the chosen option's final dough − EON count. `pmUse` on `EonRecord` is the app's reference definition; a count that ROSE reads blank, not negative — that means a miscount. The RECORDED copy on the `PM Dough Use` tab is the Dough Log's own, derived from the counts after every close (v1.30.0) — the app writes none of the three use tabs.
-- **AM use** — dough used before 2 PM = yesterday's EON count − this morning's count; `computeAmUse` is the reference definition. Blank when yesterday has no EON record (a closed day). Recorded on `AM Dough Use` by the Dough Log, same as PM.
+- **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. PM sales is not on screen (the owner asked for it gone) and not computed in the app at all: the Dough Log derives it for the `PM Dough Use` tab.
+- **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure as its PLACEHOLDER until something is typed (v1.31.0 — as the box's value it snapped back the moment it was backspaced to empty, so it could never be cleared and retyped); a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back. It is screen-only, like the EON Boli count: the sheet holds neither, so a background refresh of the date clears it.
+- **PM use** — dough used since 2 PM = Estimated Dough After Gang − EON count; a count that ROSE reads blank, not negative — that means a miscount. **`deriveUse` in `dough/Code.gs` is the ONE definition** of PM, AM and All Day use (v1.30.0); the app's own copies (`pmUse`, `computeAmUse`) were removed in v1.31.0 once nothing read them. The app writes none of the three use tabs.
+- **AM use** — dough used before 2 PM = yesterday's EON count − this afternoon's 2 PM count. Blank when yesterday has no EON row (a closed day). Recorded on `AM Dough Use` by the Dough Log, same as PM.
 - **All Day use** (v1.30.0) — AM + PM for the same date, both halves known and non-negative, against the night's takings; the `All Day Dough Use` tab. The self-building bible learns from all three kinds of point together.
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
 - **Temp slots** — before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night.
 - **Past midnight** (v1.27.0) — a close finished after 12:00 AM belongs to the evening that just
-  ended, i.e. YESTERDAY's date, but a fresh open lands on the new calendar day. The app never
-  switches dates by itself; before `smallHours.before` (05:00, in config) the date card says
-  "Past midnight — still closing out last night? … tap ◀" and leaves the choice to the person.
+  ended, i.e. YESTERDAY's date, but a fresh open lands on the new calendar day. Before
+  `smallHours.before` (05:00, in config) the date card says "Past midnight — still closing out
+  last night? … tap ◀" and leaves the choice to the person; in the small hours the app moves
+  NOTHING by itself, date or temp slot.
+- **Coming back to the app** (v1.31.0, owner re-chose Oct 2026) — a phone that keeps the app in
+  memory used to come back the next afternoon still on yesterday's date and the morning's temp
+  slot, so today's numbers filed under yesterday and 2 PM temps overwrote the morning's. Now the
+  `visibilitychange` → visible path re-asks the clock (`onReturn` in `App.tsx`), but only after
+  05:00 and only for what the CLOCK put there: the slot moves if the clock's slot changed since
+  it last picked one (a slot tapped by hand in the same period stays), and the date moves to
+  today only if it is one the clock vouched for — `clockDays`, which at an open in the small
+  hours holds both the calendar day and last night, so stepping ◀ to close last night still
+  moves on next afternoon. A date picked by hand stays put. Small hours: touch nothing, not even
+  the remembered values, or a 1 AM wake would forget what to move that afternoon (and a Morning
+  slot under last night's date would file 12:30 AM readings into last night's Morning).
 
 ## Design system (v1.5.0 — ported from the owner's other app)
 
@@ -152,6 +167,20 @@ build less.**
   clears it. `offlineTargets` is per NOTEBOOK, so an unreachable temp log cannot make the dough log
   read OFFLINE — and so is the in-flight flag (v1.27.0), so SYNCING is only ever claimed about
   the notebook actually mid-send.
+- **Each record's payload is its own content only** (v1.31.0). Since 1.30.0 the EON save carries
+  just the closing count and final sales, so the old `DEPENDENTS` rule (a 2 PM edit re-dirtying
+  the EON record) could only ever rebuild an identical payload the ack-hash then skipped — it was
+  removed, and `engine.ts` no longer builds a day record for the EON payload. Verified byte for
+  byte: every payload the app sends was identical before and after.
+- **The temp Log logs a reading only when it is NEW or CHANGED** (v1.31.0). Every temps save
+  carries the WHOLE day (all three slots — the dedupe hash needs a stable payload), and the
+  script once appended every reading it carried: 16 readings became 136 Log rows, each copy
+  stamped with that slot's latest edit time, and the graph's last-3-per-station read
+  [2 PM, Morning, 2 PM]. `doPost` now reads each station tab's row FIRST and logs only readings
+  that differ from what the tab already holds for that date and slot — which also absorbs
+  resends after a timeout, a keepalive, or the 20 s lock wait outliving the app's 15 s timeout.
+  A correction is a change, so it still lands as the newer entry. Don't "simplify" the app into
+  sending one slot: the per-slot stamps and the whole-day payload are what keep the hash stable.
 - **`action: 'recent'` on the TEMPS script** (`recentReadings` in `temps/Code.gs`) serves the temp
   graph: the last n (default 3, cap 10) Log entries per station, oldest first, read from the
   Log's tail with `getDisplayValues()` — this script never sees a Date object, and that stays
@@ -197,7 +226,7 @@ build less.**
   on a second phone or after a wipe and understated the day). Three kinds of point per night per
   size: AM = YESTERDAY'S EON count − 2 PM count against the 2 PM row's Current Sales (yesterday
   exactly, owner's rule Aug 2026 "just to be extra safe": a gap abstains, no lookback across
-  closed days — the same rule as the app's own `computeAmUse`); PM = Estimated Dough After Gang −
+  closed days); PM = Estimated Dough After Gang −
   EON count against EON Sales − Current Sales; All Day = the two added against EON Sales. A half
   drops on its own (no row, blank count, or a count that ROSE — a miscount); the All Day point
   needs both halves; each point needs takings on its own scale, so a morning still counts on a
@@ -227,7 +256,10 @@ build less.**
   update the EXISTING deployment. Rebuild runs on EON saves and the menu item only: a 2 PM save
   flushes many times an afternoon, and the rebuild walks the whole log every time, so a
   never-closed night's morning is picked up at the next close. A consequence made deliberate:
-  Erase all data empties the three use tabs and the fit history on the next refresh.
+  Erase all data empties the three use tabs and the fit history on the next refresh. **Watch
+  item:** the rebuild runs inside every EON save, under the script lock, and Theil–Sen is O(n²)
+  in points (~1.5 per night) — fine at today's size, but a few years in an EON save could
+  approach the app's 15 s timeout. If saves ever slow, cap the fit to recent nights first.
 - **No secrets** (v1.4.0, owner's explicit request), and since v1.12.0 **no Settings page either**:
   both `/exec` addresses are constants in `src/services/sheets.ts`. A per-device Settings page meant
   a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is
@@ -238,10 +270,26 @@ build less.**
   unreachable over HTTP (the guarded **Erase all data** menu item), so the worst case is snooping or
   mess, not destruction. A test asserts the scripts refuse erase types over the web.
 - Two-phone rules: date navigation paints the phone copy then background-fetches the sheet; dirty
-  local wins, clean local is replaced; typing mid-fetch discards the fetch; LOAD FROM SHEET is a
-  force-pull with a dirty double-tap; RESET is two-tap and blanks only the open date.
+  local wins, clean local is replaced; typing OR a confirmed save mid-fetch discards the fetch
+  (`changeSeq`, v1.31.0 — the sheet may have answered from before a save that was already in
+  flight; once it confirmed, the record looked clean and the OLDER sheet copy replaced the newer
+  numbers, and the next keystroke pushed them back up); LOAD FROM SHEET is a force-pull with a
+  dirty double-tap, the same `changeSeq` guard, and a drop if the date changed while it loaded;
+  RESET is two-tap and blanks only the open date.
 
 ## Things a review already found — don't reintroduce them
+
+- **Every tab that carries Sales Left must allow a negative** (`NEGATIVE_OK` in `dough/Code.gs`).
+  A lunch rush — sales by 2 PM already past the day's forecast — gives a negative sales-left,
+  and the app writes it to `2PM Dough Count` AND `Look up Dough Use for PM`. Only the first was
+  allowed, so the whole two-phase 2 PM save was refused on exactly those days (v1.31.0). The test
+  posts the app's REAL `dayRecordToTabWrites` output, not a hand-built row — the hand-built one
+  only ever hit the first tab, which is how it passed.
+- **The importer's recorded figures win** (`scripts/import-history.ts`, v1.31.0). A recorded
+  `finalDough` is written as the after-gang row; `finalDoughUnrecorded` writes an all-BLANK row
+  (clears an invented figure, never creates one). Since 1.30.0 the after-gang figure feeds the
+  PM and All Day points, so an engine-invented one would poison the self-building bible on a
+  re-run. Run it with `npx tsx` (vite-node no longer ships with Vitest).
 
 - **The two 2 PM cards must read their trays from ONE place** (`twoPm/trayPlan.ts`, pure and
   tested). They worked it out separately once and drifted: the Day's Work pills showed the trays
@@ -300,7 +348,7 @@ build less.**
   (since v1.10.0) repeats on the ladder for ever. `addressProblem()` in `services/client.ts` guards
   both verbs — https anywhere, http only against localhost so the app can be tested.
 
-## Five Google rules learned the hard way — do not relearn them
+## Six Google rules learned the hard way — do not relearn them
 
 1. **A tab name is capped at 31 characters.** Google truncates longer ones, and two names that
    truncate alike collide silently: the second tab quietly becomes `Sheet2` and everything written
@@ -340,6 +388,11 @@ build less.**
    deliberately in place of code: a converter would be a new function and a new code path for
    something that has never happened. If it ever DOES happen, strip the symbols in `cell()` in
    `services/mapping.ts` — do not reach for it before then.
+6. **A range past the sheet's edge THROWS — rows AND columns.** A new tab stops at row 1000 and
+   column Z (26); `ensureRows`/`ensureCols` grow it first. The 1.30.0 stats block runs X..AD, and
+   with no column guard every EON save threw AFTER saving, answered "retry", and sat on OFFLINE —
+   WILL RETRY for ever. The harness models both edges (and that a zero-row range throws), so a
+   write past either fails in the tests; it once let column AD through in silence.
 
 ## Engine facts worth remembering
 
@@ -351,9 +404,11 @@ build less.**
   they disagree with the app's own tray maths (17 where the app says 17.98), and regular has no
   such columns at all — using them would make the two books incomparable. Don't "fix" this.
 - `runDoughCalculation(inputs, bibles, config)` → `DoughDayRecord`;
-  `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`;
-  `computeAmUse(yesterdayEonHave, todayHave, amSales)` → `AmUse`. All pure; bibles and config are
-  always passed in; blank inputs are `null` and stay null.
+  `runEonCalculation(eonInputs, dayRecord | null, bibles, config)` → `EonRecord`. Both pure;
+  bibles and config are always passed in; blank inputs are `null` and stay null.
+- **Under 11 trays the batch count still runs the mixer once.** `batchDown` floors at 1 batch, so
+  a round DOWN can ADD trays; the Day's Work chip says "one-batch minimum" there (v1.31.0), never
+  "rounded up" under a lit Round down pill.
 - **Bible lookup** (v1.13.0, ported from the owner's other app): exact row wins; outside the range
   clamp to the nearest end; between rows the default is **UP**. It rounds **DOWN** only on a SLOW
   DAY — both forecasts entered and both strictly under `slowDayUnder` ($13,000) — and even then

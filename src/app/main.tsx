@@ -9,7 +9,8 @@ import App from './App';
 import { ErrorBoundary } from './ErrorBoundary';
 // The Mise en Place type set, self-hosted (no CDN, so it works on a bad connection):
 // Fraunces for headings and the big numbers, Inter Tight for words, JetBrains Mono
-// for every figure and micro-label. Latin subsets only — nothing else is ever typed here.
+// for every figure and micro-label. The two static fonts load Latin only; the variable
+// Fraunces brings its own subsets, which the browser fetches only if a character needs one.
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/fraunces/wght-italic.css';
 import '@fontsource/inter-tight/latin-500.css';

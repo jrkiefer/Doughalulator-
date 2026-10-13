@@ -31,15 +31,15 @@ function makeWorld(opts: { debounceMs?: number } = {}) {
     listDates: () => [...store.keys()],
     buildPayload: (type: RecordType, date, entry) => {
       // Trivial builder: send the record's form-ish content; null when empty.
-      // Like the real builder, the eon payload derives from the day record
-      // too (its tomorrow-need feeds the EON check).
+      // Like the real builder, each record's payload is its OWN content only —
+      // the EON save carries the closing count and final sales, nothing from
+      // the afternoon (since 1.30.0 the notebook derives the rest).
       const rec = entry[type];
       if (!rec) return null;
       if (type === 'eon') {
         const form = (rec as { form: Record<string, string> }).form;
         if (Object.values(form).every((v) => v === '')) return null;
-        const day = entry.day as { form?: Record<string, string> } | undefined;
-        return { type, date, body: form, need: day?.form?.tomorrowForecast ?? null };
+        return { type, date, body: form };
       }
       const body =
         type === 'temps'
@@ -477,11 +477,33 @@ describe('two-phone merge (§4)', () => {
     expect(world.engine.getEntry(D).eon).toBeUndefined();
   });
 
-  it('the keystroke guard has a per-date edit sequence to detect mid-fetch typing', () => {
+  it('the fetch guard has a per-date change sequence: every edit moves it', () => {
     const world = makeWorld();
-    const before = world.engine.editSeq(D);
+    const before = world.engine.changeSeq(D);
     typeSales(world);
-    expect(world.engine.editSeq(D)).toBe(before + 1);
+    expect(world.engine.changeSeq(D)).toBe(before + 1);
+  });
+
+  it('a CONFIRMED send moves it too — a fetch read before the save landed is stale', async () => {
+    // The race this pins: a fetch goes out, the sheet answers it from BEFORE
+    // a save that was already in flight, and the save confirms first. Without
+    // the bump the fetch then found the record clean and replaced the newer
+    // numbers on screen with the older sheet copy.
+    const world = makeWorld();
+    typeSales(world);
+    const beforeSend = world.engine.changeSeq(D);
+    await world.engine.flush();
+    expect(world.engine.changeSeq(D)).toBe(beforeSend + 1);
+  });
+
+  it('a failed or keepalive send confirms nothing, so it leaves the sequence alone', async () => {
+    const world = makeWorld();
+    typeSales(world);
+    const seq = world.engine.changeSeq(D);
+    world.setOutcomes([{ kind: 'retryable', error: 'offline' }]);
+    await world.engine.flush();
+    await world.engine.flush({ keepalive: true });
+    expect(world.engine.changeSeq(D)).toBe(seq);
   });
 
   it('overwrite (confirmed force-load) replaces even dirty content and marks it clean', () => {
@@ -563,14 +585,14 @@ describe('a rounding tap alone is content — both pills, symmetrically', () => 
   });
 });
 
-describe('derived records resync — the new math is always saved', () => {
+describe('each record stands alone — a 2 PM edit never resends the close', () => {
   function typeEon(world: ReturnType<typeof makeWorld>, value = '7.9') {
     world.engine.edit(D, 'eon', (rec) => {
       rec.form = { ...rec.form, finalSales: value };
     });
   }
 
-  it('a 2 PM edit re-dirties the EON record so its recomputed check re-syncs', async () => {
+  it('a 2 PM edit after the close sends the 2 PM record only, and the EON stays saved', async () => {
     const world = makeWorld();
     world.engine.edit(D, 'day', (rec) => {
       rec.form = { ...rec.form, tomorrowForecast: '9.1' };
@@ -579,14 +601,14 @@ describe('derived records resync — the new math is always saved', () => {
     await world.engine.flush();
     expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual(['day', 'eon']);
 
-    // Change ONLY the 2 PM tomorrow forecast — the EON check depends on it.
     world.engine.edit(D, 'day', (rec) => {
       rec.form = { ...rec.form, tomorrowForecast: '10.5' };
     });
+    // Nothing the EON save carries depends on the afternoon, so it is not
+    // re-dirtied: its saved chip never flickers while the 2 PM side resends.
+    expect(world.engine.recordStatus(D, 'eon').state).toBe('synced');
     await world.engine.flush();
-    const types = world.posts.map((p) => (p.payload as { type: string }).type);
-    expect(types).toEqual(['day', 'eon', 'day', 'eon']);
-    expect((world.posts[3]!.payload as { need: string }).need).toBe('10.5');
+    expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual(['day', 'eon', 'day']);
     expect(world.engine.status(D).state).toBe('synced');
   });
 
@@ -595,29 +617,6 @@ describe('derived records resync — the new math is always saved', () => {
     typeSales(world);
     await world.engine.flush();
     expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual(['day']);
-  });
-
-  it('a day edit clears a parked EON rejection so it retries with the new math', async () => {
-    const world = makeWorld();
-    world.setOutcomes([
-      { kind: 'ok', data: {} }, // day
-      { kind: 'rejected', reason: 'negative value where it makes no sense' }, // eon
-    ]);
-    world.engine.edit(D, 'day', (rec) => {
-      rec.form = { ...rec.form, tomorrowForecast: '9.1' };
-    });
-    typeEon(world);
-    await world.engine.flush();
-    expect(world.engine.status(D).state).toBe('rejected');
-
-    world.engine.edit(D, 'day', (rec) => {
-      rec.form = { ...rec.form, tomorrowForecast: '12' };
-    });
-    await world.engine.flush();
-    expect(world.posts.map((p) => (p.payload as { type: string }).type)).toEqual([
-      'day', 'eon', 'day', 'eon',
-    ]);
-    expect(world.engine.status(D).state).toBe('synced');
   });
 });
 

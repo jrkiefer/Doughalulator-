@@ -86,6 +86,10 @@ export function DaysWork(props: {
   // round-down reports what was really trimmed rather than what was asked for.
   const note = chosen ? splitNote(lines.small.round, lines.large.round) : '';
   const tail = note ? ` · ${note}` : '';
+  // A round DOWN that still adds trays is the one-batch floor: under 11 trays
+  // the mixer still runs once. Calling that "rounded up" under a lit Round
+  // down pill read as the card contradicting itself.
+  const oneBatchFloor = record.chosenBatchOption === 'down' && (chosen?.trayDelta ?? 0) > 0;
   // Not ready splits two ways, and saying the wrong one is worse than saying
   // nothing: the sales card comes first on the page, so between filling it in
   // and counting the dough it is the COUNTS that are missing, not the sales.
@@ -155,13 +159,15 @@ export function DaysWork(props: {
                   chosen.trayDelta > 0 ? ' up' : chosen.trayDelta < 0 ? ' down' : ''
                 }`}
               >
-                {chosen.trayDelta > 0
-                  ? `▴ rounded up · +${trayWord(chosen.trayDelta)}${tail}`
-                  : chosen.trayDelta < 0
-                    ? `▾ rounded down ${trayWord(-chosen.trayDelta)}${tail}`
-                    : `even · ${trayWord(record.totalTrays!)} = ${chosen.batches} ${
-                        chosen.batches === 1 ? 'batch' : 'batches'
-                      }`}
+                {oneBatchFloor
+                  ? `▴ one-batch minimum · +${trayWord(chosen.trayDelta)}${tail}`
+                  : chosen.trayDelta > 0
+                    ? `▴ rounded up · +${trayWord(chosen.trayDelta)}${tail}`
+                    : chosen.trayDelta < 0
+                      ? `▾ rounded down ${trayWord(-chosen.trayDelta)}${tail}`
+                      : `even · ${trayWord(record.totalTrays!)} = ${chosen.batches} ${
+                          chosen.batches === 1 ? 'batch' : 'batches'
+                        }`}
               </span>
             </div>
           </div>
