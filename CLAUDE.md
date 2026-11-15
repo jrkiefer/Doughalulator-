@@ -109,7 +109,7 @@ build less.**
 - **salesLeft** — today's forecast − current sales: the selling still to come tonight.
 - **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
 - **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. PM sales is not on screen (the owner asked for it gone) and not computed in the app at all: the Dough Log derives it for the `PM Dough Use` tab.
-- **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure as its PLACEHOLDER until something is typed (v1.31.0 — as the box's value it snapped back the moment it was backspaced to empty, so it could never be cleared and retyped); a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back. It is screen-only, like the EON Boli count: the sheet holds neither, so a background refresh of the date clears it.
+- **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure as its PLACEHOLDER until something is typed (v1.31.0 — as the box's value it snapped back the moment it was backspaced to empty, so it could never be cleared and retyped); a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back. It is screen-only, like the EON Boli count: the sheet holds neither, so both live on the phone that typed them (a re-read keeps them, v1.32.0; another phone never sees them).
 - **PM use** — dough used since 2 PM = Estimated Dough After Gang − EON count; a count that ROSE reads blank, not negative — that means a miscount. **`deriveUse` in `dough/Code.gs` is the ONE definition** of PM, AM and All Day use (v1.30.0); the app's own copies (`pmUse`, `computeAmUse`) were removed in v1.31.0 once nothing read them. The app writes none of the three use tabs.
 - **AM use** — dough used before 2 PM = yesterday's EON count − this afternoon's 2 PM count. Blank when yesterday has no EON row (a closed day). Recorded on `AM Dough Use` by the Dough Log, same as PM.
 - **All Day use** (v1.30.0) — AM + PM for the same date, both halves known and non-negative, against the night's takings; the `All Day Dough Use` tab. The self-building bible learns from all three kinds of point together.
@@ -266,16 +266,48 @@ build less.**
   exactly what happened to the owner's phone in Aug 2026. Built in, every device is already
   connected. **The addresses are therefore PUBLIC** — public repo, public site — so anyone who finds
   them can read or write those notebooks. That trade was made knowingly (Aug 2026) and is settled;
-  the addresses are not secrets and must not be handled as though they were. Erasing stays
-  unreachable over HTTP (the guarded **Erase all data** menu item), so the worst case is snooping or
-  mess, not destruction. A test asserts the scripts refuse erase types over the web.
+  the addresses are not secrets and must not be handled as though they were. Erasing a whole
+  log stays unreachable over HTTP (the guarded **Erase all data** menu item); since v1.32.0 ONE
+  date can be cleared (the app's RESET — see below), so the worst case is snooping, mess, or days
+  cleared one at a time, recoverable from the sheet's version history. A test asserts the scripts
+  refuse erase types over the web.
 - Two-phone rules: date navigation paints the phone copy then background-fetches the sheet; dirty
   local wins, clean local is replaced; typing OR a confirmed save mid-fetch discards the fetch
   (`changeSeq`, v1.31.0 — the sheet may have answered from before a save that was already in
   flight; once it confirmed, the record looked clean and the OLDER sheet copy replaced the newer
   numbers, and the next keystroke pushed them back up); LOAD FROM SHEET is a force-pull with a
-  dirty double-tap, the same `changeSeq` guard, and a drop if the date changed while it loaded;
-  RESET is two-tap and blanks only the open date.
+  dirty double-tap, the same `changeSeq` guard, and a drop if the date changed while it loaded.
+- **RESET clears the open date on the phone AND in the Dough Log** (v1.32.0, owner's choice,
+  Nov 2026). Before, the sheet kept the numbers and the next visit handed them back, and clearing
+  every box sends nothing (an empty record builds no payload) — a mistaken day could not be undone
+  from the app at all. `handleReset` calls `clearDateOnSheet` DIRECTLY (not through the sync
+  engine: one deliberate tap, its answer shown on screen); the script's `type: 'clear'` →
+  `clearDate()` is two-phase like a save, clears EVERY row carrying the date in every `TABS` tab
+  with `clearContent` (never `deleteRow`), then rebuilds the use tabs. An old script answers
+  `unknown type`, which the app turns into "the Dough Log needs its update". Temps are a
+  food-safety record in the other notebook and are NEVER cleared by RESET. **This is the one
+  erase reachable over the web — one date at a time; `wipeAllData` stays menu-only.**
+- **The open date is re-read on every return to the app** (v1.32.0, `returns` in `App.tsx`), same
+  guards as a date change, and silent when the phone copy is kept. A fetch that answers "no row"
+  now CLEARS a clean phone copy (`NOTHING_FETCHED`) — that is a day the other phone reset; unsent
+  edits stay. Because re-reads are now frequent, `applyFetchedToEntry` carries two things through
+  from the phone's pre-fetch copy (`typedForms`): the tray/singles split wherever it still adds
+  up to the sheet's total (`keepTypedSplit`, pure, tested), and the EON screen-only boxes
+  (`EON_SCREEN_ONLY`: closing Boli, tomorrow's forecast) — no fetch can speak for those, and
+  blanking them on every unlock mid-close would be a regression. A phone with no copy shows a
+  sheet total as full trays + leftover singles (`countsRowToFields`, owner's choice).
+- **A cleared temperature is a removal, and the Temp Log hears it** (v1.32.0). A box typed in and
+  then emptied keeps its key with `''`; `tempsEntryToPayload` sends those as `removed: [{slot,
+  station, time}]` beside `items`. The script empties the station cell, appends a Log line whose
+  Temp is the word `removed` (the original line is never erased), blanks the Overview row if it
+  was showing that reading, and `recentReadings` skips every earlier entry for that
+  station/date/slot. A removal of something the tab never held is a no-op, so it can ride every
+  save of the day. An old script ignores `removed` (and refuses a removal-only save as empty).
+- **Values are checked, not trusted** (v1.32.0): `validateSave` takes a number (or numeric string)
+  in every column except `TEXT_COLUMNS`, where a string must not start with `= + - @`; the temps
+  script checks station names and clock times the same way. The addresses are public.
+- **A payload that cannot be BUILT parks that record** (`DAMAGED_REASON` in `sync.ts`) instead of
+  throwing out of the flush and stalling every later date.
 
 ## Things a review already found — don't reintroduce them
 
@@ -450,7 +482,7 @@ build less.**
    placeholder, autofill — without the owner asking for it explicitly.
 6. **The closing Boli count stays off the sheet** (Aug 2026). `EON Dough Count` has no Boli column
    and `PM Dough Use` no Boli use, so the EON Boli count is screen-only: it feeds the outlook and
-   the phone, and reloading that date brings it back blank. The owner chose to keep the Dough Log's
+   the phone; it survives re-reads on that phone (v1.32.0) and is blank on any other. The owner chose to keep the Dough Log's
    layout untouched over recording it. Written down in README so it can't surprise anyone.
 3. ~~Sheet columns depending on the tapped batch choice stay blank until a choice is tapped.~~
    SUPERSEDED by #7 — a direction always resolves now, so those columns always fill. What DOES

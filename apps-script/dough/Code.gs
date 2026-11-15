@@ -125,6 +125,10 @@ var NEGATIVE_OK = {};
 NEGATIVE_OK[T_IN] = { 'Sales Left': true };
 NEGATIVE_OK[T_PM] = { 'Sales Left': true };
 
+/** The columns that hold words. Every other column holds a number or nothing. */
+var TEXT_COLUMNS = { 'Bible': true, 'Forecast Rounding': true, 'Batch Rounding': true,
+  'Bible Used': true, 'Ignored': true };
+
 /** Tabs the previous layout used, retired by this one. */
 var RETIRED_TABS = ['Summary', 'Dough Count', 'Sales', 'Use Tonight', 'Left', 'Need Tomorrow',
   'Make', 'Batches', 'Final Dough', 'EON Count', 'EON Check', 'Dough Use',
@@ -343,8 +347,16 @@ function doPost(e) {
     if (body.type === 'bibles') {
       return jsonOut(writeBibles(body));
     }
-    // Erasing is deliberately NOT reachable here: with no key it would be a
-    // delete-everything button on the open internet. It lives in the menu.
+    // The app's two-tap RESET (v1.32.0, owner's choice): take ONE date back
+    // out of the log - a day typed by mistake, or test numbers.
+    if (body.type === 'clear') {
+      var clearDateIso = normalizeDate(body.date);
+      if (!clearDateIso) return jsonOut({ ok: false, error: 'missing or invalid date: ' + body.date });
+      return jsonOut({ ok: true, cleared: clearDateIso, rows: clearDate(clearDateIso) });
+    }
+    // Erasing EVERYTHING is deliberately NOT reachable here: with no key it
+    // would be a delete-everything button on the open internet. It lives in
+    // the menu. One date at a time is as far as the web reaches.
     return jsonOut({ ok: false, error: 'unknown type: ' + body.type });
   } catch (err) {
     // Our own guards refuse terminally; everything else is Google's moment.
@@ -380,9 +392,22 @@ function validateSave(body) {
         return 'unknown column: ' + write.tab + ' -> ' + key;
       }
       var value = write.row[key];
-      if (value !== '' && value !== null) hasContent = true;
+      if (value === '' || value === null) continue;
+      hasContent = true;
+      // The address is public, so what lands in a cell is checked, not
+      // trusted: a number column takes a number and nothing else, and a
+      // words column never takes something Sheets would run as a formula.
+      if (TEXT_COLUMNS[key]) {
+        if (typeof value !== 'string' || /^[=+\-@]/.test(value) || value.length > 200) {
+          return 'not plain words: ' + write.tab + ' -> ' + key;
+        }
+        continue;
+      }
+      var number = typeof value === 'number' ? value
+        : (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)) ? Number(value) : NaN;
+      if (!isFinite(number)) return 'not a number: ' + write.tab + ' -> ' + key;
       var allowNegative = NEGATIVE_OK[write.tab] && NEGATIVE_OK[write.tab][key];
-      if (typeof value === 'number' && value < 0 && !allowNegative) {
+      if (number < 0 && !allowNegative) {
         return 'negative value where it makes no sense: ' + write.tab + ' -> ' + key + ' = ' + value;
       }
     }
@@ -498,6 +523,38 @@ function commitUpsert(prepared) {
   prepared.sheet
     .getRange(prepared.rowIndex, 1, 1, prepared.width)
     .setValues([prepared.values]);
+}
+
+/**
+ * Take one date out of every tab (the app's RESET). Two phases like a save:
+ * every tab's headings are checked before anything is cleared, so a refusal
+ * never leaves the date half-removed. EVERY row carrying the date goes, not
+ * just the first - a duplicate the app could never see is exactly the kind of
+ * leftover this is for. clearContent, not deleteRow: scans skip a blank
+ * column A, appends go after the last DATED row, and the formats stay put.
+ * The use tabs and the fit history are then rebuilt from what is left.
+ */
+function clearDate(date) {
+  var ss = SpreadsheetApp.getActive();
+  var hits = [];
+  Object.keys(TABS).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var headers = TABS[name];
+    var last = sheet.getLastRow();
+    if (last < 1) return;
+    var block = sheet.getRange(1, 1, last, headers.length).getValues();
+    assertHeaders(name, headers, block[0]);
+    for (var i = 1; i < block.length; i++) {
+      if (block[i][0] === '' || block[i][0] === null) continue;
+      if (normalizeDate(block[i][0]) === date) hits.push({ sheet: sheet, row: i + 1, width: headers.length });
+    }
+  });
+  hits.forEach(function (hit) {
+    hit.sheet.getRange(hit.row, 1, 1, hit.width).clearContent();
+  });
+  if (hits.length) refreshBibleBuilds();
+  return hits.length;
 }
 
 /**

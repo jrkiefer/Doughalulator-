@@ -237,10 +237,11 @@ describe('temps mapping', () => {
 describe('reverse mapping (loading)', () => {
   it('a 2 PM row hydrates back into the form — counts land as ball totals', () => {
     const row = dayRecordToTabWrites(dayRecord)[0]!.row;
-    const fields = countsRowToFields(row);
-    // The sheet never knew the tray/singles split, so totals come back as singles.
-    expect(fields.smallSingles).toBe('43');
-    expect(fields.smallTrays).toBe('');
+    const fields = countsRowToFields(row, defaultConfig.ballsPerTray);
+    // The sheet never knew the tray/singles split, so a total comes back the
+    // way a count is read: full trays, then the loose balls (43 Small = 5 × 8 + 3).
+    expect(fields.smallTrays).toBe('5');
+    expect(fields.smallSingles).toBe('3');
     expect(fields.sicSingles).toBe('1');
     expect(salesRowToFields(row)).toEqual({
       todayForecast: '7200', currentSales: '4500', tomorrowForecast: '9100',
@@ -269,8 +270,20 @@ describe('reverse mapping (loading)', () => {
 
   it('an EON row hydrates back through the EON prefix', () => {
     const row = eonRecordToTabWrites(eonRecord)[0]!.row;
-    expect(countsRowToFields(row, 'EON ').largeSingles).toBe('154');
+    const eonFields = countsRowToFields(row, defaultConfig.ballsPerTray, 'EON ');
+    expect([eonFields.largeTrays, eonFields.largeSingles]).toEqual(['25', '4']); // 154 = 25 × 6 + 4
     expect(eonCountRowToFinalSales(row)).toBe('7900');
+  });
+
+  it('a blank count stays blank and an odd one is left alone, never forced into trays', () => {
+    const fields = countsRowToFields(
+      { 'Indi Count': '', 'Small Count': '0', 'Large Count': '12.5', 'Boli Count': '36' },
+      defaultConfig.ballsPerTray,
+    );
+    expect([fields.indiTrays, fields.indiSingles]).toEqual(['', '']);
+    expect([fields.smallTrays, fields.smallSingles]).toEqual(['0', '0']);
+    expect([fields.largeTrays, fields.largeSingles]).toEqual(['', '12.5']);
+    expect([fields.boliTrays, fields.boliSingles]).toEqual(['6', '0']);
   });
 
   it('unknown bible / rounding cells read as nothing rather than guessing', () => {

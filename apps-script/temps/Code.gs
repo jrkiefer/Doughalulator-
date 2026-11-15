@@ -174,10 +174,16 @@ function doPost(e) {
     var log = ss.getSheetByName('Log');
     if (!log) throw refuse('missing tab (run setup): Log');
     checkTabHeaders(log, LOG_HEADERS);
+    var items = body.items || [];
+    // Readings typed and then CLEARED (v1.32.0): the cell is emptied and the
+    // Log says so. A removal of something this notebook never held is a
+    // no-op, so the whole-day payload can carry it on every save.
+    var removed = body.removed || [];
     var stations = {};
-    body.items.forEach(function (item) {
+    items.forEach(function (item) {
       item.readings.forEach(function (r) { stations[r.station] = true; });
     });
+    removed.forEach(function (x) { stations[x.station] = true; });
     Object.keys(stations).forEach(function (station) {
       var sheet = ss.getSheetByName(station);
       if (sheet) checkTabHeaders(sheet, STATION_HEADERS); // unknown station: Log only
@@ -206,14 +212,14 @@ function doPost(e) {
     // 1. Each station tab's row for this date, read ONCE: where it goes, and
     // what it already holds. Nothing is written yet.
     var slotsByStation = {};
-    body.items.forEach(function (item) {
+    items.forEach(function (item) {
       item.readings.forEach(function (r) {
         if (!slotsByStation[r.station]) slotsByStation[r.station] = {};
         slotsByStation[r.station][item.slot] = r.temp;
       });
     });
     var stationRows = {};
-    Object.keys(slotsByStation).forEach(function (station) {
+    Object.keys(stations).forEach(function (station) {
       var sheet = ss.getSheetByName(station);
       if (!sheet) return; // unknown station: Log only
       var rowIndex = findDateRow(sheet, date);
@@ -234,7 +240,7 @@ function doPost(e) {
     // nobody read it at; a resend after a timeout or a page switch did the
     // same. A correction is a change, so it still lands as the newer entry.
     var logRows = [];
-    body.items.forEach(function (item) {
+    items.forEach(function (item) {
       var col = STATION_HEADERS.indexOf(item.slot);
       item.readings.forEach(function (r) {
         saved++;
@@ -243,6 +249,23 @@ function doPost(e) {
         var already = before !== '' && before !== null && Number(before) === r.temp;
         if (!already) logRows.push([date, item.time, item.slot, r.station, r.temp]);
       });
+    });
+    // A removal empties the cell and is LOGGED - the trail never loses the
+    // original line, it gains one saying the reading was taken back and when.
+    // Only when the tab actually holds something there, and never when this
+    // same save also carries a reading for that station and slot.
+    var removals = [];
+    removed.forEach(function (x) {
+      var row = stationRows[x.station];
+      var col = STATION_HEADERS.indexOf(x.slot);
+      if (!row || row.isNew || col < 1) return;
+      if (slotsByStation[x.station] && slotsByStation[x.station][x.slot] !== undefined) return;
+      var before = row.held[col];
+      if (before === '' || before === null) return;
+      row.values[col] = '';
+      row.changed = true;
+      removals.push(x);
+      logRows.push([date, x.time, x.slot, x.station, REMOVED]);
     });
     if (logRows.length) {
       // After the last DATED row, so a stray note cannot open a gap. A
@@ -256,9 +279,12 @@ function doPost(e) {
     // the row read above and write it back in one stroke per station.
     Object.keys(stationRows).forEach(function (station) {
       var row = stationRows[station];
+      // A station that only came along as a removal with nothing to remove
+      // has nothing to write - and must not start a date-only row.
+      if (!slotsByStation[station] && !row.changed) return;
       if (row.isNew) ensureRows(row.sheet, row.rowIndex);
       row.values[0] = date;
-      Object.keys(slotsByStation[station]).forEach(function (slot) {
+      Object.keys(slotsByStation[station] || {}).forEach(function (slot) {
         var col = STATION_HEADERS.indexOf(slot);
         if (col < 1) return; // unknown slot: the Log above still has it
         row.values[col] = slotsByStation[station][slot];
@@ -273,7 +299,17 @@ function doPost(e) {
     if (overview) {
       var block = overview.getRange(2, 2, STATIONS.length, 3).getValues();
       var touched = false;
-      body.items.forEach(function (item) {
+      // A removed reading that the Overview is still showing as the station's
+      // last goes blank: no last reading is truer than a taken-back one.
+      removals.forEach(function (x) {
+        var idx = STATIONS.indexOf(x.station);
+        if (idx === -1) return;
+        if (block[idx][1] === x.slot && String(block[idx][2]).indexOf(date) === 0) {
+          block[idx] = ['', '', ''];
+          touched = true;
+        }
+      });
+      items.forEach(function (item) {
         item.readings.forEach(function (r) {
           var idx = STATIONS.indexOf(r.station);
           if (idx === -1) return;
@@ -284,7 +320,7 @@ function doPost(e) {
       if (touched) overview.getRange(2, 2, STATIONS.length, 3).setValues(block);
     }
 
-    return jsonOut({ ok: true, saved: saved, logged: logRows.length, date: date });
+    return jsonOut({ ok: true, saved: saved, removed: removals.length, logged: logRows.length, date: date });
   } catch (err) {
     // Our own guards refuse terminally; everything else is Google's moment.
     if (err && err.plainRefusal) return jsonOut({ ok: false, error: err.message });
@@ -325,19 +361,40 @@ function wipeAllData() {
 /** Terminal validation. Temps MAY be negative (the freezer) — that is not an error. */
 function validateTemps(body) {
   if (!normalizeDate(body.date)) return 'missing or invalid date: ' + body.date;
-  var items = body.items;
-  if (!items || !items.length) return 'empty save: no readings';
+  var items = body.items || [];
+  var removed = body.removed || [];
+  if (!items.length && !removed.length) return 'empty save: no readings';
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     if (SLOTS.indexOf(item.slot) === -1) return 'unknown slot: ' + item.slot;
+    if (!plainClock(item.time)) return 'not a clock time: ' + item.time;
     if (!item.readings || !item.readings.length) return 'empty save: slot ' + item.slot + ' has no readings';
     for (var r = 0; r < item.readings.length; r++) {
+      if (!plainName(item.readings[r].station)) return 'not a station name: ' + item.readings[r].station;
       if (typeof item.readings[r].temp !== 'number' || !isFinite(item.readings[r].temp)) {
         return 'temperature is not a number: ' + item.readings[r].station;
       }
     }
   }
+  for (var x = 0; x < removed.length; x++) {
+    if (SLOTS.indexOf(removed[x].slot) === -1) return 'unknown slot: ' + removed[x].slot;
+    if (!plainClock(removed[x].time)) return 'not a clock time: ' + removed[x].time;
+    if (!plainName(removed[x].station)) return 'not a station name: ' + removed[x].station;
+  }
   return null;
+}
+
+/**
+ * The address is public, so the two pieces of TEXT a save writes into the Log
+ * are checked, not trusted: a station name is plain words (never something
+ * Sheets would run as a formula) and a time is a clock time.
+ */
+function plainName(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 40 && !/^[=+\-@]/.test(value);
+}
+
+function plainClock(value) {
+  return typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value);
 }
 
 function doGet(e) {
@@ -399,6 +456,9 @@ function doGet(e) {
  */
 var RECENT_WINDOW_ROWS = 250;
 
+/** What the Log's Temp column says for a reading that was taken back. */
+var REMOVED = 'removed';
+
 function recentReadings(n) {
   var count = Math.max(1, Math.min(10, isFinite(n) && n > 0 ? Math.floor(n) : 3));
   var log = SpreadsheetApp.getActive().getSheetByName('Log');
@@ -411,10 +471,17 @@ function recentReadings(n) {
 
   var window = Math.min(last - 1, RECENT_WINDOW_ROWS);
   var rows = log.getRange(last - window + 1, 1, window, LOG_HEADERS.length).getDisplayValues();
+  var takenBack = {};
   for (var i = rows.length - 1; i >= 0; i--) {
     var row = rows[i];
     var station = row[3];
     if (STATIONS.indexOf(station) === -1) continue; // a retired station stays in the Log
+    // A "removed" line takes back every EARLIER entry for that station, date
+    // and slot (walking bottom-up, those are the ones still to come); a
+    // reading typed again AFTER the removal sits below it and was kept.
+    var key = station + '|' + normalizeDate(row[0]) + '|' + row[2];
+    if (row[4] === REMOVED) { takenBack[key] = true; continue; }
+    if (takenBack[key]) continue;
     var temp = Number(row[4]);
     if (row[4] === '' || !isFinite(temp)) continue;
     if (!out[station]) out[station] = [];

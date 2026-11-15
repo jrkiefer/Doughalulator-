@@ -2,6 +2,7 @@
  * Sheet reads for the dough log (saves go through the sync engine). All
  * fetches resolve to explicit results — nothing here throws.
  */
+import { defaultConfig } from '../config';
 import type { BibleSizeKey, Bibles } from '../core/types';
 import { getJson, postJson } from './client';
 import {
@@ -65,11 +66,11 @@ export async function fetchDate(date: string): Promise<FetchDayResult> {
     kind: 'loaded',
     day: {
       sales: day ? salesRowToFields(day) : null,
-      counts: day ? countsRowToFields(day) : null,
+      counts: day ? countsRowToFields(day, defaultConfig.ballsPerTray) : null,
       rounding: day ? summaryRowToRounding(day) : null,
       forecastRound: day ? summaryRowToForecastRounding(day) : null,
       bible: day ? salesRowToBible(day) : null,
-      eonCounts: eon ? countsRowToFields(eon, 'EON ') : null,
+      eonCounts: eon ? countsRowToFields(eon, defaultConfig.ballsPerTray, 'EON ') : null,
       finalSales: eon ? eonCountRowToFinalSales(eon) : null,
     },
   };
@@ -133,6 +134,23 @@ export async function fetchBibleBuild(): Promise<FetchBibleBuildResult> {
 }
 
 /** Mirror the bible tables to the sheet; the script no-ops when the hash is unchanged. Never throws. */
+export type ClearDateResult =
+  | { kind: 'cleared' }
+  | { kind: 'unreachable' }
+  | { kind: 'rejected'; reason: string };
+
+/**
+ * Take one date back out of the Dough Log — the sheet half of RESET. Sent
+ * directly rather than through the sync engine: it is one deliberate tap with
+ * its answer shown on screen, not an edit to be retried in the background.
+ */
+export async function clearDateOnSheet(date: string): Promise<ClearDateResult> {
+  const outcome = await postJson(DOUGH_URL, { type: 'clear', date });
+  if (outcome.kind === 'ok') return { kind: 'cleared' };
+  if (outcome.kind === 'retryable') return { kind: 'unreachable' };
+  return { kind: 'rejected', reason: outcome.reason };
+}
+
 export async function syncBibles(bibles: Bibles): Promise<void> {
   await postJson(DOUGH_URL, {
     ...biblesToPayload(bibles),

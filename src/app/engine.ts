@@ -8,7 +8,7 @@ import { runDoughCalculation, runEonCalculation, selectBibleId } from '../core';
 import type { DoughDayRecord } from '../core/types';
 import { bibles } from '../data/bibles';
 import { emptyEonForm } from '../features/eon/formState';
-import { parseCounts, toNumOrNull } from '../features/shared/counts';
+import { keepTypedSplit, parseCounts, toNumOrNull } from '../features/shared/counts';
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { postJson } from '../services/client';
@@ -67,26 +67,76 @@ export function buildDayRecord(
   );
 }
 
-/** Write a sheet fetch into a date's entry (form-shaped; blanks stay blank). */
-export function applyFetchedToEntry(entry: DateEntry, fetched: FetchedDay, date: string): void {
+/**
+ * Write a sheet fetch into a date's entry (form-shaped; blanks stay blank).
+ * `typed` is the phone's copy from BEFORE the fetch replaced it: where its
+ * trays and singles still add up to the sheet's totals, they are kept as typed.
+ */
+export function applyFetchedToEntry(
+  entry: DateEntry,
+  fetched: FetchedDay,
+  date: string,
+  typed: { day?: Record<string, string>; eon?: Record<string, string> } = {},
+): void {
   const now = Date.now();
+  const bpt = cfg.ballsPerTray;
   const overrideFrom = (bible: FetchedDay['bible']) =>
     bible && bible !== selectBibleId(date, cfg) ? bible : null;
   if (fetched.sales || fetched.counts || fetched.rounding || fetched.forecastRound) {
     entry.day = {
-      form: { ...emptyTwoPmForm, ...(fetched.counts ?? {}), ...(fetched.sales ?? {}) },
+      form: {
+        ...emptyTwoPmForm,
+        ...keepTypedSplit(fetched.counts ?? {}, fetched.counts ? typed.day : undefined, bpt),
+        ...(fetched.sales ?? {}),
+      },
       rounding: fetched.rounding,
       forecastRound: fetched.forecastRound,
       bibleOverride: overrideFrom(fetched.bible),
       ...freshMeta(now),
     };
   }
-  if (fetched.eonCounts || (fetched.finalSales !== null && fetched.finalSales !== '')) {
+  // The EON page's screen-only boxes (the closing Boli count, tomorrow's
+  // forecast) have no column on the sheet, so no fetch can speak for them:
+  // they ride through from the phone's copy. Without this, every re-read —
+  // and since v1.32.0 the app re-reads each time it comes to the front —
+  // would blank them mid-close.
+  const screenOnly: Record<string, string> = {};
+  for (const key of EON_SCREEN_ONLY) {
+    const value = typed.eon?.[key] ?? '';
+    if (value.trim() !== '') screenOnly[key] = value;
+  }
+  const sheetHasEon = !!fetched.eonCounts || (fetched.finalSales !== null && fetched.finalSales !== '');
+  if (sheetHasEon || Object.keys(screenOnly).length > 0) {
     entry.eon = {
-      form: { ...emptyEonForm, ...(fetched.eonCounts ?? {}), finalSales: fetched.finalSales ?? '' },
+      form: {
+        ...emptyEonForm,
+        ...keepTypedSplit(fetched.eonCounts ?? {}, fetched.eonCounts ? typed.eon : undefined, bpt),
+        finalSales: fetched.finalSales ?? '',
+        ...screenOnly,
+      },
       ...freshMeta(now),
     };
   }
+}
+
+/** The EON boxes the sheet has no column for. */
+const EON_SCREEN_ONLY = ['boliTrays', 'boliSingles', 'manualTomorrowForecast'] as const;
+
+/** A fetch that found no row for the date — the sheet's answer is "nothing". */
+export const NOTHING_FETCHED: FetchedDay = {
+  sales: null,
+  counts: null,
+  rounding: null,
+  forecastRound: null,
+  bible: null,
+  eonCounts: null,
+  finalSales: null,
+};
+
+/** The phone's typed forms for a date, read BEFORE a fetch replaces them. */
+export function typedForms(date: string): { day?: Record<string, string>; eon?: Record<string, string> } {
+  const entry = engine.getEntry(date);
+  return { day: entry.day?.form, eon: entry.eon?.form };
 }
 
 export const engine = createSyncEngine({

@@ -1501,3 +1501,141 @@ describe('the sheet edge, columns as well as rows', () => {
     expect(() => sheet.getRange(2, 1, 0, 1)).toThrow();
   });
 });
+
+describe('RESET takes one date out of the Dough Log (v1.32.0)', () => {
+  function realDay(date: string) {
+    const record = runDoughCalculation(
+      {
+        date,
+        counts: counts({ indiTrays: 2, smallTrays: 22, largeTrays: 22, sicSingles: 2, boliTrays: 2 }),
+        todayForecastRaw: 17,
+        currentSalesRaw: 5,
+        tomorrowForecastRaw: 6,
+      },
+      bibles,
+      defaultConfig,
+    );
+    return { type: 'day', date, tabs: dayRecordToTabWrites(record) };
+  }
+
+  it('clears that date from every tab and leaves the other days alone', () => {
+    const script = freshDough();
+    expect(post(script, realDay('2026-11-14')).ok).toBe(true);
+    expect(post(script, realDay('2026-11-15')).ok).toBe(true);
+    const answer = post(script, { type: 'clear', date: '2026-11-15' });
+    expect(answer).toMatchObject({ ok: true, cleared: '2026-11-15', rows: 6 });
+    const gone = get(script, { action: 'date', date: '2026-11-15' }).tabs as Record<string, unknown>;
+    expect(Object.values(gone).every((row) => row === null)).toBe(true);
+    const kept = get(script, { action: 'date', date: '2026-11-14' }).tabs as Record<string, unknown>;
+    expect(kept['2PM Dough Count']).not.toBeNull();
+    expect(kept['Estimated Dough After Gang']).not.toBeNull();
+  });
+
+  it('the cleared date can be typed again and lands as ONE row', () => {
+    const script = freshDough();
+    post(script, realDay('2026-11-15'));
+    post(script, { type: 'clear', date: '2026-11-15' });
+    expect(post(script, realDay('2026-11-15')).ok).toBe(true);
+    expect(script.fns.logProblems()).toEqual([]);
+    const again = get(script, { action: 'date', date: '2026-11-15' }).tabs as Record<string, unknown>;
+    expect(again['2PM Dough Count']).not.toBeNull();
+  });
+
+  it('a date the log never held answers ok with nothing cleared; a bad date is refused', () => {
+    const script = freshDough();
+    expect(post(script, { type: 'clear', date: '2026-11-15' })).toMatchObject({ ok: true, rows: 0 });
+    expect(String(post(script, { type: 'clear', date: 'everything' }).error)).toContain('invalid date');
+  });
+});
+
+describe('a number column takes a number and nothing else (v1.32.0)', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    type: 'day',
+    date: '2026-11-15',
+    tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-11-15', 'Indi Count': 22, ...extra } }],
+  });
+
+  it('refuses words, formulas and lists in a count, and writes nothing', () => {
+    const script = freshDough();
+    for (const bad of ['lots', '=1+1', [1], true, { a: 1 }]) {
+      const answer = post(script, row({ 'Small Count': bad }));
+      expect(answer.ok).toBe(false);
+      expect(String(answer.error)).toContain('not a number');
+    }
+    expect(script.world.ss.getSheetByName('2PM Dough Count')!.getLastRow()).toBe(1);
+  });
+
+  it('refuses a formula in a words column, and still takes the words the app sends', () => {
+    const script = freshDough();
+    expect(String(post(script, row({ Bible: '=IMPORTRANGE("x","y")' })).error)).toContain('not plain words');
+    expect(post(script, row({ Bible: 'peach', 'Batch Rounding': 'down', 'Small Count': '176' })).ok).toBe(true);
+  });
+});
+
+describe('a temperature typed in the wrong box can be taken back (v1.32.0)', () => {
+  const blank = (): TempsEntry => ({
+    readings: { morning: {}, midday: {}, night: {} },
+    times: { morning: '09:00' },
+    updatedAt: 1,
+    syncedAt: 0,
+    ackHash: null,
+    rejectedReason: null,
+  });
+  const send = (script: LoadedScript, entry: TempsEntry) =>
+    post(script, tempsEntryToPayload('2026-11-15', entry, defaultConfig)!);
+
+  it('clears the station cell, logs the removal, and the graph forgets the reading', () => {
+    const script = freshTemps();
+    const entry = blank();
+    entry.readings.morning = { 'Pizza 1': '66', Slice: '36' };
+    expect(send(script, entry).ok).toBe(true);
+
+    entry.readings.morning['Pizza 1'] = ''; // typed in the wrong box, cleared
+    entry.times!.morning = '09:05';
+    expect(send(script, entry)).toMatchObject({ ok: true, removed: 1, logged: 1 });
+
+    const day = get(script, { action: 'day', date: '2026-11-15' }).stations as Record<string, unknown>;
+    expect(JSON.stringify(day['Pizza 1'] ?? {})).not.toContain('66');
+    const log = script.world.ss.getSheetByName('Log')!;
+    expect(log.rowByIndex(2, 5)).toEqual(['2026-11-15', '09:00', 'Morning', 'Pizza 1', '66']); // never erased
+    expect(log.rowByIndex(4, 5)).toEqual(['2026-11-15', '09:05', 'Morning', 'Pizza 1', 'removed']);
+    const recent = get(script, { action: 'recent' }).stations as Record<string, unknown[]>;
+    expect(recent['Pizza 1'] ?? []).toEqual([]);
+    expect(recent.Slice).toHaveLength(1);
+    const latest = get(script, { action: 'latest' }).stations as Record<string, unknown>;
+    expect(JSON.stringify(latest['Pizza 1'] ?? {})).not.toContain('66');
+  });
+
+  it('sending the removal again logs nothing, and a reading typed afterwards counts', () => {
+    const script = freshTemps();
+    const entry = blank();
+    entry.readings.morning = { 'Pizza 1': '66', Slice: '36' };
+    send(script, entry);
+    entry.readings.morning['Pizza 1'] = '';
+    send(script, entry);
+    expect(send(script, entry)).toMatchObject({ ok: true, removed: 0, logged: 0 });
+
+    entry.readings.morning['Pizza 1'] = '37';
+    expect(send(script, entry)).toMatchObject({ ok: true, removed: 0, logged: 1 });
+    const recent = get(script, { action: 'recent' }).stations as Record<string, { temp: number }[]>;
+    expect(recent['Pizza 1']!.map((r) => r.temp)).toEqual([37]);
+  });
+
+  it('a box cleared before anything was ever saved starts no row and logs nothing', () => {
+    const script = freshTemps();
+    const entry = blank();
+    entry.readings.morning = { 'Pizza 1': '' };
+    expect(send(script, entry)).toMatchObject({ ok: true, removed: 0, logged: 0 });
+    expect(script.world.ss.getSheetByName('Pizza 1')!.getLastRow()).toBe(1);
+    expect(script.world.ss.getSheetByName('Log')!.getLastRow()).toBe(1);
+  });
+
+  it('a station name or a time that is not plain text is refused', () => {
+    const script = freshTemps();
+    const item = (station: string, time: string) => ({
+      type: 'temps', date: '2026-11-15', items: [{ time, slot: 'Morning', readings: [{ station, temp: 38 }] }],
+    });
+    expect(String(post(script, item('=HYPERLINK("x")', '09:00')).error)).toContain('not a station name');
+    expect(String(post(script, item('Pizza 1', '=NOW()')).error)).toContain('not a clock time');
+  });
+});

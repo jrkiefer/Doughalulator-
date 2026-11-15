@@ -27,8 +27,25 @@ export function tempsEntryToPayload(
       ? [{ time: single.time, slot: single.slot, readings: single.readings }]
       : [];
   });
-  if (items.length === 0) return null;
-  return { type: 'temps', date, items };
+  // A box typed in and then CLEARED keeps its key with an empty value — that
+  // is a reading taken back, and the Temp Log must hear it or the wrong
+  // number stays on the station tab for good. A box never touched has no key
+  // and sends nothing. The script ignores a removal of something it never
+  // held, so carrying these on every save of the day is harmless.
+  const removed = SLOTS.flatMap((slot) =>
+    config.stations
+      .filter((station) => {
+        const value = entry.readings[slot][station];
+        return value !== undefined && value.trim() === '';
+      })
+      .map((station) => ({
+        slot: config.tempSlots.names[slot],
+        station,
+        time: entry.times?.[slot] ?? '00:00',
+      })),
+  );
+  if (items.length === 0 && removed.length === 0) return null;
+  return removed.length > 0 ? { type: 'temps', date, items, removed } : { type: 'temps', date, items };
 }
 
 /**

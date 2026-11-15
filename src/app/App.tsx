@@ -12,9 +12,17 @@ import { emptyTempReadings, TempsPage, type TempReadings } from '../features/tem
 import type { Rounding } from '../features/twoPm/DaysWork';
 import { emptyTwoPmForm, type TwoPmForm } from '../features/twoPm/formState';
 import { TwoPmPage } from '../features/twoPm/TwoPmPage';
-import { addDays, fetchDate } from '../services/doughService';
+import { addDays, clearDateOnSheet, fetchDate } from '../services/doughService';
 import { KEEP_DAYS, pruneOldDates, sweepStaleKeys, type DateEntry } from '../services/local';
-import { applyFetchedToEntry, buildDayRecord, DOUGH_SHEET_RECORDS, engine, mirrorBibles } from './engine';
+import {
+  applyFetchedToEntry,
+  buildDayRecord,
+  DOUGH_SHEET_RECORDS,
+  engine,
+  mirrorBibles,
+  NOTHING_FETCHED,
+  typedForms,
+} from './engine';
 
 const cfg = defaultConfig;
 
@@ -59,6 +67,10 @@ export default function App() {
   const [resetArmed, setResetArmed] = useState(false);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [, setTick] = useState(0);
+  // Bumped each time the app comes back to the foreground, so the open date
+  // is re-read from the sheet — the other phone may have typed while this one
+  // sat in a pocket.
+  const [returns, setReturns] = useState(0);
   // The date on screen right now, for async work that must not land its
   // answer on a different date from the one it started on.
   const activeDate = useRef(date);
@@ -131,14 +143,18 @@ export default function App() {
       clockDays.current = [day];
       setDate((d) => (d !== day && vouched.includes(d) ? day : d));
     };
+    const onForeground = () => {
+      onReturn();
+      setReturns((n) => n + 1);
+      void engine.flush();
+    };
     // Leaving fires and forgets; coming BACK is the likeliest moment of all for
     // the signal to have returned, so it gets a real flush that can confirm.
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
         void engine.flush({ keepalive: true });
       } else {
-        onReturn();
-        void engine.flush();
+        onForeground();
       }
     };
     const onPageHide = () => void engine.flush({ keepalive: true });
@@ -155,33 +171,53 @@ export default function App() {
     };
   }, [rehydrate]);
 
-  // Behind the instant paint, fetch the date from the sheet and merge.
+  // Behind the instant paint, fetch the date from the sheet and merge — on
+  // every date change, and again each time the app comes back to the front.
   // Short delay first: stepping through days with ◀ ▶ should fetch the day the
   // owner lands on, not every day they pass through.
+  const lastFetchedDate = useRef<string | null>(null);
   useEffect(() => {
     let alive = true;
+    // A re-read on return is quiet: "phone copy kept" on every unlock while a
+    // save is still on its way would be noise about nothing.
+    const quiet = lastFetchedDate.current === date;
+    lastFetchedDate.current = date;
     const seqBefore = engine.changeSeq(date);
     const timer = setTimeout(() => {
       void fetchDate(date).then((result) => {
-        if (!alive || result.kind !== 'loaded') return;
+        if (!alive || (result.kind !== 'loaded' && result.kind !== 'empty')) return;
         // Stale guard: typing during the fetch, OR a save confirmed during it,
         // discards the fetched record. The second matters as much as the
         // first — the sheet may have answered from BEFORE a save that was
         // already in flight, and once that save confirmed, the record looked
         // clean and the older sheet copy replaced the newer numbers.
         if (engine.changeSeq(date) !== seqBefore) return;
+        // The sheet has NO row for this date. A clean phone copy is then a
+        // day that was taken back (RESET on the other phone) and goes too;
+        // anything unsent stays and will be sent.
+        if (result.kind === 'empty') {
+          const held = engine.getEntry(date);
+          if (!held.day && !held.eon) return;
+          const kept = typedForms(date);
+          const cleared = engine.applyFetched(date, DOUGH_SHEET_RECORDS, (entry) =>
+            applyFetchedToEntry(entry, NOTHING_FETCHED, date, kept),
+          );
+          if (cleared === 'replaced') rehydrate(date);
+          return;
+        }
+        const typed = typedForms(date);
         const applied = engine.applyFetched(date, DOUGH_SHEET_RECORDS, (entry) =>
-          applyFetchedToEntry(entry, result.day, date),
+          applyFetchedToEntry(entry, result.day, date, typed),
         );
         if (applied === 'replaced') rehydrate(date);
-        else setLoadMsg('Phone copy kept — tap LOAD FROM SHEET to pull the sheet.');
+        else if (!quiet) setLoadMsg('Phone copy kept — tap LOAD FROM SHEET to pull the sheet.');
       });
     }, 250);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [date, rehydrate]);
+  }, [date, returns, rehydrate]);
 
   const record = useMemo(
     () => buildDayRecord(date, form, rounding, bibleOverride, forecastRound),
@@ -289,8 +325,9 @@ export default function App() {
     // rounding was once missing from this list, so a tap made on the other
     // phone could not be loaded — the two phones then resolved the same
     // night in opposite directions.
+    const typed = typedForms(date);
     const probe: DateEntry = {};
-    applyFetchedToEntry(probe, result.day, date);
+    applyFetchedToEntry(probe, result.day, date, typed);
     const same =
       JSON.stringify({
         form: { ...emptyTwoPmForm, ...(probe.day?.form ?? {}) },
@@ -302,7 +339,9 @@ export default function App() {
       JSON.stringify({ form, rounding, forecastRound, bible: bibleOverride ?? null, eon: eonForm });
     if (same) return setLoadMsg('Up to date ✓');
 
-    engine.overwrite(date, DOUGH_SHEET_RECORDS, (entry) => applyFetchedToEntry(entry, result.day, date));
+    engine.overwrite(date, DOUGH_SHEET_RECORDS, (entry) =>
+      applyFetchedToEntry(entry, result.day, date, typed),
+    );
     rehydrate(date);
     setLoadMsg('Loaded from the sheet ✓');
   }
@@ -316,7 +355,21 @@ export default function App() {
     setResetArmed(false);
     engine.reset(date);
     rehydrate(date);
-    setLoadMsg('');
+    // RESET takes the date out of the Dough Log too (owner's choice, v1.32.0)
+    // — before this the sheet kept the numbers and handed them straight back
+    // on the next visit, so a day typed by mistake could not be undone from
+    // the app at all. Temperatures are a food-safety record in the other
+    // notebook and are never erased from here.
+    setLoadMsg('Cleared on this phone — clearing the sheet…');
+    void clearDateOnSheet(date).then((result) => {
+      if (activeDate.current !== date) return;
+      if (result.kind === 'cleared') setLoadMsg('Cleared on this phone and in the sheet ✓');
+      else if (result.kind === 'unreachable') {
+        setLoadMsg("Cleared on this phone, but couldn't reach the sheet — its copy is still there. Tap RESET again when you have signal.");
+      } else if (/unknown type/.test(result.reason)) {
+        setLoadMsg('Cleared on this phone. The Dough Log needs its 1.32.0 update before RESET can clear the sheet too.');
+      } else setLoadMsg(`Cleared on this phone, but the sheet said no: ${result.reason}`);
+    });
   }
 
   return (

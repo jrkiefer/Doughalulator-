@@ -673,3 +673,24 @@ describe('per-record status — a screen speaks only for what it edits', () => {
     expect(world.engine.recordStatus(D, 'day').state).toBe('new');
   });
 });
+
+describe('one damaged date cannot stall the rest (v1.32.0)', () => {
+  it('parks the record that cannot be built and still sends the others', async () => {
+    const world = makeWorld();
+    const build = world.deps.buildPayload.bind(world.deps);
+    world.deps.buildPayload = (type, date, entry) => {
+      if (date === '2026-07-30') throw new Error('malformed cache');
+      return build(type, date, entry);
+    };
+    world.engine.edit('2026-07-30', 'day', (rec) => {
+      rec.form = { ...rec.form, todayForecast: '8' };
+    });
+    typeSales(world);
+    await world.engine.flush();
+    await settle();
+    expect(world.posts.map((p) => (p.payload as { date: string }).date)).toEqual([D]);
+    expect(world.engine.status(D).state).toBe('synced');
+    expect(world.engine.status('2026-07-30')).toMatchObject({ state: 'rejected' });
+    expect(world.engine.status('2026-07-30').reason).toContain('RESET');
+  });
+});

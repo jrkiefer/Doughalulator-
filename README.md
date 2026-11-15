@@ -77,11 +77,15 @@ code comes from the `apps-script/` folder in here.
 - **There are no passwords**, and since August 2026 the two web addresses are **built into the app**
   rather than typed into it. That is why a new or wiped phone now just works. The trade you chose
   knowingly: those addresses are published in the app's code, so anyone who goes looking could read
-  your recorded nights or write junk rows into them. Nobody can erase anything — see below.
-- Because of that, **nothing destructive is reachable over the web**. Erasing a log is the
+  your recorded nights or write junk rows into them. Nobody can erase a whole log — see below.
+- Because of that, **erasing a log is not reachable over the web**. It is the
   **Erase all data** item in the spreadsheet's own menu (**Dough Tools** / **Temp Tools**), which
   asks before it acts. A test in this repo checks that the scripts refuse an erase sent over the
-  internet.
+  internet. **One exception, chosen in November 2026:** the app's two-tap **RESET** takes the open
+  date — one day — out of the Dough Log, so a day typed by mistake can be undone from the phone.
+  That means someone holding the address could clear days one at a time; the log's own version
+  history (File → Version history) is the way back if that ever happens. Temperatures are never
+  erased this way.
 - Each script is **deployed as a web app** (Deploy → Manage deployments) with "Execute as: **Me**"
   and "Access: **Anyone**". That is what produces the two long `/exec` addresses.
 - The `setup()` function inside each script builds any missing tabs. It is safe to run again
@@ -139,8 +143,8 @@ it holds no formulas, so nothing in it can break.
 - A night whose end-of-night sales came in below the 2 PM figure has no takings since 2 PM to
   measure against: its PM row still shows the dough and says *no takings*.
 - **The closing Boli count is on screen only.** The end-of-night page asks for it and the outlook
-  card uses it, but `EON Dough Count` has no Boli column, so it is never written down and comes
-  back blank if you reload that date. That is deliberate — it keeps your Dough Log's layout exactly
+  card uses it, but `EON Dough Count` has no Boli column, so it is never written down: it stays
+  on the phone that typed it and is blank on any other. That is deliberate — it keeps your Dough Log's layout exactly
   as you built it. Say the word and it can be recorded instead.
 
 ### The old tracker's history is in there too
@@ -148,8 +152,8 @@ it holds no formulas, so nothing in it can break.
 In August 2026 the previous tracking spreadsheets were replayed into the Dough Log through the real
 calculation engine, so past dates are filled in. Things worth knowing:
 
-- Old counts were whole-ball totals, so they land in the Singles/Have columns with Trays blank —
-  faithful, not a bug.
+- Old counts were whole-ball totals, so the app shows them as full trays plus the loose balls
+  left over — the sheet never knew how they were actually stacked.
 - Some early dates carry no Final Dough row: the real post-make figure was never recorded then, and
   inventing one would corrupt the dough-use maths.
 - Days missing a final sales figure or a 2 PM record were left out on purpose. If those numbers
@@ -271,6 +275,7 @@ All four must pass before a push — they are the same four the robot runs.
 
 | | |
 | --- | --- |
+| **1.32.0** | Six holes closed, found by testing the app against a stand-in sheet. **RESET now clears the sheet too:** tapping RESET twice takes the open date out of the Dough Log as well as off the phone, and tells you so — before, the sheet kept the numbers and handed them straight back, so a day typed by mistake could not be undone from the app. (Temperatures are never erased this way.) **Your trays stay your trays:** the sheet only stores ball totals, so reopening the app used to turn "22 trays" into "176 singles". The phone that typed a count now keeps it exactly as typed; another phone shows full trays plus the leftover balls. **The other phone's numbers show up:** the open date is re-read from the sheet every time you come back to the app, never over something you haven't sent yet — and the end-of-night Boli count and tomorrow's forecast now survive that re-read. **A temperature in the wrong box can be taken back:** clear the box and the station's cell empties, and the Log gains a line saying the reading was removed and when (nothing in the Log is ever erased). **One damaged day can't hold up the rest**, and **the notebooks refuse anything that isn't a number in a number column.** **This one needs both notebooks updated** — until then the app works as before, RESET just says the Dough Log needs its update: in each sheet → Extensions → Apps Script → paste in the new `Code.gs` (`apps-script/dough/` for the Dough Log, `apps-script/temps/` for the Temp Log) → Save → Deploy → Manage deployments → pencil → *New version* → Deploy — the **existing** deployment, so the address stays the same. |
 | **1.31.1** | A tidy-up of the count cards. On **Current Dough Counts** the TRAYS and SINGLES labels now sit right on their boxes, the Sicilian card drops its "balls only" and "BALLS" wording (the box speaks for itself), and Boli reads *6 / tray · target 36* so the tray size leads like every other card. The little *saved* tag moved to the bottom edge of each count box so it no longer needs a gap under the label. On **By Size**, the set-out box says **Indi**, the same name the table uses. Behind the scenes a few unused bits of code were cleared out — nothing about the numbers or the sheets changed, and neither notebook needs updating. |
 | **1.31.0** | Fixes from a full review of the app. **A busy lunch no longer loses the 2 PM save:** when sales by 2 PM were already past the day's forecast, the Dough Log refused the whole save (counts, make and all) — it now accepts it. **The Temp Log stops repeating itself:** every save carries the whole day, and the Log used to write all of it down again each time, so 16 readings came out as 136 rows with clock times nobody read them at, which also muddled the temp graph. Now each reading is written once, and a correction still shows as a new line. Rows already repeated stay where they are (the Log is never edited); the graph clears itself as new readings come in. **End-of-night saves won't get stuck on "OFFLINE — WILL RETRY":** the new-bible stats block runs past column Z, which a fresh Google tab doesn't have, so the notebook now adds the columns it needs. **Your numbers can't be swapped back for older ones:** if the app fetched a day from the sheet while one of your saves was still on its way, the older copy could replace what you'd typed — it now throws that fetch away. **Coming back to the app on a new day** moves it to today and to the right temperature slot (never before 5 AM, never a date you picked yourself) — before, a phone left open could file today's numbers under yesterday or 2 PM temps under Morning. Smaller things: each page's *saved* tags speak only for that page; the EON tomorrow-forecast box can be cleared and retyped (the 2 PM figure shows faintly until you do); a night under 11 trays says *one-batch minimum* instead of *rounded up* under a lit Round down; LOAD FROM SHEET can't paint one date's numbers onto another; the history importer now keeps your recorded after-gang figures; and code that 1.30.0 left unused is gone (nothing sent to the sheets changed — checked byte for byte). **This one needs both notebooks updated**, same dance as before, in each: open the sheet → Extensions → Apps Script → paste in the new `Code.gs` (`apps-script/dough/` for the Dough Log, `apps-script/temps/` for the Temp Log) → Save → Deploy → Manage deployments → pencil → *New version* → Deploy — the **existing** deployment, so the address stays the same. Then in the Dough Log, **Dough Tools → Refresh new-bible suggestions** once (and if you never did the 1.30.0 steps, **Dough Tools → Re-run setup** first). |
 | **1.30.0** | The Dough Log gained an **All Day Dough Use** page, and the notebook now fills it and the **AM** and **PM** pages itself after every close, for every night on record, straight from the counts — so a morning no longer goes missing when the close was typed on one phone and the 2 PM count on another. Each row has an **Ignored** column that says in words what that night could not teach and why (a day after a closed day, no after-gang figure, no takings, a size not counted, a count that rose overnight, or a night far outside the usual dough-per-dollar). The **new bible now learns from all three pages together** — every morning, night and whole day is its own point — and skips the outliers and the miscounts. On the regular bible that took the Small line from a nonsense downward slope to within 2% of the hand bible, and gave every size twenty-odd points where it had four or five. Half-day points pull the very low end of a line down a little (peach Indi reads 10 at $3,000 against the book's 20); the graph shows exactly that gap and is otherwise unchanged. **This one needs the one-off update inside the Dough Log**, in this order: open the sheet → Extensions → Apps Script → paste in the new `Code.gs` → Save; back in the sheet, **Dough Tools → Re-run setup** (adds the All Day page and the Ignored headings), then **Dough Tools → Refresh new-bible suggestions** (fills the three pages for every recorded night); then Deploy → Manage deployments → pencil → *New version* → Deploy — the **existing** deployment, so the address stays the same. |

@@ -149,6 +149,10 @@ function metaOf(entry: DateEntry, type: RecordType): SyncMeta | undefined {
   return entry[type];
 }
 
+/** Shown when a date's phone copy cannot be turned into a save at all. */
+export const DAMAGED_REASON =
+  "this date's copy on the phone is damaged and can't be sent — tap RESET on this date, then LOAD FROM SHEET";
+
 export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine {
   const memory = new Map<string, DateEntry>();
   const phoneFailed = new Set<string>(); // `${date}` whose last phone write failed
@@ -303,7 +307,18 @@ export function createSyncEngine(deps: SyncDeps, debounceMs = 1000): SyncEngine 
         if (!rec || !isDirtyRecord(rec)) continue;
 
         const editStamp = rec.updatedAt;
-        const payload = deps.buildPayload(type, date, entry);
+        let payload: object | null;
+        try {
+          payload = deps.buildPayload(type, date, entry);
+        } catch {
+          // A saved copy too damaged to build a save from. Park THIS record
+          // with words the owner can act on; without this the throw escaped
+          // the flush and every later date waited behind it for ever.
+          rec.rejectedReason = DAMAGED_REASON;
+          persist(date);
+          notify();
+          continue;
+        }
         if (payload === null) {
           // Nothing worth sending — an empty record is clean by definition.
           rec.syncedAt = editStamp;

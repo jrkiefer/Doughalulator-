@@ -280,22 +280,37 @@ function cell(row: SheetRow, key: string): string {
 }
 
 /**
- * The count tabs hold whole-ball totals per size, so a loaded row comes back
- * in the Singles fields with Trays blank. That is faithful — the sheet never
- * knew the tray/singles split — and the totals are what the math uses.
+ * The count tabs hold whole-ball totals per size — the sheet never knew the
+ * tray/singles split — so a loaded total is shown the way a count is normally
+ * read: full trays, then the loose balls left over (176 Small → 22 trays, 0
+ * singles). Sicilian is balls only. A total that is not a whole number stays
+ * in Singles untouched rather than being forced into trays.
  */
-export function countsRowToFields(row: SheetRow, prefix = ''): Record<string, string> {
-  const count = (size: string) => cell(row, `${prefix}${size} Count`);
+export function countsRowToFields(
+  row: SheetRow,
+  ballsPerTray: { indi: number; small: number; large: number; boli: number },
+  prefix = '',
+): Record<string, string> {
+  const split = (size: string, perTray: number): [string, string] => {
+    const text = cell(row, `${prefix}${size} Count`).trim();
+    if (!/^\d+$/.test(text)) return ['', text];
+    const total = Number(text);
+    return [String(Math.floor(total / perTray)), String(total % perTray)];
+  };
+  const [indiTrays, indiSingles] = split('Indi', ballsPerTray.indi);
+  const [smallTrays, smallSingles] = split('Small', ballsPerTray.small);
+  const [largeTrays, largeSingles] = split('Large', ballsPerTray.large);
+  const [boliTrays, boliSingles] = split('Boli', ballsPerTray.boli);
   return {
-    indiTrays: '',
-    indiSingles: count('Indi'),
-    smallTrays: '',
-    smallSingles: count('Small'),
-    largeTrays: '',
-    largeSingles: count('Large'),
-    sicSingles: count('Sic'),
-    boliTrays: '',
-    boliSingles: count('Boli'),
+    indiTrays,
+    indiSingles,
+    smallTrays,
+    smallSingles,
+    largeTrays,
+    largeSingles,
+    sicSingles: cell(row, `${prefix}Sic Count`),
+    boliTrays,
+    boliSingles,
   };
 }
 
