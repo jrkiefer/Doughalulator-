@@ -19,7 +19,7 @@ import { SectionHead } from '../shell/SectionHead';
 import { trayPlan } from './trayPlan';
 
 const ROWS: { key: BibleSizeKey; name: string; label: string; color: string }[] = [
-  { key: 'indi', name: 'INDI', label: 'Individual', color: 'var(--indi)' },
+  { key: 'indi', name: 'INDI', label: 'Indi', color: 'var(--indi)' },
   { key: 'small', name: 'SM', label: 'Small', color: 'var(--small)' },
   { key: 'large', name: 'LG', label: 'Large', color: 'var(--large)' },
   // Sicilian is never set out — kept here only so every row has the same shape.

@@ -7,7 +7,7 @@
  * (blank = auto), never the direction the night resolved to.
  */
 import type { AppConfig } from '../config';
-import type { Bibles, CountedInventory, DoughDayRecord, EonRecord, Maybe } from '../core/types';
+import type { Bibles, DoughDayRecord, EonRecord, Maybe } from '../core/types';
 
 /** One tab's worth of a save: the row is merged into the tab by Date. */
 export interface TabWrite {
@@ -23,10 +23,10 @@ function cellOf(value: Maybe): string | number {
 /** The tabs the app writes. It works out every number in them. */
 export const DAY_TAB = '2PM Dough Count';
 export const EON_TAB = 'EON Dough Count';
-export const PM_LOOKUP_TAB = 'Look up Dough Use for PM';
-export const TOMORROW_LOOKUP_TAB = 'Look up Dough Use Tomorrow';
-export const MAKE_TAB = 'Dough Make (estimate)';
-export const FINAL_MAKE_TAB = 'Final Make Amount';
+const PM_LOOKUP_TAB = 'Look up Dough Use for PM';
+const TOMORROW_LOOKUP_TAB = 'Look up Dough Use Tomorrow';
+const MAKE_TAB = 'Dough Make (estimate)';
+const FINAL_MAKE_TAB = 'Final Make Amount';
 export const AFTER_TAB = 'Estimated Dough After Gang';
 // The three use tabs (AM, PM, All Day) and the two New Bieblerb tabs are the
 // Dough Log's own: its script derives every night's use from the recorded
@@ -358,5 +358,3 @@ export function summaryRowsToHistory(
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
-
-export type { CountedInventory };

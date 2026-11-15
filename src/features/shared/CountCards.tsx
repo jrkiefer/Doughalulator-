@@ -9,6 +9,7 @@ type CountKey = keyof CountsFields;
 
 function CountField(props: {
   label: string;
+  hideLabel?: boolean;
   formKey: CountKey;
   fields: CountsFields;
   onChange: (patch: Partial<CountsFields>) => void;
@@ -17,7 +18,12 @@ function CountField(props: {
   const value = props.fields[props.formKey];
   return (
     <div className="fld">
-      <span className="micro">{props.label}</span>
+      {/* `hideLabel` keeps the line (so the box stays level with its
+          neighbours' boxes) but shows no word; the field is still named for
+          a screen reader. */}
+      <span className="micro" aria-hidden={props.hideLabel}>
+        {props.hideLabel ? '\u00a0' : props.label}
+      </span>
       <div className="input-wrap">
         <input
           className="input"
@@ -85,16 +91,16 @@ export function CountCards(props: {
         {card(
           'var(--sic)',
           'Sicilian',
-          'balls only',
+          '',
           <div className="fields single">
-            <CountField label="BALLS" formKey="sicSingles" fields={fields} onChange={onChange} synced={synced} />
+            <CountField label="Sicilian balls" hideLabel formKey="sicSingles" fields={fields} onChange={onChange} synced={synced} />
           </div>,
           have.sic,
         )}
         {card(
           'var(--boli)',
           'Boli Dough',
-          `target ${cfg.boliTargetTrays * bpt.boli} · ${bpt.boli} / tray`,
+          `${bpt.boli} / tray · target ${cfg.boliTargetTrays * bpt.boli}`,
           pair('boliTrays', 'boliSingles'),
           have.boli,
           true,

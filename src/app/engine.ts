@@ -35,7 +35,7 @@ const cfg = defaultConfig;
 export const DOUGH_SHEET_RECORDS = ['day', 'eon'] as const satisfies readonly RecordType[];
 
 /** A record worth sending: at least one field the owner actually filled in. */
-export function formHasContent(form: Record<string, string>): boolean {
+function formHasContent(form: Record<string, string>): boolean {
   return Object.values(form).some((v) => v.trim() !== '');
 }
 

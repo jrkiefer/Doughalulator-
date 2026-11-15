@@ -5,17 +5,9 @@
  * to the ball.
  */
 export { normalizeSales } from './sales';
-export {
-  selectBibleId,
-  getBible,
-  lookupBibleRow,
-  rowToNeeds,
-  isSlowDay,
-  resolveForecastRound,
-} from './bible';
-export { computeHave, computeCountedSizes } from './counting';
-export { traysForNeeds, batchesForNeeds, perTraySizes } from './bibleCompare';
-export { runDoughCalculation, buildBatchOption, splitTrayDelta } from './dough';
+export { selectBibleId, lookupBibleRow } from './bible';
+export { batchesForNeeds } from './bibleCompare';
+export { runDoughCalculation } from './dough';
 export { runEonCalculation } from './eon';
 export { slotForTime, type TempSlot } from './tempSlots';
 export type * from './types';

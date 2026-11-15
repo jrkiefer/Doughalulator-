@@ -592,16 +592,23 @@ button:focus-visible {
   grid-template-columns: 1fr;
 }
 
-/* The gap is what keeps the saved chip — which straddles the field's top edge —
-   off this label on a narrow phone, where the field is barely wider than the chip. */
+/* The label sits right on its box. The saved chip straddles a field's top
+   edge everywhere else, which here would land on the label (the field is
+   barely wider than the chip on a narrow phone) — so in these cards it drops
+   to the field's bottom edge instead. */
 .count-card .fld .micro {
   display: block;
   font-size: 9px;
-  margin-bottom: 11px;
+  margin-bottom: 3px;
+}
+
+.count-card .chip {
+  top: auto;
+  bottom: -7px;
 }
 
 .count-card .balls {
-  margin-top: 6px;
+  margin-top: 11px; /* clears the saved chip hanging off the field above */
   text-align: right;
   font-family: var(--font-mono);
   font-size: 11px;
