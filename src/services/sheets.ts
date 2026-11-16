@@ -15,10 +15,13 @@
  *
  * If an address ever does change — creating a NEW deployment gives a new /exec
  * address, while updating an existing one keeps it — change it here and push.
+ * It did once (Nov 2026): the Dough Log got a new deployment and the old ones
+ * were archived, which switches an address OFF (it answers 404). ARCHIVING THE
+ * DEPLOYMENT THE APP USES TAKES THE APP OFF THE SHEET until this file follows.
  */
 
 export const DOUGH_URL =
-  'https://script.google.com/macros/s/AKfycby2yBi1FEYabzAatB2Mz2UxPpyQNBUtoOMAsOO8Wgvx6sXYH5BYaE3AgmfTfrLQMzd8/exec';
+  'https://script.google.com/macros/s/AKfycbyW-cGGNrm8YzfbsyAvDTscDmHfXPX9NTrwqiBy50yQW9shWSXUexCpFsd4lvhMRA1K/exec';
 
 export const TEMPS_URL =
   'https://script.google.com/macros/s/AKfycbwb9KWYG-2QSUYqL8hwiIVPMf7PJQdoFUmtJmlMBsu0kJLWhcXjuLAT9TSxTFbqp7SK/exec';
