@@ -60,6 +60,8 @@ interface HistoryEntry {
     batchesMade: number;
     bible: BibleId;
     batchRounding: 'down' | 'up' | null;
+    /** A forecast rounding the night's record carries as TAPPED; absent = auto. */
+    forecastRounding?: 'down' | 'up' | null;
   };
   finalDough?: Sizes;
   finalDoughUnrecorded?: boolean;
@@ -115,6 +117,9 @@ function buildDay(date: string, e: HistoryEntry): { record: DoughDayRecord; payl
     currentSalesRaw: toNumOrNull(form.currentSales),
     tomorrowForecastRaw: toNumOrNull(form.tomorrowForecast),
     bibleOverride: t.bible,
+    // A tapped forecast rounding moves the bible row, and with it every tray
+    // the batch count is judged on — it goes in exactly as it was recorded.
+    forecastRound: t.forecastRounding ?? null,
   };
   const base = runDoughCalculation(inputs, bibles, cfg);
   // The recorded rounding note wins; otherwise recover the choice from which

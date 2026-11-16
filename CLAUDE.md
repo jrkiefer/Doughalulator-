@@ -321,7 +321,12 @@ build less.**
   `finalDough` is written as the after-gang row; `finalDoughUnrecorded` writes an all-BLANK row
   (clears an invented figure, never creates one). Since 1.30.0 the after-gang figure feeds the
   PM and All Day points, so an engine-invented one would poison the self-building bible on a
-  re-run. Run it with `npx tsx` (vite-node no longer ships with Vitest).
+  re-run. Run it with `npx tsx` (vite-node no longer ships with Vitest). A history entry may
+  carry `forecastRounding` (v1.32.1) — the night's TAPPED forecast direction, passed to the engine
+  as `forecastRound`; without it an imported night could land on a different bible row than it
+  used. In the old system's workbook an EON Sales of 0 means "not recorded" (blank), and its
+  "Final Dough Amount at 2pm" is count + exact balls needed, NOT whole trays — an estimate, so
+  the owner chose the engine's whole-tray after-gang figure for imported nights (Nov 2026).
 
 - **The two 2 PM cards must read their trays from ONE place** (`twoPm/trayPlan.ts`, pure and
   tested). They worked it out separately once and drifted: the Day's Work pills showed the trays
