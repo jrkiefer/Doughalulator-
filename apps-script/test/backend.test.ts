@@ -1793,7 +1793,7 @@ describe('Google shows the heading "2 PM" as "2:00 PM" (v1.33.3)', () => {
 
   it('a heading that really HAS moved is still refused', () => {
     const script = freshTemps();
-    script.world.ss.getSheetByName('Pizza 1')!.getRange(1, 3).setValue('Lunch');
+    script.world.ss.getSheetByName('Pizza 1')!.setCell(1, 3, 'Lunch');
     const answer = post(script, {
       type: 'temps', date: '2026-11-17',
       items: [{ time: '14:05', slot: '2 PM', readings: [{ station: 'Pizza 1', temp: 38 }] }],
