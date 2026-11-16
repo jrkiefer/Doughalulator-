@@ -1028,7 +1028,9 @@ describe("temps script — the graph's last-few readings per station", () => {
     // Three each — and they are the LAST day's three slots, in taken order.
     expect(out['Pizza 1']).toEqual([
       { date: '2026-08-16', time: '08:30', slot: 'Morning', temp: 38 },
-      { date: '2026-08-16', time: '14:05', slot: '2 PM', temp: 39 },
+      // Read back the way Google SHOWS the slot it was sent as "2 PM" — the app's
+      // normalizeSlot() turns it back.
+      { date: '2026-08-16', time: '14:05', slot: '2:00 PM', temp: 39 },
       { date: '2026-08-16', time: '21:15', slot: 'Night', temp: 40 },
     ]);
     // The freezer's readings stay below zero — never clamped or dropped.
@@ -1061,7 +1063,7 @@ describe("temps script — the graph's last-few readings per station", () => {
     });
     const out = recent(script);
     expect(out.Slice!.map((r) => r.temp)).toEqual([37, 38, 39]);
-    expect(out.Slice![2]).toMatchObject({ slot: '2 PM', time: '21:40' });
+    expect(out.Slice![2]).toMatchObject({ slot: '2:00 PM', time: '21:40' });
   });
 
   it('asks for more with n, capped sanely', () => {
@@ -1458,7 +1460,7 @@ describe('the temp Log records each reading once', () => {
     expect(log.getLastRow() - 1).toBe(16);
     // Each reading is logged once, at the time it was typed.
     expect(log.rowByIndex(2, 5)).toEqual(['2026-10-13', '09:00', 'Morning', 'Pizza 1', '34']);
-    expect(log.rowByIndex(10, 5)).toEqual(['2026-10-13', '14:00', '2 PM', 'Pizza 1', '36']);
+    expect(log.rowByIndex(10, 5)).toEqual(['2026-10-13', '14:00', '2:00 PM', 'Pizza 1', '36']);
   });
 
   it('the same day sent again logs nothing new and still answers ok', () => {
@@ -1473,7 +1475,7 @@ describe('the temp Log records each reading once', () => {
     const script = freshTemps();
     typeDay(script, ['morning', 'midday']);
     const slice = (get(script, { action: 'recent' }).stations as Record<string, { slot: string }[]>).Slice!;
-    expect(slice.map((r) => r.slot)).toEqual(['Morning', '2 PM']);
+    expect(slice.map((r) => r.slot)).toEqual(['Morning', '2:00 PM']);
   });
 });
 
@@ -1766,5 +1768,53 @@ describe("the line's height comes from the totals (v1.33.0)", () => {
     expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe(''); // New Indi
     const rows = (get(script, { action: 'bibles' }).bibles as { dough: { new: { indi: number | null } }[] }).dough;
     expect(rows[0]!.new.indi).toBeNull();
+  });
+});
+
+describe('Google shows the heading "2 PM" as "2:00 PM" (v1.33.3)', () => {
+  // setup() writes the slot name "2 PM" as a heading; Google reads that as a
+  // time of day and shows "2:00 PM". The heading check compared what the cell
+  // SHOWS with what was written, so on the real sheet it refused every
+  // temperature save - straight after the setup that had written the heading.
+  it('a tab straight out of setup accepts a 2 PM reading, and Re-run setup changes nothing', () => {
+    const script = freshTemps();
+    const pizza = script.world.ss.getSheetByName('Pizza 1')!;
+    expect(pizza.headerRow(4)).toEqual(['Date', 'Morning', '2:00 PM', 'Night']); // as Google shows it
+    const save = {
+      type: 'temps', date: '2026-11-17',
+      items: [{ time: '14:05', slot: '2 PM', readings: [{ station: 'Pizza 1', temp: 38 }] }],
+    };
+    expect(post(script, save)).toMatchObject({ ok: true, saved: 1, logged: 1 });
+    script.fns.setup();
+    expect(post(script, save)).toMatchObject({ ok: true, saved: 1, logged: 0 });
+    const day = get(script, { action: 'day', date: '2026-11-17' }).stations as Record<string, Record<string, string>>;
+    expect(day['Pizza 1']!['2 PM']).toBe('38');
+  });
+
+  it('a heading that really HAS moved is still refused', () => {
+    const script = freshTemps();
+    script.world.ss.getSheetByName('Pizza 1')!.getRange(1, 3).setValue('Lunch');
+    const answer = post(script, {
+      type: 'temps', date: '2026-11-17',
+      items: [{ time: '14:05', slot: '2 PM', readings: [{ station: 'Pizza 1', temp: 38 }] }],
+    });
+    expect(answer.ok).toBe(false);
+    expect(String(answer.error)).toContain('should say "2 PM"');
+  });
+
+  it('taking back a 2 PM reading blanks the Overview row that was showing it', () => {
+    const script = freshTemps();
+    post(script, {
+      type: 'temps', date: '2026-11-17',
+      items: [{ time: '14:05', slot: '2 PM', readings: [{ station: 'Slice', temp: 61 }] }],
+    });
+    const before = get(script, { action: 'latest' }).stations as Record<string, { temp: string }>;
+    expect(before.Slice!.temp).toBe('61');
+    expect(post(script, {
+      type: 'temps', date: '2026-11-17', items: [],
+      removed: [{ slot: '2 PM', station: 'Slice', time: '14:09' }],
+    })).toMatchObject({ ok: true, removed: 1 });
+    const after = get(script, { action: 'latest' }).stations as Record<string, { temp: string }>;
+    expect(JSON.stringify(after.Slice ?? {})).not.toContain('61');
   });
 });

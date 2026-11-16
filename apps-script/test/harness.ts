@@ -33,8 +33,35 @@ export function renderInSheetZone(value: Date, shiftHours: number): string {
  */
 function display(value: Cell, shiftHours = 0): string {
   if (value === '') return '';
-  if (value instanceof Date) return renderInSheetZone(value, shiftHours);
+  if (value instanceof Date) return isClockTime(value) ? renderClockTime(value) : renderInSheetZone(value, shiftHours);
   return String(value);
+}
+
+/**
+ * Sheets reads the TEXT "2 PM" as a time of day: it stores a time (a Date on
+ * the spreadsheet epoch, 30 Dec 1899) and SHOWS it as "2:00 PM". That is true
+ * of a heading as much as of a data cell. The Temp Log writes the slot name
+ * "2 PM" as a heading, a Log entry and an Overview cell, so anything comparing
+ * what a cell shows against the text it wrote meets this — and a heading
+ * check that did not know it once refused every temperature save on the real
+ * sheet while passing here.
+ */
+const CLOCK_TEXT = /^(\d{1,2}) (AM|PM)$/;
+
+function clockTime(text: string): Date {
+  const m = CLOCK_TEXT.exec(text)!;
+  const hour = (Number(m[1]) % 12) + (m[2] === 'PM' ? 12 : 0);
+  return new Date(Date.UTC(1899, 11, 30, hour, 0));
+}
+
+function isClockTime(value: Date): boolean {
+  return value.getUTCFullYear() === 1899;
+}
+
+function renderClockTime(value: Date): string {
+  const hour = value.getUTCHours();
+  const minutes = String(value.getUTCMinutes()).padStart(2, '0');
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${minutes} ${hour < 12 ? 'AM' : 'PM'}`;
 }
 
 class FakeRange {
@@ -157,6 +184,8 @@ export class FakeSheet {
 
   /** Date-formatted columns store dates, exactly as Sheets does (header row excluded). */
   private coerce(row: number, col: number, value: Cell): Cell {
+    // "2 PM" becomes a time of day in ANY cell, the header row included.
+    if (typeof value === 'string' && CLOCK_TEXT.test(value)) return clockTime(value);
     if (row === 1 || !this.dateColumns.has(col) || typeof value !== 'string') return value;
     const iso = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (!iso) return value;

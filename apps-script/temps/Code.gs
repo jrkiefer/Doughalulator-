@@ -125,8 +125,21 @@ function assertHeaders(tabName, expected, actual) {
 
 /** Read a tab's header row and check it, in one small ranged read. */
 function checkTabHeaders(sheet, expected) {
-  var actual = sheet.getRange(1, 1, 1, expected.length).getDisplayValues()[0];
+  var actual = sheet.getRange(1, 1, 1, expected.length).getDisplayValues()[0].map(asWritten);
   assertHeaders(sheet.getName(), expected, actual);
+}
+
+/**
+ * What a cell SHOWS, put back the way this script wrote it. Google reads the
+ * text "2 PM" as a time of day and shows it as "2:00 PM" - in a heading as
+ * much as anywhere - so a heading setup() itself had just written came back
+ * different, and the heading check refused every temperature save (v1.33.3;
+ * the check arrived in 1.27.0 and no reading had been saved since). Tolerating
+ * how Google shows it beats fighting the cell format: a tab already in that
+ * state needs no repair, and Re-run setup cannot put it back.
+ */
+function asWritten(shown) {
+  return String(shown).replace(/^(\d{1,2}):00 (AM|PM)$/, '$1 $2');
 }
 
 /**
@@ -298,13 +311,16 @@ function doPost(e) {
     // and half a save beats none.
     if (overview) {
       var block = overview.getRange(2, 2, STATIONS.length, 3).getValues();
+      // Compared as SHOWN: the raw slot cell is a time of day and the raw
+      // "when" cell may be a date, neither of which equals the text written.
+      var shown = removals.length ? overview.getRange(2, 2, STATIONS.length, 3).getDisplayValues() : [];
       var touched = false;
       // A removed reading that the Overview is still showing as the station's
       // last goes blank: no last reading is truer than a taken-back one.
       removals.forEach(function (x) {
         var idx = STATIONS.indexOf(x.station);
         if (idx === -1) return;
-        if (block[idx][1] === x.slot && String(block[idx][2]).indexOf(date) === 0) {
+        if (asWritten(shown[idx][1]) === x.slot && String(shown[idx][2]).indexOf(date) === 0) {
           block[idx] = ['', '', ''];
           touched = true;
         }

@@ -411,7 +411,7 @@ build less.**
   (since v1.10.0) repeats on the ladder for ever. `addressProblem()` in `services/client.ts` guards
   both verbs — https anywhere, http only against localhost so the app can be tested.
 
-## Six Google rules learned the hard way — do not relearn them
+## Seven Google rules learned the hard way — do not relearn them
 
 1. **A tab name is capped at 31 characters.** Google truncates longer ones, and two names that
    truncate alike collide silently: the second tab quietly becomes `Sheet2` and everything written
@@ -456,6 +456,20 @@ build less.**
    with no column guard every EON save threw AFTER saving, answered "retry", and sat on OFFLINE —
    WILL RETRY for ever. The harness models both edges (and that a zero-row range throws), so a
    write past either fails in the tests; it once let column AD through in silence.
+
+7. **Google reads the text "2 PM" as a TIME and shows it as "2:00 PM"** (v1.33.3) — in a heading
+   as much as in a data cell. The Temp Log writes that slot name as a station-tab heading, a Log
+   entry and an Overview cell. The app has always known (`normalizeSlot` in
+   `temps/tempChart.ts`); the script's heading check (added 1.27.0) did not, so on the real sheet
+   it refused EVERY temperature save straight after the `setup()` that had written the heading —
+   unnoticed for months because no reading was saved in between, and invisible in the tests
+   because the fake Google kept the text as text. The harness now models it (`CLOCK_TEXT` in
+   `apps-script/test/harness.ts`), and `asWritten()` in `temps/Code.gs` turns what a cell shows
+   back into what was written before any comparison. Tolerate how Google shows it; don't fight
+   the cell format — a tab already in that state then needs no repair and Re-run setup cannot
+   put it back. Anything new that compares a SHOWN value with written text needs `asWritten`.
+   And a lesson about deployments from the same week: **archiving a deployment switches its
+   address OFF (404)**. The owner archived the ones the app used; `sheets.ts` had to follow.
 
 ## Engine facts worth remembering
 
