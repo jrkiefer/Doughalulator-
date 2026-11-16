@@ -234,6 +234,32 @@ describe('temps mapping', () => {
   });
 });
 
+describe('a night with nothing to make is a known night, not a blank one (v1.33.0)', () => {
+  const row = (record: ReturnType<typeof runDoughCalculation>, tab: string) =>
+    dayRecordToTabWrites(record).find((write) => write.tab === tab)!.row;
+
+  it('closed tomorrow: the make is zero and the dough standing is exactly the count', () => {
+    const closed = runDoughCalculation({ ...pmInputs, tomorrowForecastRaw: 0, batchRound: null }, bibles, defaultConfig);
+    expect(closed.totalTrays).toBe(0);
+    expect(row(closed, 'Final Make Amount')).toEqual({
+      Date: '2026-01-15', 'Indi Trays': 0, 'Small Trays': 0, 'Large Trays': 0, 'Sic (balls)': 0, 'Boli Trays': 0,
+    });
+    // 1 tray + 4, 5 trays + 3, 4 trays + 2, 1 ball, 2 trays + 1 — what was counted.
+    expect(row(closed, 'Estimated Dough After Gang')).toEqual({
+      Date: '2026-01-15', Indi: 15, Small: 43, Large: 26, Sic: 1, Boli: 13,
+    });
+  });
+
+  it('an UNKNOWN night still travels blank — nothing is invented', () => {
+    const unknown = runDoughCalculation({ ...pmInputs, tomorrowForecastRaw: null, batchRound: null }, bibles, defaultConfig);
+    expect(unknown.totalTrays).toBeNull();
+    expect(row(unknown, 'Estimated Dough After Gang')).toEqual({
+      Date: '2026-01-15', Indi: '', Small: '', Large: '', Sic: '', Boli: '',
+    });
+    expect(row(unknown, 'Final Make Amount')['Small Trays']).toBe('');
+  });
+});
+
 describe('reverse mapping (loading)', () => {
   it('a 2 PM row hydrates back into the form — counts land as ball totals', () => {
     const row = dayRecordToTabWrites(dayRecord)[0]!.row;

@@ -692,12 +692,14 @@ describe('the new bible builds itself as whole days accumulate', () => {
     expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 2)).toBe('');
   });
 
-  it('a count that ROSE overnight makes that size abstain, not go negative', () => {
+  it('a count that ROSE overnight is kept as a negative figure, so miscounts cancel', () => {
     const script = freshDough();
     post(script, { ...biblesToPayload(bibles) });
     seedEon(script, '2026-09-01');
     fullDay(script, '2026-09-02', 4000, 40, 'regular');
-    // Day 3: Small\'s 2 PM count is ABOVE last night\'s close — a miscount.
+    // Day 3: Small's 2 PM count is ABOVE last night's close — a tray counted
+    // one way. Throwing such mornings away kept only the miscounts that went
+    // the OTHER way, which read every size high.
     post(script, {
       type: 'day', date: '2026-09-03',
       tabs: [
@@ -717,17 +719,18 @@ describe('the new bible builds itself as whole days accumulate', () => {
     const build = script.world.ss.getSheetByName('New Bieblerb')!;
     expect(build.getCell(3, 2)).toBe(6000);
     expect(build.getCell(3, 3)).toBe(40); // Indi: AM 20 + PM 20
-    expect(build.getCell(3, 4)).toBe(''); // Small abstains — never a negative half
-    // The morning says which size and why; the evening's Small was fine and
-    // stands on its own; the whole day cannot be summed for Small.
+    // Small: the morning reads -20 and the evening +20. The whole day is
+    // close-to-close (100 at close, nothing made, 100 at close): the 2 PM
+    // count cancels out of it, so it is a true zero, not an abstention.
+    expect(build.getCell(3, 4)).toBe(0);
     expect(useRow(script, 'AM Dough Use', '2026-09-03'))
-      .toEqual(['2026-09-03', '3000', '20', '', '20', '20', 'regular', 'Small negative']);
+      .toEqual(['2026-09-03', '3000', '20', '-20', '20', '20', 'regular', '']);
     expect(useRow(script, 'PM Dough Use', '2026-09-03'))
       .toEqual(['2026-09-03', '3000', '20', '20', '20', '20', 'regular', '']);
     expect(useRow(script, 'All Day Dough Use', '2026-09-03'))
-      .toEqual(['2026-09-03', '6000', '40', '', '40', '40', 'regular', 'Small AM negative']);
-    // Small keeps one morning, two evenings and one whole day: 4 points from 2 nights.
-    expect(stats(script, 'New Bieblerb', 'Small')).toEqual(['Small', '4', '2', '1', '2', '1', '0']);
+      .toEqual(['2026-09-03', '6000', '40', '0', '40', '40', 'regular', '']);
+    // Nothing abstains: Small has all six points from its two nights.
+    expect(stats(script, 'New Bieblerb', 'Small')).toEqual(['Small', '6', '2', '2', '2', '2', '0']);
   });
 
   it("the morning must come from the day before — any gap abstains (owner's rule)", () => {
@@ -1637,5 +1640,131 @@ describe('a temperature typed in the wrong box can be taken back (v1.32.0)', () 
     });
     expect(String(post(script, item('=HYPERLINK("x")', '09:00')).error)).toContain('not a station name');
     expect(String(post(script, item('Pizza 1', '=NOW()')).error)).toContain('not a clock time');
+  });
+});
+
+/** The stats block including the totals columns (X..AG). */
+function runStats(script: LoadedScript, tab: string, size: 'Indi' | 'Small' | 'Large' | 'Sic'): string[] {
+  const sheet = script.world.ss.getSheetByName(tab)!;
+  return sheet.rowByIndex(2 + ['Indi', 'Small', 'Large', 'Sic'].indexOf(size), 33).slice(30);
+}
+
+describe("the line's height comes from the totals (v1.33.0)", () => {
+  // Tue-Sat weeks from Tue Sept 1 2026. `rate` is dough per dollar that day.
+  const WEEKS = [
+    ['2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+    ['2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12'],
+    ['2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19'],
+  ];
+  const salesFor = (i: number) => 4000 + 1000 * (i % 5);
+  function weeks(script: LoadedScript, tuesdayRate = 0.01) {
+    seedEon(script, '2026-09-01');
+    let i = 0;
+    let used = 0;
+    let sold = 0;
+    for (const week of WEEKS) {
+      for (const date of week) {
+        const sales = salesFor(i++);
+        const tuesday = new Date(`${date}T12:00:00Z`).getUTCDay() === 2;
+        const use = Math.round(sales * (tuesday ? tuesdayRate : 0.01));
+        fullDay(script, date, sales, use, 'regular');
+        used += use;
+        sold += sales;
+      }
+    }
+    return { used, sold };
+  }
+
+  it('a run crosses the closed Sunday and Monday: every recorded day is in the total', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    weeks(script);
+    // 14 days, 1 ball per $100: 10 per $1,000, and a line that already agrees.
+    expect(runStats(script, 'New Bieblerb', 'Small')).toEqual(['14', '10', '1']);
+    const build = script.world.ss.getSheetByName('New Bieblerb')!;
+    expect(build.rowByIndex(1, 33).slice(23)).toEqual([
+      'Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored', 'Run days', 'Per $1,000', 'Levelled by',
+    ]);
+  });
+
+  it('a closing count miscounted in the middle of a run cannot move the total', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    weeks(script);
+    // Thursday's close is counted 30 balls too high. That evening reads 30
+    // low and the next morning 30 high - but over the run the count cancels.
+    post(script, {
+      type: 'eon', date: '2026-09-10',
+      tabs: [{ tab: 'EON Dough Count', row: { Date: '2026-09-10', 'EON Small Count': 130 } }],
+    });
+    expect(useRow(script, 'PM Dough Use', '2026-09-10')[3]).not.toBe(useRow(script, 'PM Dough Use', '2026-09-09')[3]);
+    expect(runStats(script, 'New Bieblerb', 'Small').slice(0, 2)).toEqual(['14', '10']);
+  });
+
+  it('levels the line so it adds up to the dough really used - once there are ten run days', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    // Tuesdays use twice the dough per dollar. They have no morning and no
+    // whole-day point (no close the day before), so the line through the
+    // single days barely hears them - but the totals hear every ball.
+    const { used, sold } = weeks(script, 0.02);
+    const first = bibles.regular.rows[0]!;
+    const level = used / (0.01 * sold);
+    expect(level).toBeGreaterThan(1.1);
+    const [days, rate, levelled] = runStats(script, 'New Bieblerb', 'Indi');
+    expect(days).toBe('14');
+    expect(Number(rate)).toBeCloseTo((used / sold) * 1000, 2);
+    expect(Number(levelled)).toBeCloseTo(level, 3);
+    const build = script.world.ss.getSheetByName('New Bieblerb')!;
+    expect(build.getCell(2, 10)).toBe(Math.round(level * first.sales * 0.01)); // New Indi, levelled
+  });
+
+  it('under ten run days the line is published as drawn', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    WEEKS[0]!.forEach((date, i) => fullDay(script, date, salesFor(i), salesFor(i) * 0.01, 'regular'));
+    fullDay(script, '2026-09-08', 6000, 180, 'regular'); // a Tuesday at three times the rate (count stays above zero)
+    const first = bibles.regular.rows[0]!;
+    const [days, rate, levelled] = runStats(script, 'New Bieblerb', 'Indi');
+    expect(days).toBe('5');
+    expect(Number(rate)).toBeGreaterThan(10); // the total already knows...
+    expect(levelled).toBe('1'); // ...but five days is too few to trust it over the line
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe(Math.round(first.sales * 0.01));
+  });
+
+  it('a weekday nobody recorded stops the run; a holiday typed as "closed tomorrow" does not', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    fullDay(script, '2026-09-02', 4000, 40, 'regular');
+    fullDay(script, '2026-09-03', 5000, 50, 'regular');
+    // Friday the 4th was worked but never entered: what was made is unknown.
+    fullDay(script, '2026-09-05', 6000, 60, 'regular');
+    expect(runStats(script, 'New Bieblerb', 'Large')[0]).toBe('2');
+
+    const holiday = freshDough();
+    post(holiday, { ...biblesToPayload(bibles) });
+    seedEon(holiday, '2026-09-01');
+    fullDay(holiday, '2026-09-02', 4000, 40, 'regular');
+    fullDay(holiday, '2026-09-03', 5000, 50, 'regular');
+    post(holiday, { // Thursday says: closed tomorrow
+      type: 'day', date: '2026-09-03',
+      tabs: [{ tab: '2PM Dough Count', row: { Date: '2026-09-03', "Tomorrow's Forecast": 0 } }],
+    });
+    fullDay(holiday, '2026-09-05', 6000, 60, 'regular');
+    expect(runStats(holiday, 'New Bieblerb', 'Large')[0]).toBe('3');
+  });
+
+  it('a line that falls as sales rise is noise, and publishes nothing', () => {
+    const script = freshDough();
+    post(script, { ...biblesToPayload(bibles) });
+    seedEon(script, '2026-09-01');
+    fullDay(script, '2026-09-02', 4000, 80, 'regular');
+    fullDay(script, '2026-09-03', 6000, 60, 'regular');
+    fullDay(script, '2026-09-04', 8000, 40, 'regular');
+    expect(script.world.ss.getSheetByName('New Bieblerb')!.getCell(2, 10)).toBe(''); // New Indi
+    const rows = (get(script, { action: 'bibles' }).bibles as { dough: { new: { indi: number | null } }[] }).dough;
+    expect(rows[0]!.new.indi).toBeNull();
   });
 });

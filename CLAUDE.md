@@ -110,9 +110,9 @@ build less.**
 - **EON session** — End Of Night: final count + final sales, and the outlook against tomorrow's need — all five sizes, Boli against its 36-ball target (0 when closed tomorrow).
 - **EON outlook** (`record.outlook`, ported from the owner's other app so the two match): per size, `diff` = have − need in balls and `trays` = the NEAREST tray, signed — `sign(diff) × round(|diff| ÷ perTray) || 0`, where the `|| 0` kills the `-0` a sub-tray shortage would otherwise produce. Sicilian is balls-only on screen and clamped at 0. PM sales is not on screen (the owner asked for it gone) and not computed in the app at all: the Dough Log derives it for the `PM Dough Use` tab.
 - **Tomorrow's forecast on the EON page overrides the 2 PM one.** The box shows the afternoon's figure as its PLACEHOLDER until something is typed (v1.31.0 — as the box's value it snapped back the moment it was backspaced to empty, so it could never be cleared and retyped); a typed figure wins (`needSource: 'manualForecast'`), and clearing it hands back. It is screen-only, like the EON Boli count: the sheet holds neither, so both live on the phone that typed them (a re-read keeps them, v1.32.0; another phone never sees them).
-- **PM use** — dough used since 2 PM = Estimated Dough After Gang − EON count; a count that ROSE reads blank, not negative — that means a miscount. **`deriveUse` in `dough/Code.gs` is the ONE definition** of PM, AM and All Day use (v1.30.0); the app's own copies (`pmUse`, `computeAmUse`) were removed in v1.31.0 once nothing read them. The app writes none of the three use tabs.
+- **PM use** — dough used since 2 PM = Estimated Dough After Gang − EON count. A count that ROSE reads as a NEGATIVE figure (v1.33.0 — it read blank before; see the audit note under Storage & sync). **`deriveUse` in `dough/Code.gs` is the ONE definition** of PM, AM and All Day use (v1.30.0); the app's own copies (`pmUse`, `computeAmUse`) were removed in v1.31.0 once nothing read them. The app writes none of the three use tabs.
 - **AM use** — dough used before 2 PM = yesterday's EON count − this afternoon's 2 PM count. Blank when yesterday has no EON row (a closed day). Recorded on `AM Dough Use` by the Dough Log, same as PM.
-- **All Day use** (v1.30.0) — AM + PM for the same date, both halves known and non-negative, against the night's takings; the `All Day Dough Use` tab. The self-building bible learns from all three kinds of point together.
+- **All Day use** (v1.30.0) — AM + PM for the same date, both halves known, against the night's takings; the `All Day Dough Use` tab. With both halves it is simply close-to-close — the 2 PM count cancels out of the sum. The self-building bible learns from all three kinds of point together.
 - **Stations** (walking order, for the temps page): Pizza 1, Pizza Lowboy, Pizza 2, Slice, Salad, Reach-In, Walk-In, Freezer.
 - **Temp slots** — before 11:00 → Morning; 11:00–17:00 → 2 PM; after → Night.
 - **Past midnight** (v1.27.0) — a close finished after 12:00 AM belongs to the evening that just
@@ -228,8 +228,8 @@ build less.**
   exactly, owner's rule Aug 2026 "just to be extra safe": a gap abstains, no lookback across
   closed days); PM = Estimated Dough After Gang −
   EON count against EON Sales − Current Sales; All Day = the two added against EON Sales. A half
-  drops on its own (no row, blank count, or a count that ROSE — a miscount); the All Day point
-  needs both halves; each point needs takings on its own scale, so a morning still counts on a
+  drops on its own (no row or a blank count; a count that ROSE stays in as a negative,
+  v1.33.0); the All Day point needs both halves; each point needs takings on its own scale, so a morning still counts on a
   night whose sales were never typed. Then per (bible, size, kind) an outlier rule: dough per
   $1,000 outside 1.5× the middle spread past the quartiles (`outlierFences`, median-of-halves;
   needs ≥ 4 points and a spread > 0 — a spread of zero cannot pick an outlier, and Sicilian is
@@ -237,8 +237,7 @@ build less.**
   — the owner's words: "am pm and all day all as separate data and all together". Gate: ≥ 3
   distinct nights with a usable point. Every measured value is written; outliers are only marked.
   The `Ignored` column carries the reasons in words (row-level first — no close yesterday, no
-  after-gang figure, no takings — then per size: Small negative, Large not counted, Indi
-  outlier). Bucket from the 2 PM row's Bible cell, falling back to the date rule. A stats block
+  after-gang figure, no takings — then per size: Large not counted, Indi outlier). Bucket from the 2 PM row's Bible cell, falling back to the date rule. A stats block
   from column X of each build tab records Points / Nights / AM / PM / All Day / Ignored per size.
   Measured on the real log before shipping: whole-day-only left the regular bible 4–5 nights and a
   NEGATIVE Small slope; pooled gives 23–26 points from 15–18 nights (peach 53–61 from 29–31),
@@ -260,6 +259,33 @@ build less.**
   item:** the rebuild runs inside every EON save, under the script lock, and Theil–Sen is O(n²)
   in points (~1.5 per night) — fine at today's size, but a few years in an EON save could
   approach the app's 15 s timeout. If saves ever slow, cap the fit to recent nights first.
+- **The bible's SHAPE comes from the partials, its HEIGHT from the totals** (v1.33.0, audited
+  Nov 2026 on the real log — 105 working days). The tank equation is the whole method, at four
+  lengths: a morning, an evening, a whole day, and a whole unbroken run. The first three are the
+  points the line is drawn through (they are what gives real use at SMALL sales figures — owner's
+  words: "use totals but let's also use partials"). The fourth is `runTotals()` in
+  `dough/Code.gs`: first close + everything made − last close, against the final sales of the
+  days between. Every count in the middle cancels, so a miscounted tray cannot move it;
+  `refreshBibleBuild` then scales the line by ONE factor so that, summed over those run days,
+  it equals the dough really used (needs ≥ `MIN_RUN_DAYS` 10; the stats block shows `Run days`,
+  `Per $1,000`, `Levelled by`). Why: the line through single days read Large and Indi 6–8% HIGH
+  against the totals. Three causes were measured. (1) `half()` used to drop a morning whose count
+  ROSE — 30% of Indi mornings, 37% Sicilian — which kept only the miscounts that went the other
+  way; it now returns the signed figure, and the use tabs show the negative. (2) Medians of noisy
+  single days, on a selected set of days (no Tuesdays, no risen mornings). (3) A closed-tomorrow
+  night wrote a blank after-gang row, losing its evening and breaking the run —
+  `dayRecordToTabWrites` now writes the counts as the after-gang figure and zero trays whenever
+  `totalTrays === 0`. "Made" in a run is after-gang − that day's 2 PM count, the same definition
+  the evening use rests on. A day with no row is shut on `CLOSED_WEEKDAYS` (Sun/Mon, owner) or
+  when the last recorded day typed tomorrow's forecast 0; otherwise it is a working day nobody
+  recorded and the run stops. A line with a slope not above zero publishes nothing. **Forecasts
+  are never used here — only current sales and final sales** (owner's instruction). Tested and
+  deliberately left alone, don't re-litigate: the "yesterday exactly" morning rule (Saturday's
+  close for Tuesdays moves no suggestion by more than a ball); the ratio outlier rule (drops high
+  nights more than low, but removing it moves the answer ≤ 2%); pooling the three kinds; no "ran
+  out" rule (only Sicilian ever closes at zero); rows above the highest recorded day ($16.2k)
+  are an extension of the line; the suggestion is TYPICAL use, like the hand bible (owner). The
+  evening figure rests on the gang making exactly the FINAL trays — owner confirmed they do.
 - **No secrets** (v1.4.0, owner's explicit request), and since v1.12.0 **no Settings page either**:
   both `/exec` addresses are constants in `src/services/sheets.ts`. A per-device Settings page meant
   a wiped phone silently lost its connection and read "can't reach the spreadsheet" — which is

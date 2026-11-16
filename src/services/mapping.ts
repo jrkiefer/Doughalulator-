@@ -111,33 +111,56 @@ export function dayRecordToTabWrites(record: DoughDayRecord): TabWrite[] {
 
   // The make and the resulting dough exist as soon as there is a batch
   // direction — since v1.13.0 the remainder rule always resolves one. When
-  // there is NO direction (nothing to make, or the inputs went unknown
-  // again), the rows still travel — as ALL-BLANK cells. Blanks clear: a make
-  // saved earlier tonight and then un-decided must not survive on the sheet,
-  // where the self-building bible would read the stale after-gang figure as
+  // the inputs are UNKNOWN (no direction because nothing can be worked out),
+  // the rows still travel — as ALL-BLANK cells. Blanks clear: a make saved
+  // earlier tonight and then un-decided must not survive on the sheet, where
+  // the self-building bible would read the stale after-gang figure as
   // tonight's truth. The script skips an all-blank row for a date that has
   // none (blank rows clear, they never create), so this costs no clutter.
+  //
+  // NOTHING TO MAKE is a different case, and a known one (v1.33.0): closed
+  // tomorrow, or enough of everything already. There is no direction because
+  // there are no batches — but the make is exactly zero and the dough standing
+  // afterwards is exactly the count. Left blank, that night's evening use was
+  // lost and the Dough Log's unbroken run of days stopped there.
+  const nothingMade = !chosen && record.totalTrays === 0;
+  const made = chosen
+    ? { ...chosen.finalTraysToMake, sic: record.sicBalls }
+    : nothingMade
+      ? { ...record.trays, sic: record.sicBalls, boli: record.boliTrays }
+      : null;
+  const standing = chosen
+    ? {
+        indi: chosen.finalDough.indiTotal,
+        small: chosen.finalDough.smallTotal,
+        large: chosen.finalDough.largeTotal,
+        sic: chosen.finalDough.sicTotal,
+        boli: chosen.finalDough.boliTotal,
+      }
+    : nothingMade
+      ? record.have
+      : null;
   writes.push(
     {
       tab: FINAL_MAKE_TAB,
       row: {
         Date: d,
-        'Indi Trays': cellOf(chosen ? chosen.finalTraysToMake.indi : null),
-        'Small Trays': cellOf(chosen ? chosen.finalTraysToMake.small : null),
-        'Large Trays': cellOf(chosen ? chosen.finalTraysToMake.large : null),
-        'Sic (balls)': cellOf(chosen ? record.sicBalls : null),
-        'Boli Trays': cellOf(chosen ? chosen.finalTraysToMake.boli : null),
+        'Indi Trays': cellOf(made ? made.indi : null),
+        'Small Trays': cellOf(made ? made.small : null),
+        'Large Trays': cellOf(made ? made.large : null),
+        'Sic (balls)': cellOf(made ? made.sic : null),
+        'Boli Trays': cellOf(made ? made.boli : null),
       },
     },
     {
       tab: AFTER_TAB,
       row: {
         Date: d,
-        Indi: cellOf(chosen ? chosen.finalDough.indiTotal : null),
-        Small: cellOf(chosen ? chosen.finalDough.smallTotal : null),
-        Large: cellOf(chosen ? chosen.finalDough.largeTotal : null),
-        Sic: cellOf(chosen ? chosen.finalDough.sicTotal : null),
-        Boli: cellOf(chosen ? chosen.finalDough.boliTotal : null),
+        Indi: cellOf(standing ? standing.indi : null),
+        Small: cellOf(standing ? standing.small : null),
+        Large: cellOf(standing ? standing.large : null),
+        Sic: cellOf(standing ? standing.sic : null),
+        Boli: cellOf(standing ? standing.boli : null),
       },
     },
   );

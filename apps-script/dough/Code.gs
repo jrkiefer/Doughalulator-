@@ -113,7 +113,10 @@ var BIBLE_BUILD_BLOCK = { indi: 8, small: 12, large: 16, sic: 20 };
 var BIBLE_BUILD_USE = { indi: 3, small: 4, large: 5, sic: 6 };
 /** Column (1-based) of the per-size stats block, and its headings. */
 var BIBLE_BUILD_STATS_COL = 24; // X
-var BIBLE_BUILD_STATS_HEADERS = ['Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored'];
+var BIBLE_BUILD_STATS_HEADERS = ['Size', 'Points', 'Nights', 'AM', 'PM', 'All Day', 'Ignored',
+  'Run days', 'Per $1,000', 'Levelled by'];
+/** Run days a size needs before its line is levelled to the totals. */
+var MIN_RUN_DAYS = 10;
 
 /**
  * Columns that may legitimately hold negatives - everything else must be >= 0.
@@ -771,8 +774,10 @@ function rebuildBibleHistories() {
  * Each of the three kinds is its own data point for the fit - a morning is a
  * complete observation of dough against takings even when the night was never
  * closed out, and a night whose morning was miscounted still has its evening.
- * A half is dropped on its own: no row, a blank count, or a count that ROSE
- * (a miscount, not negative use). The All Day point needs both halves. A
+ * A half is dropped on its own: no row or a blank count. A count that ROSE
+ * is kept as a negative figure (v1.33.0 - see half()). The All Day point
+ * needs both halves, and with both it is simply close-to-close: the 2 PM
+ * count cancels out of the sum. A
  * point also needs takings on its own scale (2 PM sales, sales since 2 PM,
  * the night's total) to sit against.
  *
@@ -785,8 +790,8 @@ function rebuildBibleHistories() {
  * Every measured value is written to the tabs. Cells are blank only where a
  * half is unknowable, and the sales cell where there were no takings. The
  * Ignored column carries the reasons, in words: row-level ones first (no
- * close yesterday, no after-gang figure, no takings), then per size (Small
- * negative, Large not counted, Indi outlier). Nights split regular/peach by
+ * close yesterday, no after-gang figure, no takings), then per size (Large
+ * not counted, Indi outlier). Nights split regular/peach by
  * the 2 PM row's Bible cell, falling back to the date rule.
  */
 function deriveUse(index) {
@@ -811,8 +816,7 @@ function deriveUse(index) {
     var afterRow = index[T_AFTER][date] || null;
     var lastEonRow = index[T_EON][addDaysIso(date, -1)] || null;
 
-    var bible = twopmRow ? String(twopmRow[10]).toLowerCase() : '';
-    var bucket = bible === 'peach' ? 'peach' : bible === 'regular' ? 'dough' : isPeachDate(date) ? 'peach' : 'dough';
+    var bucket = bibleBucket(twopmRow, date);
 
     // Each kind's takings, on its own scale.
     var amSales = twopmRow ? numOrNull(twopmRow[2]) : null; // col C, Current Sales
@@ -905,17 +909,114 @@ function deriveUse(index) {
     }
   });
 
+  // The totals each size's line is levelled to ride along with its points.
+  var totals = runTotals(index);
+  ['dough', 'peach'].forEach(function (bucket) {
+    sizes.forEach(function (size) { points[bucket][size].run = totals[bucket][size]; });
+  });
+
   return { rows: rows, history: history, points: points };
 }
 
-/** One half of a night's use: before - after. Says why when it cannot. */
+/** Which bible a night belongs to: the 2 PM row's Bible cell, else the date rule. */
+function bibleBucket(twopmRow, date) {
+  var bible = twopmRow ? String(twopmRow[10]).toLowerCase() : '';
+  return bible === 'peach' ? 'peach' : bible === 'regular' ? 'dough' : isPeachDate(date) ? 'peach' : 'dough';
+}
+
+/** Days the shop is normally shut (0 = Sunday, 1 = Monday) - owner, Nov 2026. */
+var CLOSED_WEEKDAYS = [0, 1];
+
+/**
+ * The tank total, per bible and size, over every unbroken run of days:
+ *
+ *   used = dough at the first close + everything made - dough at the last close
+ *
+ * against the final sales of the days in between. Every count in the middle
+ * cancels out, so a miscounted tray cannot move it - which is why the line's
+ * HEIGHT is set from this (see refreshBibleBuild) while its shape comes from
+ * the mornings, evenings and whole days.
+ *
+ * "Made" is the after-gang figure minus that day's 2 PM count - the same
+ * definition the evening use rests on, so the two can never disagree.
+ *
+ * A run starts at a closing count and carries on while each open day has a
+ * known make and final sales; it can end at any closing count. A day with no
+ * row is shut when it is a Sunday or Monday, or when the last recorded day
+ * typed tomorrow's forecast as 0 (a holiday); otherwise nobody recorded it,
+ * its make is unknown, and the run stops there. A change of bible stops it too.
+ */
+function runTotals(index) {
+  var sizes = Object.keys(USE_COLS);
+  var out = { dough: {}, peach: {} };
+  ['dough', 'peach'].forEach(function (bucket) {
+    sizes.forEach(function (size) { out[bucket][size] = { used: 0, sales: [] }; });
+  });
+  var recorded = {};
+  Object.keys(index[T_IN]).forEach(function (d) { recorded[d] = true; });
+  Object.keys(index[T_EON]).forEach(function (d) { recorded[d] = true; });
+  var all = Object.keys(recorded).sort();
+  if (all.length === 0) return out;
+  var lastDate = all[all.length - 1];
+
+  sizes.forEach(function (size) {
+    var cols = USE_COLS[size];
+    var run = null;
+    var holiday = false;
+    // The longest stretch a run reached a closing count at is what it is worth.
+    var bank = function () {
+      if (run && run.reached) {
+        out[run.bucket][size].used += run.reached.used;
+        out[run.bucket][size].sales = out[run.bucket][size].sales.concat(run.reached.sales);
+      }
+      run = null;
+    };
+    for (var date = all[0]; date <= lastDate; date = addDaysIso(date, 1)) {
+      var twopmRow = index[T_IN][date] || null;
+      var eonRow = index[T_EON][date] || null;
+      if (!twopmRow && !eonRow) {
+        var parts = date.split('-');
+        var weekday = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))).getUTCDay();
+        if (CLOSED_WEEKDAYS.indexOf(weekday) === -1 && !holiday) bank(); // a working day nobody recorded
+        continue;
+      }
+      holiday = !!twopmRow && numOrNull(twopmRow[4]) === 0; // col E, Tomorrow's Forecast: 0 = closed tomorrow
+      var afterRow = index[T_AFTER][date] || null;
+      var bucket = bibleBucket(twopmRow, date);
+      var count = twopmRow ? numOrNull(twopmRow[cols.twopm - 1]) : null;
+      var after = afterRow ? numOrNull(afterRow[cols.after - 1]) : null;
+      var made = count !== null && after !== null ? after - count : null;
+      var sales = eonRow ? numOrNull(eonRow[1]) : null;
+      var close = eonRow ? numOrNull(eonRow[cols.eon - 1]) : null;
+
+      if (run && run.bucket !== bucket) bank();
+      if (run) {
+        if (made === null || sales === null || sales <= 0) {
+          bank();
+        } else {
+          run.made += made;
+          run.sales.push(sales);
+          if (close !== null) run.reached = { used: run.start + run.made - close, sales: run.sales.slice() };
+        }
+      }
+      if (!run && close !== null) run = { bucket: bucket, start: close, made: 0, sales: [], reached: null };
+    }
+    bank();
+  });
+  return out;
+}
+
+/** One half of a night's use: before - after, negative when the count rose. Says why when it cannot. */
 function half(beforeRow, beforeCol, afterRow, afterCol) {
   if (!beforeRow || !afterRow) return { use: null, why: 'no row' };
   var before = numOrNull(beforeRow[beforeCol - 1]);
   var after = numOrNull(afterRow[afterCol - 1]);
   if (before === null || after === null) return { use: null, why: 'not counted' };
-  var used = before - after;
-  return used < 0 ? { use: null, why: 'negative' } : { use: used, why: '' }; // a count that rose is a miscount
+  // Signed on purpose (v1.33.0). A count that ROSE is a tray miscounted one
+  // way; throwing those mornings out kept only the miscounts that went the
+  // other way and read every size high. Kept, the two cancel. A wild one is
+  // still left out by the outlier pass.
+  return { use: before - after, why: '' };
 }
 
 /**
@@ -952,7 +1053,9 @@ function isPeachDate(iso) {
  * mornings, nights and whole days together - and write the suggestion at each
  * of the mirror's thresholds beside the current bible. A size needs three
  * distinct nights behind it before its column says anything; under that any
- * line is noise. The block from X records what each line rests on.
+ * line is noise. The line's SHAPE comes from those points; its HEIGHT is then
+ * levelled to the run totals (runTotals), which no miscount can move. The
+ * block from X records what each line rests on, the totals rate included.
  */
 function refreshBibleBuild(key, sizePoints) {
   var ss = SpreadsheetApp.getActive();
@@ -969,17 +1072,38 @@ function refreshBibleBuild(key, sizePoints) {
     p.kept.forEach(function (k) { nights[k[2]] = true; });
     var nightCount = Object.keys(nights).length;
     var fit = nightCount >= 3 ? theilSen(points) : null;
+    // A line that falls as sales rise says less dough for a busier night:
+    // that is noise, never a suggestion.
+    if (fit && !(fit.slope > 0)) fit = null;
+    var line = function (sales) { return fit ? Math.max(0, fit.slope * sales + fit.intercept) : 0; };
+
+    // Level the line to the totals. The line is drawn through single days,
+    // each one a noisy count against a noisy count, and only the days that
+    // HAVE a point - so its height drifts (it read Large 6-8% high on the
+    // real log). The run total cannot drift: one factor makes the line, added
+    // up over the run days, equal the dough that was really used. Too few run
+    // days and the total is no steadier than the line, so it is left alone.
+    var run = p.run || { used: 0, sales: [] };
+    var runSales = run.sales.reduce(function (sum, v) { return sum + v; }, 0);
+    var level = 1;
+    if (fit && run.sales.length >= MIN_RUN_DAYS && run.used > 0) {
+      var drawn = run.sales.reduce(function (sum, v) { return sum + line(v); }, 0);
+      if (drawn > 0) level = run.used / drawn;
+    }
     var block = thresholds.map(function (row) {
       var sales = Number(row[0]);
       var current = row[sizeIndex + 1];
-      var suggested = fit ? Math.max(0, Math.round(fit.slope * sales + fit.intercept)) : '';
+      var suggested = fit ? Math.round(level * line(sales)) : '';
       return [sales, current, suggested];
     });
     if (block.length) {
       ensureRows(sheet, block.length + 1);
       sheet.getRange(2, BIBLE_BUILD_BLOCK[size], block.length, 3).setValues(block);
     }
-    stats.push([SIZE_LABEL[size], points.length, nightCount, p.am, p.pm, p.day, p.dropped]);
+    stats.push([SIZE_LABEL[size], points.length, nightCount, p.am, p.pm, p.day, p.dropped,
+      run.sales.length,
+      runSales > 0 ? Math.round((run.used / runSales) * 100000) / 100 : '',
+      fit ? Math.round(level * 1000) / 1000 : '']);
   });
 
   ensureCols(sheet, BIBLE_BUILD_STATS_COL + BIBLE_BUILD_STATS_HEADERS.length - 1);
